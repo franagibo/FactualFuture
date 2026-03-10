@@ -3,7 +3,7 @@ import type { CardDef } from './cardDef';
 import type { EnemyDef, EncounterDef, EventDef, PotionDef } from './loadData';
 import { generateMap, type ActConfig } from './map/mapGenerator';
 import { startCombatFromRunState } from './combat';
-import { drawCards } from './effectRunner';
+import { drawCards, runEffects } from './effectRunner';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -498,14 +498,46 @@ function applyDamageToEnemyInRun(enemy: GameState['enemies'][0], dmg: number): {
 }
 
 /**
+ * Play the top N cards of the deck (resolve their effects without spending energy).
+ * Uses first alive enemy as target for single-target effects. Cards are put in discard after playing.
+ */
+export function playTopCards(
+  state: GameState,
+  count: number,
+  cardsMap: Map<string, CardDef>,
+  targetEnemyIndex: number | null
+): GameState {
+  let deck = [...state.deck];
+  let discard = [...state.discard];
+  if (deck.length < count) {
+    const shuffled = shuffle([...deck, ...discard]);
+    deck = shuffled;
+    discard = [];
+  }
+  if (deck.length < count) return state;
+  const playedIds = deck.splice(0, count);
+  let next: GameState = { ...state, deck, discard };
+  const firstAlive = next.enemies.findIndex((e) => e.hp > 0);
+  const resolved = targetEnemyIndex ?? (firstAlive >= 0 ? firstAlive : null);
+  for (const cardId of playedIds) {
+    const card = cardsMap.get(cardId);
+    if (!card) continue;
+    next = runEffects(card, next, resolved, cardsMap);
+  }
+  return { ...next, discard: [...next.discard, ...playedIds] };
+}
+
+/**
  * Use one potion in combat: apply effect, remove one instance from potions.
  * For single-target damage potions, targetEnemyIndex must be a valid alive enemy.
+ * Pass cardsMap for effects that play cards from deck (e.g. playTopCards).
  */
 export function usePotion(
   state: GameState,
   potionId: string,
   targetEnemyIndex: number | null,
-  potionDef: PotionEffectDef | undefined
+  potionDef: PotionEffectDef | undefined,
+  cardsMap?: Map<string, CardDef>
 ): GameState {
   if (state.runPhase !== 'combat' || state.phase !== 'player' || state.combatResult) return state;
   const list = state.potions ?? [];
@@ -551,6 +583,20 @@ export function usePotion(
   } else if (effect.type === 'maxHp') {
     const add = effect.value;
     next = { ...next, playerMaxHp: (next.playerMaxHp ?? next.playerHp) + add, playerHp: next.playerHp + add };
+  } else if (effect.type === 'thorns') {
+    next = { ...next, playerThorns: (next.playerThorns ?? 0) + effect.value };
+  } else if (effect.type === 'healAtEndOfTurn') {
+    next = { ...next, playerHealAtEndOfTurn: (next.playerHealAtEndOfTurn ?? 0) + effect.value };
+  } else if (effect.type === 'blockPerTurn') {
+    next = { ...next, playerBlockPerTurn: (next.playerBlockPerTurn ?? 0) + effect.value };
+  } else if (effect.type === 'strengthPerTurn') {
+    next = { ...next, playerStrengthPerTurn: (next.playerStrengthPerTurn ?? 0) + effect.value };
+  } else if (effect.type === 'artifact') {
+    next = { ...next, playerArtifactStacks: (next.playerArtifactStacks ?? 0) + effect.value };
+  } else if (effect.type === 'nextCardPlayedTwice') {
+    next = { ...next, playerNextCardPlayedTwice: true };
+  } else if (effect.type === 'playTopCards' && cardsMap) {
+    next = playTopCards(next, effect.value, cardsMap, targetEnemyIndex);
   } else if (effect.type === 'escape') {
     next = { ...next, combatResult: 'win', runPhase: 'map', currentEncounter: null, enemies: [] };
   }

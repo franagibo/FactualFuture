@@ -99,7 +99,7 @@ export class GameBridgeService {
   usePotion(potionId: string, targetEnemyIndex?: number): void {
     if (!this.state) return;
     const def = this.potionDefs.get(potionId);
-    this.state = engineUsePotion(this.state, potionId, targetEnemyIndex ?? 0, def);
+    this.state = engineUsePotion(this.state, potionId, targetEnemyIndex ?? null, def, this.cardsMap ?? undefined);
     this.maybeHandleCombatWin();
   }
 

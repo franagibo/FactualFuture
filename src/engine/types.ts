@@ -109,6 +109,18 @@ export interface GameState {
   playerWeakStacks?: number;
   /** Vulnerable on player: damage taken multiplied by 1.5, decay by 1 per turn. */
   playerVulnerableStacks?: number;
+  /** Thorns: when you take attack damage, deal this much damage back to the attacking enemy. */
+  playerThorns?: number;
+  /** Heal this much at end of your turn (e.g. Nanite Paste). */
+  playerHealAtEndOfTurn?: number;
+  /** Gain this much Block at start of each turn (e.g. Armor Weave). */
+  playerBlockPerTurn?: number;
+  /** Gain this much Strength at start of each turn (e.g. Ritual Amp). */
+  playerStrengthPerTurn?: number;
+  /** Artifact: negate this many debuff applications (Weak/Vulnerable/Frail). */
+  playerArtifactStacks?: number;
+  /** Next card you play is resolved twice (e.g. Twin Dose). */
+  playerNextCardPlayedTwice?: boolean;
 }
 
 /** Meta progression (unlocks) and run statistics, stored separately from run. */

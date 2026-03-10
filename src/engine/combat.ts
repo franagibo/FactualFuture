@@ -263,6 +263,10 @@ export function playCard(
     energy: state.energy - card.cost,
   };
   next = runEffects(card, next, targetEnemyIndex, cardsMap);
+  if (next.playerNextCardPlayedTwice) {
+    next = { ...next, playerNextCardPlayedTwice: false };
+    next = runEffects(card, next, targetEnemyIndex, cardsMap);
+  }
   next = processHpThresholdTriggers(next, enemyDefs);
 
   // Check combat result
@@ -297,7 +301,20 @@ export function endTurn(
         next = { ...next, playerBlock: next.playerBlock - blockReduce };
         dmg -= blockReduce;
       }
-      if (dmg > 0) next = { ...next, playerHp: Math.max(0, next.playerHp - dmg) };
+      if (dmg > 0) {
+        next = { ...next, playerHp: Math.max(0, next.playerHp - dmg) };
+        const thorns = next.playerThorns ?? 0;
+        if (thorns > 0) {
+          const ei = next.enemies.findIndex((e) => e.id === enemy.id);
+          if (ei >= 0 && next.enemies[ei].hp > 0) {
+            const en = [...next.enemies];
+            const targetEn = en[ei];
+            const blockReduce = Math.min(targetEn.block, thorns);
+            en[ei] = { ...targetEn, block: targetEn.block - blockReduce, hp: Math.max(0, targetEn.hp - (thorns - blockReduce)) };
+            next = { ...next, enemies: en };
+          }
+        }
+      }
     }
     if (intent.type === 'block') {
       const idx = next.enemies.findIndex((e) => e.id === enemy.id);
@@ -308,10 +325,14 @@ export function endTurn(
       }
     }
     if (intent.type === 'debuff') {
-      next = { ...next, playerWeakStacks: (next.playerWeakStacks ?? 0) + intent.value };
+      const artifact = next.playerArtifactStacks ?? 0;
+      const absorb = Math.min(artifact, intent.value);
+      next = { ...next, playerArtifactStacks: Math.max(0, artifact - absorb), playerWeakStacks: (next.playerWeakStacks ?? 0) + intent.value - absorb };
     }
     if (intent.type === 'vulnerable') {
-      next = { ...next, playerVulnerableStacks: (next.playerVulnerableStacks ?? 0) + intent.value };
+      const artifact = next.playerArtifactStacks ?? 0;
+      const absorb = Math.min(artifact, intent.value);
+      next = { ...next, playerArtifactStacks: Math.max(0, artifact - absorb), playerVulnerableStacks: (next.playerVulnerableStacks ?? 0) + intent.value - absorb };
     }
     if (intent.addStatus?.length) {
       for (const { cardId, count, to } of intent.addStatus) {
@@ -340,13 +361,19 @@ export function endTurn(
     weakStacks: Math.max(0, (e.weakStacks ?? 0) - 1),
   }));
   const decayStrength = next.playerStrengthDecayAtEnd ?? 0;
+  const healEnd = next.playerHealAtEndOfTurn ?? 0;
+  const blockPerTurn = next.playerBlockPerTurn ?? 0;
+  const strPerTurn = next.playerStrengthPerTurn ?? 0;
   next = {
     ...next,
     phase: 'player',
     energy: Math.max(0, next.maxEnergy - voidCount),
     turnNumber: next.turnNumber + 1,
-    strengthStacks: Math.max(0, (next.strengthStacks ?? 0) - decayStrength),
+    strengthStacks: Math.max(0, (next.strengthStacks ?? 0) - decayStrength) + strPerTurn,
     playerStrengthDecayAtEnd: 0,
+    playerHealAtEndOfTurn: 0,
+    playerBlock: next.playerBlock + blockPerTurn,
+    playerHp: Math.min(next.playerMaxHp ?? next.playerHp, next.playerHp + healEnd),
     frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
     playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),
     playerVulnerableStacks: Math.max(0, (next.playerVulnerableStacks ?? 0) - 1),

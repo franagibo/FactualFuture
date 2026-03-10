@@ -53,3 +53,4 @@
   { "id": "slimed", "name": "Slimed", "cost": 1, "effects": [], "isStatus": true, "exhaust": true },
   { "id": "void", "name": "Void", "cost": 0, "effects": [], "isStatus": true }
 ]
+  
