@@ -46,5 +46,10 @@
   { "id": "suppress", "name": "Suppress", "cost": 1, "effects": [{ "type": "weak", "value": 2, "target": "enemy" }] },
   { "id": "void_grenade", "name": "Void Grenade", "cost": 2, "effects": [{ "type": "damage", "value": 18, "target": "enemy" }] },
   { "id": "emergency_shield", "name": "Emergency Shield", "cost": 1, "effects": [{ "type": "block", "value": 10, "target": "player" }, { "type": "draw", "value": 1, "target": "player" }] },
-  { "id": "injury", "name": "Injury", "cost": 0, "effects": [], "isCurse": true }
+  { "id": "injury", "name": "Injury", "cost": 0, "effects": [], "isCurse": true },
+  { "id": "burn", "name": "Burn", "cost": 0, "effects": [], "isStatus": true },
+  { "id": "dazed", "name": "Dazed", "cost": 0, "effects": [], "isStatus": true },
+  { "id": "wound", "name": "Wound", "cost": 0, "effects": [], "isStatus": true },
+  { "id": "slimed", "name": "Slimed", "cost": 1, "effects": [], "isStatus": true, "exhaust": true },
+  { "id": "void", "name": "Void", "cost": 0, "effects": [], "isStatus": true }
 ]

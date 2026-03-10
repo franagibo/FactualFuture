@@ -12,11 +12,18 @@ export interface EnemyHpTrigger {
 /** Future: other trigger types (e.g. 'on_death', 'turn_start') can be added to this union. */
 export type EnemyTrigger = EnemyHpTrigger;
 
+/** Optional status cards added when this intent is resolved (e.g. Slimed to discard). */
+export interface IntentAddStatusDef {
+  cardId: string;
+  count: number;
+  to: 'draw' | 'discard';
+}
+
 export interface EnemyDef {
   id: string;
   name: string;
   maxHp: number;
-  intents: { weight: number; intent: { type: string; value: number } }[];
+  intents: { weight: number; intent: { type: string; value: number; addStatus?: IntentAddStatusDef[] } }[];
   /** Optional size for display scale: small (0.8), medium (1), large (1.2). Default medium. */
   size?: 'small' | 'medium' | 'large';
   /** Optional triggers (e.g. split at 50% HP). Processed after damage is applied. */

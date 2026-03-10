@@ -30,11 +30,20 @@ function pickIntent(def: EnemyDef): EnemyIntent {
   for (const { weight, intent } of def.intents) {
     r -= weight;
     if (r <= 0) {
-      return { type: intent.type as EnemyIntent['type'], value: intent.value };
+      return {
+        type: intent.type as EnemyIntent['type'],
+        value: intent.value,
+        addStatus: intent.addStatus,
+      };
     }
   }
   const last = def.intents[def.intents.length - 1];
-  return { type: last.intent.type as EnemyIntent['type'], value: last.intent.value };
+  const intent = last.intent;
+  return {
+    type: intent.type as EnemyIntent['type'],
+    value: intent.value,
+    addStatus: intent.addStatus,
+  };
 }
 
 function setEnemyIntents(
@@ -304,7 +313,19 @@ export function endTurn(
     if (intent.type === 'vulnerable') {
       next = { ...next, playerVulnerableStacks: (next.playerVulnerableStacks ?? 0) + intent.value };
     }
+    if (intent.addStatus?.length) {
+      for (const { cardId, count, to } of intent.addStatus) {
+        const cards = Array.from({ length: count }, () => cardId);
+        if (to === 'draw') next = { ...next, deck: [...next.deck, ...cards] };
+        else next = { ...next, discard: [...next.discard, ...cards] };
+      }
+    }
   }
+
+  // Burn: at end of turn, take 2 damage per Burn in hand (before discarding)
+  const burnCount = next.hand.filter((id) => id === 'burn').length;
+  if (burnCount > 0) next = { ...next, playerHp: Math.max(0, next.playerHp - burnCount * 2) };
+  if (next.playerHp <= 0) return { ...next, combatResult: 'lose' };
 
   next = { ...next, playerBlock: 0 };
 
@@ -312,6 +333,7 @@ export function endTurn(
 
   // Next turn: discard hand, draw 5, refill energy, decay statuses, new intents
   next = discardHandAndDraw(next, DRAW_PER_TURN);
+  const voidCount = next.hand.filter((id) => id === 'void').length;
   const decayedEnemies = next.enemies.map((e) => ({
     ...e,
     vulnerableStacks: Math.max(0, (e.vulnerableStacks ?? 0) - 1),
@@ -320,7 +342,7 @@ export function endTurn(
   next = {
     ...next,
     phase: 'player',
-    energy: next.maxEnergy,
+    energy: Math.max(0, next.maxEnergy - voidCount),
     turnNumber: next.turnNumber + 1,
     frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
     playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),

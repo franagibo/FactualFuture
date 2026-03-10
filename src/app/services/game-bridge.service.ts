@@ -332,7 +332,7 @@ export class GameBridgeService {
     } else {
       rawCards = [...new Set([...(base.cards ?? []), ...this.meta.unlockedCards])];
     }
-    if (this.cardsMap) rawCards = rawCards.filter((id) => !this.cardsMap!.get(id)?.isCurse);
+    if (this.cardsMap) rawCards = rawCards.filter((id) => !this.cardsMap!.get(id)?.isCurse && !this.cardsMap!.get(id)?.isStatus);
     const relics = [...new Set([...(base.relics ?? []), ...this.meta.unlockedRelics])];
     return { ...base, cards: rawCards, relics };
   }
@@ -351,7 +351,7 @@ export class GameBridgeService {
         ? character.cardPoolIds
         : (this.shopPoolsByAct[actKey]?.cards ?? []);
     let merged = [...new Set([...base, ...this.meta.unlockedCards])];
-    if (this.cardsMap) merged = merged.filter((id) => this.cardsMap!.get(id) && !this.cardsMap!.get(id)?.isCurse);
+    if (this.cardsMap) merged = merged.filter((id) => this.cardsMap!.get(id) && !this.cardsMap!.get(id)?.isCurse && !this.cardsMap!.get(id)?.isStatus);
     return merged;
   }
 
@@ -523,7 +523,7 @@ export class GameBridgeService {
     } else {
       const actKey = `act${this.state.act ?? 1}`;
       const rewardPool = this.getRewardCardPoolForAct(actKey);
-      this.state = engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []));
+      this.state = engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!);
       this.meta = {
         ...this.meta,
         runStats: { combatsWon: (this.meta.runStats?.combatsWon ?? 0) + 1, goldSpent: this.meta.runStats?.goldSpent ?? 0 },

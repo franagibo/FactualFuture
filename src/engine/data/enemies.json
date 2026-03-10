@@ -4,12 +4,12 @@
     { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
   ]},
   { "id": "acid_slime_m", "name": "Acid Slime (M)", "maxHp": 28, "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 7 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 7, "addStatus": [{ "cardId": "slimed", "count": 1, "to": "discard" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 10 } },
     { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
   ]},
   { "id": "acid_slime_l", "name": "Acid Slime (L)", "maxHp": 65, "size": "large", "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 11, "addStatus": [{ "cardId": "slimed", "count": 2, "to": "discard" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 16 } },
     { "weight": 1, "intent": { "type": "debuff", "value": 2 } }
   ], "triggers": [{ "trigger": "hp_below_percent", "value": 50, "action": "split", "spawnEnemyId": "acid_slime_m", "spawnCount": 2 }]},
@@ -17,11 +17,11 @@
     { "weight": 1, "intent": { "type": "attack", "value": 5 } }
   ]},
   { "id": "spike_slime_m", "name": "Spike Slime (M)", "maxHp": 30, "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 11, "addStatus": [{ "cardId": "slimed", "count": 1, "to": "discard" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 10 } }
   ]},
   { "id": "spike_slime_l", "name": "Spike Slime (L)", "maxHp": 68, "size": "large", "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 16 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 16, "addStatus": [{ "cardId": "slimed", "count": 2, "to": "discard" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 18 } }
   ], "triggers": [{ "trigger": "hp_below_percent", "value": 50, "action": "split", "spawnEnemyId": "spike_slime_m", "spawnCount": 2 }]},
   { "id": "cultist", "name": "Cultist", "maxHp": 48, "intents": [
@@ -119,7 +119,7 @@
     { "weight": 1, "intent": { "type": "block", "value": 0 } }
   ]},
   { "id": "sentry", "name": "Sentry", "maxHp": 38, "intents": [
-    { "weight": 2, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 2, "intent": { "type": "attack", "value": 11, "addStatus": [{ "cardId": "dazed", "count": 2, "to": "discard" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 8 } }
   ]},
   { "id": "darkling", "name": "Darkling", "maxHp": 48, "intents": [
@@ -127,11 +127,11 @@
     { "weight": 1, "intent": { "type": "none", "value": 0 } }
   ]},
   { "id": "orb_walker", "name": "Orb Walker", "maxHp": 90, "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 12, "addStatus": [{ "cardId": "burn", "count": 1, "to": "draw" }, { "cardId": "burn", "count": 1, "to": "discard" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 15 } }
   ]},
   { "id": "repulsor", "name": "Repulsor", "maxHp": 40, "intents": [
-    { "weight": 1, "intent": { "type": "debuff", "value": 1 } },
+    { "weight": 1, "intent": { "type": "none", "value": 0, "addStatus": [{ "cardId": "dazed", "count": 2, "to": "draw" }] } },
     { "weight": 1, "intent": { "type": "attack", "value": 10 } }
   ]},
   { "id": "spiker", "name": "Spiker", "maxHp": 44, "intents": [

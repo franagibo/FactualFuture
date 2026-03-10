@@ -385,19 +385,32 @@ export function chooseNode(
 const GOLD_PER_COMBAT = 10;
 const REWARD_CARD_COUNT = 3;
 
+/** Remove all status cards (Burn, Dazed, etc.) from deck, hand, and discard. Status cards are combat-only. */
+export function stripStatusCards(state: GameState, cardsMap: Map<string, CardDef>): GameState {
+  const isStatus = (id: string) => cardsMap.get(id)?.isStatus === true;
+  return {
+    ...state,
+    deck: state.deck.filter((id) => !isStatus(id)),
+    hand: state.hand.filter((id) => !isStatus(id)),
+    discard: state.discard.filter((id) => !isStatus(id)),
+  };
+}
+
 /**
- * After combat win: add gold, set runPhase to 'reward', pick 3 card choices from pool.
+ * After combat win: strip status cards, add gold, set runPhase to 'reward', pick 3 card choices from pool.
  */
 export function afterCombatWin(
   state: GameState,
-  rewardCardPool: string[]
+  rewardCardPool: string[],
+  cardsMap: Map<string, CardDef>
 ): GameState {
+  const stripped = stripStatusCards(state, cardsMap);
   const choices = pickRandom(rewardCardPool, REWARD_CARD_COUNT);
   return {
-    ...state,
+    ...stripped,
     runPhase: 'reward',
     rewardCardChoices: choices,
-    gold: (state.gold ?? 0) + GOLD_PER_COMBAT,
+    gold: (stripped.gold ?? 0) + GOLD_PER_COMBAT,
     currentEncounter: null,
     enemies: [],
     combatResult: null,

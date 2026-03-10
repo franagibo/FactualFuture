@@ -43,4 +43,6 @@ export interface CardDef {
   isCurse?: boolean;
   /** When true, this card is exhausted (removed for rest of combat) when played. */
   exhaust?: boolean;
+  /** When true, card is a status (added by monsters/effects); removed from deck at end of combat. */
+  isStatus?: boolean;
 }

@@ -26,9 +26,18 @@ export interface MapState {
   edges: [string, string][];
 }
 
+/** Status cards added to player deck/discard when this intent is resolved (e.g. Sentry Bolt → Dazed). */
+export interface IntentAddStatus {
+  cardId: string;
+  count: number;
+  to: 'draw' | 'discard';
+}
+
 export interface EnemyIntent {
   type: 'attack' | 'block' | 'debuff' | 'vulnerable' | 'none';
   value: number;
+  /** When set, resolving this intent adds these status cards to the player's draw or discard pile. */
+  addStatus?: IntentAddStatus[];
 }
 
 export interface EnemyState {
