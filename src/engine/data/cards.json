@@ -1,0 +1,12 @@
+[
+  { "id": "strike", "name": "Strike", "cost": 1, "effects": [{ "type": "damage", "value": 6, "target": "enemy" }] },
+  { "id": "defend", "name": "Defend", "cost": 1, "effects": [{ "type": "block", "value": 5, "target": "player" }] },
+  { "id": "bash", "name": "Bash", "cost": 2, "effects": [{ "type": "damage", "value": 8, "target": "enemy" }, { "type": "vulnerable", "value": 2, "target": "enemy" }] },
+  { "id": "heavy_strike", "name": "Heavy Strike", "cost": 2, "effects": [{ "type": "damage", "value": 12, "target": "enemy" }] },
+  { "id": "block", "name": "Block", "cost": 1, "effects": [{ "type": "block", "value": 8, "target": "player" }] },
+  { "id": "clash", "name": "Clash", "cost": 0, "effects": [{ "type": "damage", "value": 14, "target": "enemy" }] },
+  { "id": "pommel_strike", "name": "Pommel Strike", "cost": 1, "effects": [{ "type": "damage", "value": 9, "target": "enemy" }, { "type": "draw", "value": 1, "target": "player" }] },
+  { "id": "iron_wave", "name": "Iron Wave", "cost": 1, "effects": [{ "type": "damage", "value": 5, "target": "enemy" }, { "type": "block", "value": 5, "target": "player" }] },
+  { "id": "shrug_it_off", "name": "Shrug It Off", "cost": 1, "effects": [{ "type": "block", "value": 8, "target": "player" }, { "type": "draw", "value": 1, "target": "player" }] },
+  { "id": "body_slam", "name": "Body Slam", "cost": 1, "effects": [{ "type": "damage", "value": 0, "target": "enemy" }] }
+]

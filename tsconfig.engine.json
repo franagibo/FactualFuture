@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-engine",
+    "rootDir": "./src/engine",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "declaration": true,
+    "noEmit": false,
+    "strict": true
+  },
+  "include": ["src/engine/**/*.ts"],
+  "exclude": ["node_modules", "**/*.spec.ts"]
+}

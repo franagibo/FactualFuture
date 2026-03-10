@@ -1,0 +1,12 @@
+{
+  "act1": {
+    "combat": 4,
+    "elite": 0,
+    "rest": 2,
+    "shop": 0,
+    "event": 0,
+    "boss": 1,
+    "encounterPool": ["tutorial"],
+    "bossEncounter": "tutorial"
+  }
+}

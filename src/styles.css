@@ -1,0 +1,25 @@
+* {
+  box-sizing: border-box;
+}
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+}
+html {
+  overflow: hidden;
+}
+body {
+  overflow: auto;
+}
+app-root {
+  display: block;
+  height: 100%;
+}
+app-root::ng-deep router-outlet + * {
+  display: block;
+  height: 100%;
+  width: 100%;
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "jaw_worm",
+    "name": "Jaw Worm",
+    "maxHp": 40,
+    "intents": [
+      { "weight": 1, "intent": { "type": "attack", "value": 11 } },
+      { "weight": 1, "intent": { "type": "block", "value": 6 } },
+      { "weight": 1, "intent": { "type": "attack", "value": 7 } }
+    ]
+  }
+]
