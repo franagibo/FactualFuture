@@ -691,6 +691,66 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  /** Convex hull (Graham scan), CCW order. */
+  private convexHull(points: { x: number; y: number }[]): { x: number; y: number }[] {
+    if (points.length < 3) return [...points];
+    const idx = points.reduce((min, p, i) => {
+      const q = points[min];
+      return p.y < q.y || (p.y === q.y && p.x < q.x) ? i : min;
+    }, 0);
+    const pivot = points[idx];
+    const rest = points.filter((_, i) => i !== idx);
+    rest.sort((a, b) => {
+      const ax = a.x - pivot.x;
+      const ay = a.y - pivot.y;
+      const bx = b.x - pivot.x;
+      const by = b.y - pivot.y;
+      const cross = ax * by - ay * bx;
+      if (cross !== 0) return cross > 0 ? 1 : -1;
+      return (ax * ax + ay * ay) - (bx * bx + by * by);
+    });
+    const hull: { x: number; y: number }[] = [pivot];
+    for (const p of rest) {
+      while (hull.length >= 2) {
+        const a = hull[hull.length - 2];
+        const b = hull[hull.length - 1];
+        const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+        if (cross <= 0) hull.pop();
+        else break;
+      }
+      hull.push(p);
+    }
+    return hull;
+  }
+
+  /** Expand polygon outward by distance (CCW vertices). */
+  private expandPolygon(poly: { x: number; y: number }[], distance: number): { x: number; y: number }[] {
+    const n = poly.length;
+    if (n < 3) return poly;
+    const out: { x: number; y: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const prev = poly[(i - 1 + n) % n];
+      const curr = poly[i];
+      const next = poly[(i + 1) % n];
+      const e1x = curr.x - prev.x;
+      const e1y = curr.y - prev.y;
+      const e2x = next.x - curr.x;
+      const e2y = next.y - curr.y;
+      const n1x = -e1y;
+      const n1y = e1x;
+      const n2x = -e2y;
+      const n2y = e2x;
+      const l1 = Math.hypot(n1x, n1y) || 1;
+      const l2 = Math.hypot(n2x, n2y) || 1;
+      const bx = n1x / l1 + n2x / l2;
+      const by = n1y / l1 + n2y / l2;
+      const bl = Math.hypot(bx, by) || 1;
+      const scale = distance / bl;
+      out.push({ x: curr.x + bx * scale, y: curr.y + by * scale });
+    }
+    return out;
+  }
+
   private drawMapView(
     state: GameState,
     stage: PIXI.Container,
@@ -743,20 +803,32 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     const totalMapHeight = (maxFloor + 2) * FLOOR_SPACING;
     const contentBottomPadding = 60;
+    /** Deterministic jitter from node id + floor so layout is less rigid but stable. Returns -1..1. */
+    const jitterFrom = (nodeId: string, floor: number, seed: number) => {
+      let h = seed;
+      for (let i = 0; i < nodeId.length; i++) h = (h * 31 + nodeId.charCodeAt(i)) | 0;
+      h = (h + floor * 17) | 0;
+      return ((h >>> 0) % 2000) / 1000 - 1;
+    };
+    const JITTER_X = 22;
+    const JITTER_Y = 12;
     const posById = new Map<string, { x: number; y: number }>();
     for (let f = 0; f <= maxFloor; f++) {
       const ids = floors[f] ?? [];
       if (!ids.length) continue;
-      const y = contentBottomPadding + totalMapHeight - (f + 1) * FLOOR_SPACING;
+      const baseY = contentBottomPadding + totalMapHeight - (f + 1) * FLOOR_SPACING;
       const gapX = Math.min(80, (w - padding * 2) / Math.max(1, ids.length));
       const rowWidth = (ids.length - 1) * gapX;
       const centerX = w / 2;
       for (let i = 0; i < ids.length; i++) {
-        const n = nodes.find((x) => x.id === ids[i]);
+        const nodeId = ids[i];
+        const n = nodes.find((x) => x.id === nodeId);
         const lane = (n && (n as { lane?: number }).lane != null) ? (n as { lane: number }).lane : i;
-        const jitter = (lane / laneCount - 0.5) * 16;
-        const x = centerX - rowWidth / 2 + i * gapX + jitter;
-        posById.set(ids[i], { x, y });
+        const laneJitter = (lane / laneCount - 0.5) * 16;
+        const baseX = centerX - rowWidth / 2 + i * gapX + laneJitter;
+        const x = baseX + jitterFrom(nodeId, f, 1) * JITTER_X;
+        const y = baseY + jitterFrom(nodeId, f, 2) * JITTER_Y;
+        posById.set(nodeId, { x, y });
       }
     }
     for (const n of nodes) {
@@ -767,56 +839,89 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     this.mapAssets.loadMapAssets();
     const bgTex = this.mapAssets.getMapBgTexture();
+    stage.sortableChildren = true;
     if (bgTex) {
       const bgSprite = new PIXI.Sprite(bgTex);
       bgSprite.width = w;
       bgSprite.height = h;
+      bgSprite.zIndex = 0;
       stage.addChild(bgSprite);
     } else {
       const bg = new PIXI.Graphics();
       bg.rect(0, 0, w, h).fill(0x1a1822);
+      bg.zIndex = 0;
       stage.addChild(bg);
+    }
+
+    // Full-map container: one large panel that contains the entire path (all levels, bottom to top)
+    const nodePoints = Array.from(posById.values());
+    if (nodePoints.length > 0) {
+      const minX = Math.min(...nodePoints.map((p) => p.x));
+      const maxX = Math.max(...nodePoints.map((p) => p.x));
+      const minY = Math.min(...nodePoints.map((p) => p.y));
+      const maxY = Math.max(...nodePoints.map((p) => p.y));
+      const PAD = 70;
+      const x = minX - PAD;
+      const y = minY - PAD;
+      const boxW = maxX - minX + 2 * PAD;
+      const boxH = maxY - minY + 2 * PAD;
+      const cornerRadius = 40;
+      const containerShape = new PIXI.Graphics();
+      containerShape.roundRect(x, y, boxW, boxH, cornerRadius);
+      containerShape.fill({ color: 0x0c0a18, alpha: 0.88 });
+      containerShape.stroke({ width: 2, color: 0xb48cff, alpha: 0.45 });
+      containerShape.zIndex = 1;
+      stage.addChild(containerShape);
     }
 
     const inset = NODE_RADIUS + 6;
     const strokeColor = 0x8899aa;
+    const pathBorderColor = 0x0c0c18;
+    const pathBorderWidth = 6;
+    const pathStrokeWidth = 2.5;
     const dashLen = 10;
     const gapLen = 6;
 
-    const edgeGraphics = new PIXI.Graphics();
-    for (const [from, to] of edges) {
-      const fromPos = posById.get(from);
-      const toPos = posById.get(to);
-      if (!fromPos || !toPos) continue;
-      const dx = toPos.x - fromPos.x;
-      const dy = toPos.y - fromPos.y;
-      const len = Math.hypot(dx, dy);
-      if (len < inset * 2) continue;
-      const ux = dx / len;
-      const uy = dy / len;
-      const startX = fromPos.x + ux * inset;
-      const startY = fromPos.y + uy * inset;
-      const endX = toPos.x - ux * inset;
-      const endY = toPos.y - uy * inset;
-      const segLen = Math.hypot(endX - startX, endY - startY);
-      let dist = 0;
-      while (dist < segLen - 16) {
-        const a = dist;
-        const b = Math.min(dist + dashLen, segLen - 16);
-        edgeGraphics.moveTo(startX + ux * a, startY + uy * a);
-        edgeGraphics.lineTo(startX + ux * b, startY + uy * b);
-        edgeGraphics.stroke({ width: 2.5, color: strokeColor });
-        dist += dashLen + gapLen;
+    const drawEdgePath = (g: PIXI.Graphics, lineWidth: number, color: number) => {
+      for (const [from, to] of edges) {
+        const fromPos = posById.get(from);
+        const toPos = posById.get(to);
+        if (!fromPos || !toPos) continue;
+        const dx = toPos.x - fromPos.x;
+        const dy = toPos.y - fromPos.y;
+        const len = Math.hypot(dx, dy);
+        if (len < inset * 2) continue;
+        const ux = dx / len;
+        const uy = dy / len;
+        const startX = fromPos.x + ux * inset;
+        const startY = fromPos.y + uy * inset;
+        const endX = toPos.x - ux * inset;
+        const endY = toPos.y - uy * inset;
+        const segLen = Math.hypot(endX - startX, endY - startY);
+        let dist = 0;
+        while (dist < segLen - 16) {
+          const a = dist;
+          const b = Math.min(dist + dashLen, segLen - 16);
+          g.moveTo(startX + ux * a, startY + uy * a);
+          g.lineTo(startX + ux * b, startY + uy * b);
+          g.stroke({ width: lineWidth, color });
+          dist += dashLen + gapLen;
+        }
+        const arrowBase = segLen - 16;
+        const baseX = startX + ux * arrowBase;
+        const baseY = startY + uy * arrowBase;
+        const arrowLen = 12;
+        g.moveTo(baseX - uy * arrowLen * 0.5, baseY + ux * arrowLen * 0.5);
+        g.lineTo(endX, endY);
+        g.lineTo(baseX + uy * arrowLen * 0.5, baseY - ux * arrowLen * 0.5);
+        g.stroke({ width: lineWidth, color });
       }
-      const arrowBase = segLen - 16;
-      const baseX = startX + ux * arrowBase;
-      const baseY = startY + uy * arrowBase;
-      const arrowLen = 12;
-      edgeGraphics.moveTo(baseX - uy * arrowLen * 0.5, baseY + ux * arrowLen * 0.5);
-      edgeGraphics.lineTo(endX, endY);
-      edgeGraphics.lineTo(baseX + uy * arrowLen * 0.5, baseY - ux * arrowLen * 0.5);
-      edgeGraphics.stroke({ width: 2.5, color: strokeColor });
-    }
+    };
+
+    const edgeGraphics = new PIXI.Graphics();
+    drawEdgePath(edgeGraphics, pathBorderWidth, pathBorderColor);
+    drawEdgePath(edgeGraphics, pathStrokeWidth, strokeColor);
+    edgeGraphics.zIndex = 2;
     stage.addChild(edgeGraphics);
 
     const nodeColor = (type: MapNodeType): number => {
@@ -846,6 +951,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const container = new PIXI.Container();
       container.x = pos.x;
       container.y = pos.y;
+      container.zIndex = 3;
 
       if (nodeTex) {
         const sprite = new PIXI.Sprite(nodeTex);

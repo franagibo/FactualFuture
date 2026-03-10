@@ -16,7 +16,7 @@ import { GameBridgeService } from '../services/game-bridge.service';
             </button>
           }
           <button type="button" class="menu-btn menu-btn-primary" (click)="onPlay()">
-            <span class="menu-btn-inner">Play</span>
+            <span class="menu-btn-inner">New Game</span>
           </button>
           <button type="button" class="menu-btn" (click)="onSettings()">
             <span class="menu-btn-inner">Settings</span>

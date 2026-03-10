@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import * as PIXI from 'pixi.js';
 import type { MapNodeType } from '../../engine/types';
 
-const MAP_BG_PATH = '/assets/map/map-bg.svg';
+const MAP_BG_PATH = '/assets/map/power-core-level.jpg';
 const NODE_ICON_PATHS: Record<MapNodeType, string> = {
   combat: '/assets/map/nodes/combat.svg',
   elite: '/assets/map/nodes/elite.svg',
