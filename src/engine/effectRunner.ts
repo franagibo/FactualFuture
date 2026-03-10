@@ -37,21 +37,9 @@ export function runEffects(
       case 'damage': {
         if (effect.target === 'enemy' && targetEnemyIndex != null && enemies[targetEnemyIndex]) {
           const enemy = enemies[targetEnemyIndex];
-          const dmg = Math.min(effect.value, enemy.block + enemy.hp);
-          let remain = effect.value;
-          if (enemy.block > 0) {
-            const blockReduce = Math.min(enemy.block, remain);
-            enemy.block -= blockReduce;
-            remain -= blockReduce;
-          }
-          if (remain > 0) enemy.hp = Math.max(0, enemy.hp - remain);
-        }
-        break;
-      }
-      case 'damageEqualToBlock': {
-        const dmg = next.playerBlock;
-        if (effect.target === 'enemy' && targetEnemyIndex != null && enemies[targetEnemyIndex]) {
-          const enemy = enemies[targetEnemyIndex];
+          let dmg = effect.value;
+          if ((enemy.vulnerableStacks ?? 0) > 0) dmg = Math.ceil(dmg * 1.5);
+          dmg = Math.min(dmg, enemy.block + enemy.hp);
           let remain = dmg;
           if (enemy.block > 0) {
             const blockReduce = Math.min(enemy.block, remain);
@@ -59,6 +47,23 @@ export function runEffects(
             remain -= blockReduce;
           }
           if (remain > 0) enemy.hp = Math.max(0, enemy.hp - remain);
+          if ((enemy.vulnerableStacks ?? 0) > 0) enemy.vulnerableStacks = Math.max(0, (enemy.vulnerableStacks ?? 0) - 1);
+        }
+        break;
+      }
+      case 'damageEqualToBlock': {
+        let dmg = next.playerBlock;
+        if (effect.target === 'enemy' && targetEnemyIndex != null && enemies[targetEnemyIndex]) {
+          const enemy = enemies[targetEnemyIndex];
+          if ((enemy.vulnerableStacks ?? 0) > 0) dmg = Math.ceil(dmg * 1.5);
+          let remain = dmg;
+          if (enemy.block > 0) {
+            const blockReduce = Math.min(enemy.block, remain);
+            enemy.block -= blockReduce;
+            remain -= blockReduce;
+          }
+          if (remain > 0) enemy.hp = Math.max(0, enemy.hp - remain);
+          if ((enemy.vulnerableStacks ?? 0) > 0) enemy.vulnerableStacks = Math.max(0, (enemy.vulnerableStacks ?? 0) - 1);
         }
         break;
       }
@@ -78,7 +83,10 @@ export function runEffects(
         }
         break;
       case 'vulnerable':
-        // V1: no vulnerability state; skip
+        if (effect.target === 'enemy' && targetEnemyIndex != null && enemies[targetEnemyIndex]) {
+          const enemy = enemies[targetEnemyIndex];
+          enemy.vulnerableStacks = (enemy.vulnerableStacks ?? 0) + effect.value;
+        }
         break;
     }
   }

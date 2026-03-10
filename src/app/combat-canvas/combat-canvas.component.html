@@ -70,6 +70,13 @@
         </div>
       } @else {
         <div class="quit-title">Settings</div>
+        <div class="pause-settings-section">
+          <div class="pause-settings-label">Sound</div>
+          <div class="pause-settings-options">
+            <button type="button" class="btn-quit btn-pause" [class.active]="!sound.isMuted()" (click)="setPauseSound(false)">On</button>
+            <button type="button" class="btn-quit btn-pause" [class.active]="sound.isMuted()" (click)="setPauseSound(true)">Off</button>
+          </div>
+        </div>
         @if (isElectron()) {
           <div class="pause-settings-section">
             <div class="pause-settings-label">Display</div>

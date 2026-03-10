@@ -38,6 +38,8 @@ export interface EnemyState {
   maxHp: number;
   block: number;
   intent: EnemyIntent | null;
+  /** B17: Vulnerable stacks; damage taken multiplied by 1.5, decay by 1 per turn. */
+  vulnerableStacks?: number;
 }
 
 export interface GameState {

@@ -229,14 +229,18 @@ export function endTurn(
 
   if (next.playerHp <= 0) return { ...next, combatResult: 'lose' };
 
-  // Next turn: discard hand, draw 5, refill energy, new intents
+  // Next turn: discard hand, draw 5, refill energy, decay statuses, new intents
   next = discardHandAndDraw(next, DRAW_PER_TURN);
+  const decayedEnemies = next.enemies.map((e) => ({
+    ...e,
+    vulnerableStacks: Math.max(0, (e.vulnerableStacks ?? 0) - 1),
+  }));
   next = {
     ...next,
     phase: 'player',
     energy: next.maxEnergy,
     turnNumber: next.turnNumber + 1,
-    enemies: setEnemyIntents(next.enemies, enemyDefs),
+    enemies: setEnemyIntents(decayedEnemies, enemyDefs),
   };
   return next;
 }

@@ -8,8 +8,10 @@ import {
   HostListener,
 } from '@angular/core';
 import { Router } from '@angular/router';
+import { CombatAssetsService } from '../services/combat-assets.service';
 import { GameBridgeService } from '../services/game-bridge.service';
 import { MapAssetsService } from '../services/map-assets.service';
+import { SoundService } from '../services/sound.service';
 import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
@@ -41,14 +43,19 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   selectedCardId: string | null = null;
   /** In targeting mode, index of enemy currently hovered (for arrow and highlight). */
   hoveredEnemyIndex: number | null = null;
-  /** B9: Floating numbers to show (damage/block) with screen position. */
-  private floatingNumbers: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number }[] = [];
+  /** B9/B20: Floating numbers to show (damage/block) with screen position; addedAt for expiry. */
+  private floatingNumbers: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt?: number }[] = [];
   /** B11: When true, show "Enemy turn" banner before resolving enemy phase. */
   private showingEnemyTurn = false;
+  /** B15: Per-card hover influence 0..1 for smooth animation; length = hand length. */
+  private hoverLerp: number[] = [];
+  /** B15: Target values for hoverLerp (0 or 1); set each redraw in combat. */
+  private targetLerp: number[] = [];
   private _steamWarning = '';
   private _combatResult: GameState['combatResult'] = null;
   private _runPhase: RunPhase | undefined = undefined;
   private resizeObserver: ResizeObserver | null = null;
+  private hoverLerpTicker: ((t: { deltaTime: number }) => void) | null = null;
   /** When in map phase, total height of map content (px) for scroll. */
   mapContentHeight = 0;
   showPauseMenu = false;
@@ -58,6 +65,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   constructor(
     private bridge: GameBridgeService,
     private mapAssets: MapAssetsService,
+    private combatAssets: CombatAssetsService,
+    public sound: SoundService,
     private router: Router,
     private cdr: ChangeDetectorRef
   ) {}
@@ -71,6 +80,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.cdr.markForCheck();
       return;
     }
+    // B18: targeting cancelled above; fall through to open pause menu
     this.showPauseSettings = false;
     this.showPauseMenu = true;
     this.cdr.markForCheck();
@@ -116,6 +126,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  setPauseSound(muted: boolean): void {
+    this.sound.setMuted(muted);
+    this.cdr.markForCheck();
+  }
+
   onExitGame(): void {
     this.closePauseMenu();
     const api = (window as unknown as { electronAPI?: { quit?: () => void } }).electronAPI;
@@ -140,6 +155,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   rewardChoices = () => this.bridge.getRewardChoices();
 
   ngOnInit(): void {
+    this.sound.loadMutedPreference();
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
       (window as unknown as { electronAPI: { onSteamWarning: (cb: (m: string) => void) => void } }).electronAPI.onSteamWarning((msg) => {
         this._steamWarning = msg;
@@ -150,6 +166,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.hoverLerpTicker && this.app) this.app.ticker.remove(this.hoverLerpTicker);
+    this.hoverLerpTicker = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.app?.destroy(true, { children: true, texture: false });
@@ -178,6 +196,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.app.stage.eventMode = 'passive' as PIXI.EventMode;
     this.resizeObserver = new ResizeObserver(() => this.redraw());
     this.resizeObserver.observe(host);
+    this.hoverLerpTicker = () => {
+      if (this._runPhase !== 'combat' || !this.app || this.hoverLerp.length !== this.targetLerp.length) return;
+      let changed = false;
+      const factor = 0.2;
+      for (let i = 0; i < this.hoverLerp.length; i++) {
+        const prev = this.hoverLerp[i];
+        this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
+        if (Math.abs(this.hoverLerp[i] - prev) > 0.01) changed = true;
+      }
+      if (changed) {
+        this.redraw();
+        this.cdr.markForCheck();
+      }
+    };
+    this.app.ticker.add(this.hoverLerpTicker);
     this.redraw();
     if (this._runPhase === 'map') {
       this.mapAssets.loadMapAssets().then(() => {
@@ -190,6 +223,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private redraw(): void {
     const state = this.bridge.getState();
     if (!state || !this.app) return;
+    const now = performance.now();
+    this.floatingNumbers = this.floatingNumbers.filter((fn) => (fn.addedAt == null) || now - fn.addedAt <= 700);
     this._combatResult = state.combatResult;
     this._runPhase = this.bridge.getRunPhase();
 
@@ -217,9 +252,17 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Combat phase: build context and delegate to combat renderer.
+    // Combat phase: ensure combat assets loading, build context and delegate to combat renderer.
+    this.combatAssets.loadCombatAssets();
     const hand = state.hand;
     if (this.hoveredCardIndex != null && this.hoveredCardIndex >= hand.length) this.hoveredCardIndex = null;
+
+    this.targetLerp = hand.map((cardId, i) =>
+      (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) || this.selectedCardId === cardId ? 1 : 0
+    );
+    if (this.hoverLerp.length !== this.targetLerp.length) {
+      this.hoverLerp = [...this.targetLerp];
+    }
 
     const combatContext: CombatViewContext = {
       stage,
@@ -243,6 +286,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       onEnemyPointerOut: () => { this.hoveredEnemyIndex = null; this.redraw(); },
       cardSprites: this.cardSprites,
       markForCheck: () => this.cdr.markForCheck(),
+      getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
+      getPlayerTexture: () => this.combatAssets.getPlayerTexture(),
+      getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
+      hoverLerp: this.hoverLerp,
     };
     drawCombatView(combatContext);
   }
@@ -282,7 +329,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     if (this.cardNeedsEnemyTarget(cardId)) {
       const aliveCount = state.enemies.filter((e) => e.hp > 0).length;
-      if (aliveCount === 0) return;
+      if (aliveCount === 0) return; // B19: no valid target, do not enter targeting
       this.selectedCardId = cardId;
       this.redraw();
       this.cdr.markForCheck();
@@ -375,28 +422,33 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         flyCard.destroy({ children: true });
         const oldState = state;
         this.bridge.playCard(cardId, enemyIndex);
+        this.sound.playCardPlay();
         const newState = this.bridge.getState()!;
         this.selectedCardId = null;
         this.hoveredEnemyIndex = null;
-        const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number }[] = [];
+        const now = performance.now();
+        const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt: number }[] = [];
         if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
           const hpLost = oldState.enemies[enemyIndex].hp - newState.enemies[enemyIndex].hp;
-          if (hpLost > 0) toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex });
+          if (hpLost > 0) {
+            toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
+            this.sound.playHit();
+          }
         }
         const blockGain = newState.playerBlock - oldState.playerBlock;
         if (blockGain > 0) {
           const playerZoneX = w * L.playerZoneXRatio;
-          toAdd.push({ type: 'block', value: blockGain, x: playerZoneX, y: baselineBottom - L.playerPlaceholderH / 2 });
+          toAdd.push({ type: 'block', value: blockGain, x: playerZoneX, y: baselineBottom - L.playerPlaceholderH / 2, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
+          this.sound.playBlock();
         }
-        this.floatingNumbers = toAdd;
+        this.floatingNumbers = [...this.floatingNumbers, ...toAdd];
         this.redraw();
         this.cdr.markForCheck();
         if (toAdd.length > 0) {
           setTimeout(() => {
-            this.floatingNumbers = [];
             this.redraw();
             this.cdr.markForCheck();
-          }, 700);
+          }, 750);
         }
       }
     };
@@ -412,10 +464,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   /** Show "Enemy turn" banner, then after 1200ms call bridge.endTurn() and redraw. */
   onEndTurn(): void {
     if (!this.canEndTurn()) return;
+    this.sound.playTurnEnd();
     this.showingEnemyTurn = true;
     this.redraw();
     this.cdr.markForCheck();
     setTimeout(() => {
+      this.sound.playTurnStart();
       this.bridge.endTurn();
       this.showingEnemyTurn = false;
       this.redraw();
