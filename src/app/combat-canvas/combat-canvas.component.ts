@@ -11,7 +11,7 @@ import { Router } from '@angular/router';
 import { GameBridgeService } from '../services/game-bridge.service';
 import { MapAssetsService } from '../services/map-assets.service';
 import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
-import type { CardDef } from '../../engine/cardDef';
+import type { CardDef, CardEffect } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
 
 @Component({
@@ -26,6 +26,9 @@ import * as PIXI from 'pixi.js';
       </div>
       <div class="overlay-actions">
         @if (runPhase() === 'combat') {
+          @if (selectedCardId) {
+            <button type="button" class="btn-cancel-target" (click)="cancelTargeting()">Cancel target</button>
+          }
           <button type="button" class="btn-end" (click)="onEndTurn()" [disabled]="!canEndTurn()">
             End turn
           </button>
@@ -215,6 +218,27 @@ import * as PIXI from 'pixi.js';
           0 2px 0 #1e1838,
           0 2px 8px rgba(0, 0, 0, 0.4),
           inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      }
+      .btn-cancel-target {
+        position: relative;
+        padding: 10px 20px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        color: #1a1a2e;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #c9a227 0%, #9a7b1a 50%, #7a6015 100%);
+        box-shadow: 0 4px 0 #4a3a0a, 0 6px 16px rgba(0, 0, 0, 0.35);
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+        margin-right: 12px;
+      }
+      .btn-cancel-target:hover {
+        transform: translateY(-2px) scale(1.02);
+        filter: brightness(1.1);
+      }
+      .btn-cancel-target:active {
+        transform: translateY(1px) scale(0.99);
       }
       .result {
         font-size: 1.35rem;
@@ -448,6 +472,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private app: PIXI.Application | null = null;
   private cardSprites: Map<string, PIXI.Container> = new Map();
   private cardsMap: Map<string, CardDef> | null = null;
+  /** Index of card in hand currently hovered; used for lift/scale/z-order. */
+  hoveredCardIndex: number | null = null;
+  /** When set, we are in targeting mode; player must click an enemy to play this card. */
+  selectedCardId: string | null = null;
+  /** In targeting mode, index of enemy currently hovered (for arrow and highlight). */
+  hoveredEnemyIndex: number | null = null;
+  /** B9: Floating numbers to show (damage/block) with screen position. */
+  private floatingNumbers: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number }[] = [];
+  /** B11: When true, show "Enemy turn" banner before resolving enemy phase. */
+  private showingEnemyTurn = false;
   private _steamWarning = '';
   private _combatResult: GameState['combatResult'] = null;
   private _runPhase: RunPhase | undefined = undefined;
@@ -467,6 +501,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.selectedCardId != null) {
+      this.selectedCardId = null;
+      this.hoveredEnemyIndex = null;
+      this.redraw();
+      this.cdr.markForCheck();
+      return;
+    }
     this.showPauseSettings = false;
     this.showPauseMenu = true;
     this.cdr.markForCheck();
@@ -601,8 +642,35 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Player area (bottom): HP, block, energy
-    const playerY = h - 100;
+    // Combat layout: player left, enemies right; both in bottom 40% of height
+    const playerZoneX = w * 0.18;
+    const enemyZoneStart = w * 0.52;
+    const baselineBottom = h * 0.6;
+    const playerY = h - 28;
+    const playerPlaceholderW = 100;
+    const playerPlaceholderH = 130;
+    const enemyPlaceholderW = 100;
+    const enemyPlaceholderH = 110;
+    const enemyGap = 28;
+
+    // Player character placeholder (left), in bottom 40%
+    const playerContainer = new PIXI.Container();
+    playerContainer.x = playerZoneX - playerPlaceholderW / 2;
+    playerContainer.y = baselineBottom - playerPlaceholderH;
+    const playerBody = new PIXI.Graphics();
+    playerBody.roundRect(20, 44, 60, 72, 8).fill({ color: 0x3a4a6a }).stroke({ width: 2, color: 0x5a6a8a });
+    playerContainer.addChild(playerBody);
+    const playerHead = new PIXI.Graphics();
+    playerHead.circle(50, 28, 22).fill({ color: 0x4a5a7a }).stroke({ width: 2, color: 0x6a7a9a });
+    playerContainer.addChild(playerHead);
+    const showBlockFlash = this.floatingNumbers.some((f) => f.type === 'block');
+    if (showBlockFlash) {
+      const blockOverlay = new PIXI.Graphics();
+      blockOverlay.roundRect(0, 0, playerPlaceholderW, playerPlaceholderH, 10).fill({ color: 0x44ff88, alpha: 0.3 });
+      playerContainer.addChild(blockOverlay);
+    }
+    stage.addChild(playerContainer);
+
     const hpText = new PIXI.Text({
       text: `HP: ${state.playerHp}/${state.playerMaxHp}  Block: ${state.playerBlock}  Energy: ${state.energy}/${state.maxEnergy}`,
       style: { fontFamily: 'system-ui', fontSize: 18, fill: 0xeeeeee },
@@ -611,86 +679,267 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     hpText.y = playerY;
     stage.addChild(hpText);
 
-    // Hand (cards as colored rectangles)
+    // Hand: arc + overlap + pivot, card visuals, hover lift, unplayable dim
     const hand = state.hand;
-    const cardWidth = 80;
-    const cardHeight = 110;
-    const gap = 10;
-    const totalHandWidth = hand.length * cardWidth + (hand.length - 1) * gap;
-    let startX = (w - totalHandWidth) / 2 + cardWidth / 2 + gap / 2;
+    if (this.hoveredCardIndex != null && this.hoveredCardIndex >= hand.length) this.hoveredCardIndex = null;
+    const cardWidth = 100;
+    const cardHeight = 140;
+    const overlapRatio = 0.45;
+    const arcAmplitude = 30;
+    const cardRotationRad = 0.03;
+    const cardSpacing = cardWidth * overlapRatio;
+    const totalHandWidth = (hand.length - 1) * cardSpacing + cardWidth;
+    const startX = (w - totalHandWidth) / 2 + cardWidth / 2;
     const handY = playerY - cardHeight - 20;
+    const center = (hand.length - 1) / 2;
+    const hoverLift = 20;
+    const hoverScale = 1.08;
 
+    const handContainer = new PIXI.Container();
+    handContainer.sortableChildren = true;
     this.cardSprites.clear();
+
     for (let i = 0; i < hand.length; i++) {
       const cardId = hand[i];
+      const cost = this.getCardCost(cardId);
+      const playable = state.energy >= cost;
+      const isHovered = this.hoveredCardIndex === i;
+      const isSelected = this.selectedCardId === cardId;
+      const applyHover = (isHovered && playable) || isSelected;
+
+      const arcNorm = hand.length > 1 ? (i - center) / (hand.length - 1) : 0;
+      const baseY = handY + arcAmplitude * (1 - 4 * arcNorm * arcNorm);
+      const rot = (i - center) * cardRotationRad;
+      const cardX = startX + i * cardSpacing;
+      const cardY = baseY - (applyHover ? hoverLift : 0);
+
       const container = new PIXI.Container();
+      container.sortableChildren = true;
+
+      const shadowOffset = 4;
+      const shadow = new PIXI.Graphics();
+      shadow.roundRect(shadowOffset, shadowOffset, cardWidth, cardHeight, 10)
+        .fill({ color: 0x000000, alpha: applyHover ? 0.35 : 0.18 });
+      container.addChild(shadow);
+
+      const borderColor = isSelected ? 0xe8c060 : playable ? 0x6a6a8a : 0x4a4a5a;
       const bg = new PIXI.Graphics();
-      bg.roundRect(0, 0, cardWidth, cardHeight, 6).fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0x6a6a8a });
+      bg.roundRect(0, 0, cardWidth, cardHeight, 10)
+        .fill({ color: 0x2a2a4a })
+        .stroke({ width: 2, color: borderColor });
       container.addChild(bg);
-      const costColor = state.energy >= (this.getCardCost(cardId) ?? 1) ? 0x88ff88 : 0xff8888;
+
+      const costRadius = 12;
+      const costBg = new PIXI.Graphics();
+      const costColor = playable ? 0x88ff88 : 0xff8888;
+      costBg.circle(costRadius + 6, costRadius + 6, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 1.5, color: costColor });
+      container.addChild(costBg);
       const costText = new PIXI.Text({
-        text: String(this.getCardCost(cardId) ?? '?'),
+        text: String(cost),
         style: { fontFamily: 'system-ui', fontSize: 14, fill: costColor },
       });
-      costText.x = 6;
-      costText.y = 6;
+      costText.anchor.set(0.5, 0.5);
+      costText.x = costRadius + 6;
+      costText.y = costRadius + 6;
       container.addChild(costText);
+
+      const name = this.getCardName(cardId);
+      const nameDisplay = name.length > 12 ? name.slice(0, 12) + '…' : name;
       const nameText = new PIXI.Text({
-        text: this.getCardName(cardId).slice(0, 10),
+        text: nameDisplay,
         style: { fontFamily: 'system-ui', fontSize: 12, fill: 0xcccccc },
       });
-      nameText.x = 6;
+      nameText.x = 8;
       nameText.y = 28;
       container.addChild(nameText);
-      container.x = startX + i * (cardWidth + gap) - cardWidth / 2;
-      container.y = handY;
+
+      const artTop = 48;
+      const artHeight = 50;
+      const artArea = new PIXI.Graphics();
+      artArea.roundRect(8, artTop, cardWidth - 16, artHeight, 4).fill({ color: 0x1e1e32 });
+      container.addChild(artArea);
+
+      const effectDesc = this.getCardEffectDescription(cardId);
+      const effectText = new PIXI.Text({
+        text: effectDesc.slice(0, 22) + (effectDesc.length > 22 ? '…' : ''),
+        style: { fontFamily: 'system-ui', fontSize: 10, fill: 0xaaaaaa },
+      });
+      effectText.x = 8;
+      effectText.y = cardHeight - 22;
+      container.addChild(effectText);
+
+      container.pivot.set(cardWidth / 2, cardHeight);
+      container.x = cardX;
+      container.y = cardY;
+      container.rotation = rot;
+      container.scale.set(applyHover ? hoverScale : 1);
+      container.zIndex = applyHover ? 100 : i;
+      if (!playable) container.alpha = 0.6;
+
       container.eventMode = 'static';
-      container.cursor = 'pointer';
+      container.cursor = playable ? 'pointer' : 'not-allowed';
       const idx = i;
+      container.on('pointerover', () => {
+        this.hoveredCardIndex = idx;
+        this.redraw();
+      });
+      container.on('pointerout', () => {
+        this.hoveredCardIndex = null;
+        this.redraw();
+      });
       container.on('pointerdown', () => this.onCardClick(cardId, idx));
-      stage.addChild(container);
+
+      handContainer.addChild(container);
       this.cardSprites.set(`${cardId}-${idx}`, container);
     }
 
-    // Enemies (top)
-    const enemyStartY = 80;
+    // Enemies (bottom right): same baseline as player, in bottom 40%
+    const targetingMode = this.selectedCardId != null;
+    const enemyStartY = baselineBottom - enemyPlaceholderH;
     const enemies = state.enemies;
-    const enemyW = 120;
-    const enemyH = 90;
-    const enemyGap = 30;
-    const totalEnemyWidth = enemies.length * enemyW + (enemies.length - 1) * enemyGap;
-    let ex = (w - totalEnemyWidth) / 2 + enemyW / 2 + enemyGap / 2;
+    const totalEnemyWidth = enemies.length * enemyPlaceholderW + (enemies.length - 1) * enemyGap;
+    const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
+      const isAlive = e.hp > 0;
+      const isValidTarget = targetingMode && isAlive;
+      const isHoveredEnemy = targetingMode && this.hoveredEnemyIndex === i && isAlive;
       const container = new PIXI.Container();
-      const bg = new PIXI.Graphics();
-      bg.roundRect(0, 0, enemyW, enemyH, 6).fill({ color: 0x3a2a2a }).stroke({ width: 2, color: 0x8a4a4a });
-      container.addChild(bg);
+      const placeholder = new PIXI.Graphics();
+      placeholder.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, 10)
+        .fill({ color: 0x4a3030 })
+        .stroke({ width: isValidTarget ? 4 : 2, color: isHoveredEnemy ? 0xffcc44 : isValidTarget ? 0xcc8866 : 0x8a4a4a });
+      container.addChild(placeholder);
+      if (isValidTarget) {
+        const highlight = new PIXI.Graphics();
+        highlight.roundRect(-3, -3, enemyPlaceholderW + 6, enemyPlaceholderH + 6, 12)
+          .stroke({ width: isHoveredEnemy ? 3 : 2, color: isHoveredEnemy ? 0xffdd66 : 0xe8c060, alpha: 0.9 });
+        container.addChild(highlight);
+      }
+      const wasJustHit = this.floatingNumbers.some((f) => f.type === 'damage' && f.enemyIndex === i);
+      const baseEnemyX = ex + i * (enemyPlaceholderW + enemyGap) - enemyPlaceholderW / 2;
+      const baseEnemyY = enemyStartY;
+      if (wasJustHit) {
+        const hitOverlay = new PIXI.Graphics();
+        hitOverlay.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, 10).fill({ color: 0xff4444, alpha: 0.35 });
+        container.addChild(hitOverlay);
+      }
+      if (isHoveredEnemy) {
+        container.scale.set(1.05);
+        container.pivot.set(enemyPlaceholderW / 2, enemyPlaceholderH / 2);
+        container.x = baseEnemyX + enemyPlaceholderW / 2;
+        container.y = baseEnemyY + enemyPlaceholderH / 2;
+      } else {
+        container.x = baseEnemyX;
+        container.y = baseEnemyY;
+      }
       const nameT = new PIXI.Text({
         text: e.name,
-        style: { fontFamily: 'system-ui', fontSize: 14, fill: 0xeeeeee },
+        style: { fontFamily: 'system-ui', fontSize: 13, fill: 0xeeeeee },
       });
       nameT.x = 8;
       nameT.y = 8;
       container.addChild(nameT);
       const hpT = new PIXI.Text({
         text: `HP: ${e.hp}/${e.maxHp}  Block: ${e.block}`,
-        style: { fontFamily: 'system-ui', fontSize: 12, fill: 0xcccccc },
+        style: { fontFamily: 'system-ui', fontSize: 11, fill: 0xcccccc },
       });
       hpT.x = 8;
-      hpT.y = 28;
+      hpT.y = 26;
       container.addChild(hpT);
       const intentStr = e.intent ? `${e.intent.type} ${e.intent.value}` : '?';
       const intentT = new PIXI.Text({
         text: intentStr,
-        style: { fontFamily: 'system-ui', fontSize: 11, fill: 0xffaa00 },
+        style: { fontFamily: 'system-ui', fontSize: 10, fill: 0xffaa00 },
       });
       intentT.x = 8;
-      intentT.y = 50;
+      intentT.y = 46;
       container.addChild(intentT);
-      container.x = ex + i * (enemyW + enemyGap) - enemyW / 2;
-      container.y = enemyStartY;
+      if (isValidTarget) {
+        container.eventMode = 'static';
+        container.cursor = 'pointer';
+        container.hitArea = new PIXI.Rectangle(0, 0, enemyPlaceholderW, enemyPlaceholderH);
+        const idx = i;
+        container.on('pointerover', () => {
+          this.hoveredEnemyIndex = idx;
+          this.redraw();
+        });
+        container.on('pointerout', () => {
+          this.hoveredEnemyIndex = null;
+          this.redraw();
+        });
+        container.on('pointerdown', () => this.onEnemyTargetClick(idx));
+      }
       stage.addChild(container);
+    }
+
+    // B5: Arrow from selected card to hovered enemy (targeting mode)
+    if (targetingMode && this.hoveredEnemyIndex != null && this.hoveredEnemyIndex < enemies.length && enemies[this.hoveredEnemyIndex].hp > 0) {
+      const selIdx = hand.indexOf(this.selectedCardId!);
+      if (selIdx >= 0) {
+        const arcN = hand.length > 1 ? (selIdx - center) / (hand.length - 1) : 0;
+        const fromX = startX + selIdx * cardSpacing;
+        const fromY = handY + arcAmplitude * (1 - 4 * arcN * arcN) - hoverLift;
+        const toX = ex + this.hoveredEnemyIndex * (enemyPlaceholderW + enemyGap);
+        const toY = enemyStartY + enemyPlaceholderH / 2;
+        const arrow = new PIXI.Graphics();
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const trim = 24;
+        const startXArrow = fromX + ux * trim;
+        const startYArrow = fromY + uy * trim;
+        const endXArrow = toX - ux * trim;
+        const endYArrow = toY - uy * trim;
+        arrow.moveTo(startXArrow, startYArrow).lineTo(endXArrow, endYArrow);
+        arrow.stroke({ width: 3, color: 0xe8c060, alpha: 0.85 });
+        const headLen = 14;
+        const headW = 8;
+        const hx = endXArrow - ux * headLen;
+        const hy = endYArrow - uy * headLen;
+        const perpX = -uy;
+        const perpY = ux;
+        arrow.moveTo(endXArrow, endYArrow)
+          .lineTo(hx + perpX * headW, hy + perpY * headW)
+          .moveTo(endXArrow, endYArrow)
+          .lineTo(hx - perpX * headW, hy - perpY * headW);
+        arrow.stroke({ width: 3, color: 0xe8c060, alpha: 0.85 });
+        stage.addChild(arrow);
+      }
+    }
+
+    stage.addChild(handContainer);
+
+    for (const fn of this.floatingNumbers) {
+      const text = new PIXI.Text({
+        text: fn.type === 'damage' ? `-${fn.value}` : `+${fn.value}`,
+        style: {
+          fontFamily: 'system-ui',
+          fontSize: fn.type === 'damage' ? 22 : 18,
+          fill: fn.type === 'damage' ? 0xff6666 : 0x66ff88,
+          fontWeight: 'bold',
+        },
+      });
+      text.anchor.set(0.5, 0.5);
+      text.x = fn.x;
+      text.y = fn.y;
+      stage.addChild(text);
+    }
+
+    if (this.showingEnemyTurn) {
+      const banner = new PIXI.Graphics();
+      banner.rect(0, 0, w, h).fill({ color: 0x000000, alpha: 0.5 });
+      stage.addChild(banner);
+      const turnText = new PIXI.Text({
+        text: 'Enemy turn',
+        style: { fontFamily: 'system-ui', fontSize: 36, fill: 0xffcc44, fontWeight: 'bold' },
+      });
+      turnText.anchor.set(0.5, 0.5);
+      turnText.x = w / 2;
+      turnText.y = h / 2;
+      stage.addChild(turnText);
     }
 
     this.cdr.markForCheck();
@@ -1022,8 +1271,32 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
   }
 
+  private formatEffect(e: CardEffect): string {
+    switch (e.type) {
+      case 'damage': return `Deal ${e.value} damage`;
+      case 'block': return `Gain ${e.value} block`;
+      case 'heal': return `Heal ${e.value}`;
+      case 'draw': return e.value === 1 ? 'Draw 1 card' : `Draw ${e.value} cards`;
+      case 'vulnerable': return `Apply ${e.value} Vulnerable`;
+      case 'damageEqualToBlock': return 'Damage equal to block';
+      default: return '';
+    }
+  }
+
+  private getCardEffectDescription(cardId: string): string {
+    const def = this.bridge.getCardDef(cardId);
+    if (!def?.effects?.length) return '';
+    return def.effects.map((e) => this.formatEffect(e)).filter(Boolean).join(' • ') || '';
+  }
+
   private getCardCost(cardId: string): number {
     return this.bridge.getCardDef(cardId)?.cost ?? 0;
+  }
+
+  /** True if the card has any effect that targets an enemy (requires target selection). */
+  private cardNeedsEnemyTarget(cardId: string): boolean {
+    const def = this.bridge.getCardDef(cardId);
+    return def?.effects?.some((e) => e.target === 'enemy') ?? false;
   }
 
   getCardName(cardId: string): string {
@@ -1033,9 +1306,139 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   onCardClick(cardId: string, _handIndex: number): void {
     const state = this.bridge.getState();
     if (!state || state.phase !== 'player' || state.combatResult || this._runPhase !== 'combat') return;
-    const targetIndex = state.enemies.length > 0 ? 0 : undefined;
-    this.bridge.playCard(cardId, targetIndex);
+
+    const cost = this.getCardCost(cardId);
+    if (state.energy < cost) return;
+
+    if (this.selectedCardId != null) {
+      if (this.selectedCardId === cardId) {
+        this.selectedCardId = null;
+        this.redraw();
+        this.cdr.markForCheck();
+      }
+      return;
+    }
+
+    if (this.cardNeedsEnemyTarget(cardId)) {
+      const aliveCount = state.enemies.filter((e) => e.hp > 0).length;
+      if (aliveCount === 0) return;
+      this.selectedCardId = cardId;
+      this.redraw();
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.bridge.playCard(cardId, state.enemies.length > 0 ? 0 : undefined);
     this.redraw();
+  }
+
+  onEnemyTargetClick(enemyIndex: number): void {
+    if (this.selectedCardId == null) return;
+    const state = this.bridge.getState();
+    if (!state || state.phase !== 'player' || state.combatResult || this._runPhase !== 'combat') return;
+    const enemy = state.enemies[enemyIndex];
+    if (!enemy || enemy.hp <= 0) return;
+    this.runCardFlyThenPlay(this.selectedCardId, enemyIndex, state);
+  }
+
+  cancelTargeting(): void {
+    this.selectedCardId = null;
+    this.hoveredEnemyIndex = null;
+    this.redraw();
+    this.cdr.markForCheck();
+  }
+
+  /** B8: Animate card flying to enemy, then play card and redraw. */
+  private runCardFlyThenPlay(cardId: string, enemyIndex: number, state: GameState): void {
+    if (!this.app) return;
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const padding = 20;
+    const playerY = h - 28;
+    const cardWidth = 100;
+    const cardHeight = 140;
+    const overlapRatio = 0.45;
+    const arcAmplitude = 30;
+    const hoverLift = 20;
+    const cardSpacing = cardWidth * overlapRatio;
+    const totalHandWidth = (state.hand.length - 1) * cardSpacing + cardWidth;
+    const startX = (w - totalHandWidth) / 2 + cardWidth / 2;
+    const handY = playerY - cardHeight - 20;
+    const center = (state.hand.length - 1) / 2;
+    const enemyPlaceholderW = 100;
+    const enemyPlaceholderH = 110;
+    const enemyGap = 28;
+    const enemyZoneStart = w * 0.52;
+    const baselineBottom = h * 0.6;
+    const enemyStartY = baselineBottom - enemyPlaceholderH;
+    const totalEnemyWidth = state.enemies.length * enemyPlaceholderW + (state.enemies.length - 1) * enemyGap;
+    const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
+
+    const selIdx = state.hand.indexOf(cardId);
+    if (selIdx < 0) {
+      this.bridge.playCard(cardId, enemyIndex);
+      this.selectedCardId = null;
+      this.hoveredEnemyIndex = null;
+      this.redraw();
+      this.cdr.markForCheck();
+      return;
+    }
+    const arcN = state.hand.length > 1 ? (selIdx - center) / (state.hand.length - 1) : 0;
+    const fromX = startX + selIdx * cardSpacing;
+    const fromY = handY + arcAmplitude * (1 - 4 * arcN * arcN) - hoverLift;
+    const toX = ex + enemyIndex * (enemyPlaceholderW + enemyGap);
+    const toY = enemyStartY + enemyPlaceholderH / 2;
+
+    const flyCard = new PIXI.Container();
+    const bg = new PIXI.Graphics();
+    bg.roundRect(0, 0, cardWidth, cardHeight, 10).fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0xe8c060 });
+    flyCard.addChild(bg);
+    flyCard.pivot.set(cardWidth / 2, cardHeight);
+    flyCard.x = fromX;
+    flyCard.y = fromY;
+    this.app.stage.addChild(flyCard);
+
+    const duration = 280;
+    const startTime = performance.now();
+    const tick = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const ease = 1 - (1 - t) * (1 - t);
+      flyCard.x = fromX + (toX - fromX) * ease;
+      flyCard.y = fromY + (toY - fromY) * ease;
+      if (t >= 1) {
+        this.app!.ticker.remove(tick);
+        flyCard.destroy({ children: true });
+        const oldState = state;
+        this.bridge.playCard(cardId, enemyIndex);
+        const newState = this.bridge.getState()!;
+        this.selectedCardId = null;
+        this.hoveredEnemyIndex = null;
+        const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number }[] = [];
+        if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
+          const hpLost = oldState.enemies[enemyIndex].hp - newState.enemies[enemyIndex].hp;
+          if (hpLost > 0) toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex });
+        }
+        const blockGain = newState.playerBlock - oldState.playerBlock;
+        if (blockGain > 0) {
+          const playerZoneX = w * 0.18;
+          const baselineBottom = h * 0.6;
+          const playerPlaceholderH = 130;
+          toAdd.push({ type: 'block', value: blockGain, x: playerZoneX, y: baselineBottom - playerPlaceholderH / 2 });
+        }
+        this.floatingNumbers = toAdd;
+        this.redraw();
+        this.cdr.markForCheck();
+        if (toAdd.length > 0) {
+          setTimeout(() => {
+            this.floatingNumbers = [];
+            this.redraw();
+            this.cdr.markForCheck();
+          }, 700);
+        }
+      }
+    };
+    this.app.ticker.add(tick);
   }
 
   canEndTurn(): boolean {
@@ -1044,8 +1447,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   onEndTurn(): void {
-    this.bridge.endTurn();
+    if (!this.canEndTurn()) return;
+    this.showingEnemyTurn = true;
     this.redraw();
+    this.cdr.markForCheck();
+    setTimeout(() => {
+      this.bridge.endTurn();
+      this.showingEnemyTurn = false;
+      this.redraw();
+      this.cdr.markForCheck();
+    }, 1200);
   }
 
   onRestart(): void {
