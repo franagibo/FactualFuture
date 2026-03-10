@@ -132,6 +132,11 @@ import * as PIXI from 'pixi.js';
         overflow-y: auto;
         overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      .canvas-wrap.map-mode .scroll-area::-webkit-scrollbar {
+        display: none;
       }
       .scroll-area {
         flex: 1 1 0;
@@ -763,7 +768,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const edges = map.edges;
     const availableNext = this.bridge.getAvailableNextNodes();
     const NODE_RADIUS = 20;
-    const FLOOR_SPACING = 140;
+    const FLOOR_SPACING = 240;
     const laneCount = 7;
 
     // Use floor from nodes when present, else compute level from graph
@@ -786,7 +791,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
 
     const maxFloor = Math.max(0, ...Array.from(floorById.values()));
-    const BOTTOM_MARGIN = 72;
+    const BOTTOM_MARGIN = 130;
     this.mapContentHeight = (maxFloor + 1) * FLOOR_SPACING + padding * 2 + BOTTOM_MARGIN;
     this.cdr.markForCheck();
     setTimeout(() => {
@@ -810,21 +815,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       h = (h + floor * 17) | 0;
       return ((h >>> 0) % 2000) / 1000 - 1;
     };
-    const JITTER_X = 22;
-    const JITTER_Y = 12;
+    const JITTER_X = 28;
+    const JITTER_Y = 16;
     const posById = new Map<string, { x: number; y: number }>();
     for (let f = 0; f <= maxFloor; f++) {
       const ids = floors[f] ?? [];
       if (!ids.length) continue;
       const baseY = contentBottomPadding + totalMapHeight - (f + 1) * FLOOR_SPACING;
-      const gapX = Math.min(80, (w - padding * 2) / Math.max(1, ids.length));
+      const gapX = Math.min(140, (w - padding * 2) / Math.max(1, ids.length));
       const rowWidth = (ids.length - 1) * gapX;
       const centerX = w / 2;
       for (let i = 0; i < ids.length; i++) {
         const nodeId = ids[i];
         const n = nodes.find((x) => x.id === nodeId);
         const lane = (n && (n as { lane?: number }).lane != null) ? (n as { lane: number }).lane : i;
-        const laneJitter = (lane / laneCount - 0.5) * 16;
+        const laneJitter = (lane / laneCount - 0.5) * 28;
         const baseX = centerX - rowWidth / 2 + i * gapX + laneJitter;
         const x = baseX + jitterFrom(nodeId, f, 1) * JITTER_X;
         const y = baseY + jitterFrom(nodeId, f, 2) * JITTER_Y;
@@ -840,34 +845,49 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.mapAssets.loadMapAssets();
     const bgTex = this.mapAssets.getMapBgTexture();
     stage.sortableChildren = true;
+    const mapH = Math.max(h, this.mapContentHeight);
     if (bgTex) {
       const bgSprite = new PIXI.Sprite(bgTex);
       bgSprite.width = w;
-      bgSprite.height = h;
+      bgSprite.height = mapH;
       bgSprite.zIndex = 0;
       stage.addChild(bgSprite);
     } else {
       const bg = new PIXI.Graphics();
-      bg.rect(0, 0, w, h).fill(0x1a1822);
+      bg.rect(0, 0, w, mapH).fill(0x1a1822);
       bg.zIndex = 0;
       stage.addChild(bg);
     }
 
-    // Full-map container: one large panel that contains the entire path (all levels, bottom to top)
-    const nodePoints = Array.from(posById.values());
-    if (nodePoints.length > 0) {
-      const minX = Math.min(...nodePoints.map((p) => p.x));
-      const maxX = Math.max(...nodePoints.map((p) => p.x));
-      const minY = Math.min(...nodePoints.map((p) => p.y));
-      const maxY = Math.max(...nodePoints.map((p) => p.y));
-      const PAD = 70;
-      const x = minX - PAD;
-      const y = minY - PAD;
-      const boxW = maxX - minX + 2 * PAD;
-      const boxH = maxY - minY + 2 * PAD;
-      const cornerRadius = 40;
+    // Container that follows the width of each layer (wider where nodes spread, narrower at top/bottom)
+    const PAD_H = 88;
+    const PAD_V = 42;
+    const rowData: { left: number; right: number; y: number }[] = [];
+    for (let f = 0; f <= maxFloor; f++) {
+      const ids = floors[f] ?? [];
+      if (ids.length === 0) continue;
+      const xs = ids.map((id) => posById.get(id)!.x);
+      const ys = ids.map((id) => posById.get(id)!.y);
+      const left = Math.min(...xs) - PAD_H;
+      const right = Math.max(...xs) + PAD_H;
+      const y = ys.reduce((a, b) => a + b, 0) / ys.length;
+      rowData.push({ left, right, y });
+    }
+    if (rowData.length >= 2) {
+      rowData[0].y += PAD_V;
+      rowData[rowData.length - 1].y -= PAD_V;
       const containerShape = new PIXI.Graphics();
-      containerShape.roundRect(x, y, boxW, boxH, cornerRadius);
+      const first = rowData[0];
+      containerShape.moveTo(first.left, first.y);
+      containerShape.lineTo(first.right, first.y);
+      for (let i = 1; i < rowData.length; i++) {
+        containerShape.lineTo(rowData[i].right, rowData[i].y);
+      }
+      const last = rowData[rowData.length - 1];
+      containerShape.lineTo(last.left, last.y);
+      for (let i = rowData.length - 2; i >= 0; i--) {
+        containerShape.lineTo(rowData[i].left, rowData[i].y);
+      }
       containerShape.fill({ color: 0x0c0a18, alpha: 0.88 });
       containerShape.stroke({ width: 2, color: 0xb48cff, alpha: 0.45 });
       containerShape.zIndex = 1;
