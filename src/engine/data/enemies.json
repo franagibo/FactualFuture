@@ -8,5 +8,15 @@
       { "weight": 1, "intent": { "type": "block", "value": 6 } },
       { "weight": 1, "intent": { "type": "attack", "value": 7 } }
     ]
+  },
+  {
+    "id": "act1_boss",
+    "name": "Guardian",
+    "maxHp": 80,
+    "intents": [
+      { "weight": 2, "intent": { "type": "attack", "value": 10 } },
+      { "weight": 1, "intent": { "type": "block", "value": 12 } },
+      { "weight": 1, "intent": { "type": "attack", "value": 15 } }
+    ]
   }
 ]

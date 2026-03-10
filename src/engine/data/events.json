@@ -1,0 +1,34 @@
+[
+  {
+    "id": "stub",
+    "text": "You rest here briefly. Nothing much happens.",
+    "choices": [
+      { "text": "Continue", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "heal_event",
+    "text": "A stranger offers to tend your wounds.",
+    "choices": [
+      { "text": "Accept (Heal 15 HP)", "outcome": { "type": "heal", "amount": 15 } },
+      { "text": "Decline", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "gold_event",
+    "text": "You find a small cache of coins.",
+    "choices": [
+      { "text": "Take the gold", "outcome": { "type": "gold", "amount": 25 } },
+      { "text": "Leave it", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "card_event",
+    "text": "A merchant offers you a card.",
+    "choices": [
+      { "text": "Take Strike", "outcome": { "type": "addCard", "cardId": "strike" } },
+      { "text": "Take Defend", "outcome": { "type": "addCard", "cardId": "defend" } },
+      { "text": "Refuse", "outcome": { "type": "nothing" } }
+    ]
+  }
+]

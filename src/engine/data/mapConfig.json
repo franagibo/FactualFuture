@@ -3,10 +3,20 @@
     "combat": 4,
     "elite": 0,
     "rest": 2,
-    "shop": 0,
-    "event": 0,
+    "shop": 1,
+    "event": 1,
     "boss": 1,
     "encounterPool": ["tutorial"],
-    "bossEncounter": "tutorial"
+    "bossEncounter": "boss_act1"
+  },
+  "act2": {
+    "combat": 4,
+    "elite": 0,
+    "rest": 2,
+    "shop": 1,
+    "event": 1,
+    "boss": 1,
+    "encounterPool": ["tutorial"],
+    "bossEncounter": "boss_act1"
   }
 }

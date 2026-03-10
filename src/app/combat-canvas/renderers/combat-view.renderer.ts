@@ -82,6 +82,9 @@ export interface CombatViewContext {
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
   /** B15: Per-card hover influence 0..1 for smooth lift/scale; same length as hand. If absent, use binary from hoveredCardIndex/selectedCardId. */
   hoverLerp?: number[];
+  /** When true, player sprite shows shield animation video instead of static texture. */
+  shieldAnimationPlaying?: boolean;
+  getShieldVideoTexture?: () => PIXI.Texture | null;
 }
 
 const L = COMBAT_LAYOUT;
@@ -116,9 +119,13 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const playerContainer = new PIXI.Container();
   playerContainer.x = playerZoneX - playerPlaceholderW / 2;
   playerContainer.y = baselineBottom - playerPlaceholderH;
-  const playerTex = ctx.getPlayerTexture?.() ?? null;
+  const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
+  const playerTex = shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
     const sprite = new PIXI.Sprite(playerTex);
+    sprite.anchor.set(0.5, 1);
+    sprite.x = playerPlaceholderW / 2;
+    sprite.y = playerPlaceholderH;
     sprite.width = playerPlaceholderW;
     sprite.height = playerPlaceholderH;
     playerContainer.addChild(sprite);
@@ -139,16 +146,18 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   stage.addChild(playerContainer);
 }
 
-/** Draws HP, block, and energy text at bottom-left. */
+/** Draws HP, block, and energy text below the player character (centered). */
 function drawHpText(ctx: CombatViewContext): void {
-  const { state, stage, w, h, padding } = ctx;
-  const playerY = h - L.playerYOffsetFromBottom;
+  const { state, stage, w, h } = ctx;
+  const playerZoneX = w * L.playerZoneXRatio;
+  const baselineBottom = h * L.baselineBottomRatio;
   const hpText = new PIXI.Text({
     text: `HP: ${state.playerHp}/${state.playerMaxHp}  Block: ${state.playerBlock}  Energy: ${state.energy}/${state.maxEnergy}`,
     style: { fontFamily: 'system-ui', fontSize: 18, fill: 0xeeeeee },
   });
-  hpText.x = padding;
-  hpText.y = playerY;
+  hpText.anchor.set(0.5, 0);
+  hpText.x = playerZoneX;
+  hpText.y = baselineBottom + 8;
   stage.addChild(hpText);
 }
 

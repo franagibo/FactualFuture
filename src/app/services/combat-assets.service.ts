@@ -2,17 +2,34 @@ import { Injectable } from '@angular/core';
 import * as PIXI from 'pixi.js';
 
 const COMBAT_BG_PATH = '/assets/combat/combat-bg.jpg';
-const PLAYER_PATH = '/assets/combat/player.png';
 const ENEMY_PATH_PREFIX = '/assets/combat/enemies/';
+
+const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
+
+/** Shield animation sprite sheet (6x6 grid). Path: /assets/characters/{id}/{id}_shield.png. First frame is used as static pose. */
+function getShieldSheetPath(characterId: string): string {
+  return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shield.png`;
+}
+
+const SHIELD_SHEET_COLS = 6;
+const SHIELD_SHEET_ROWS = 6;
+const SHIELD_FRAME_MS = 80;
+const SHIELD_FRAME_COUNT = SHIELD_SHEET_COLS * SHIELD_SHEET_ROWS;
+
+/** Current player character id (one of many usable characters). Can later come from run state or selection. */
+const DEFAULT_PLAYER_CHARACTER_ID = 'gunboy';
 
 @Injectable({ providedIn: 'root' })
 export class CombatAssetsService {
   private combatBgTexture: PIXI.Texture | null = null;
-  private playerTexture: PIXI.Texture | null = null;
+  private playerTextures = new Map<string, PIXI.Texture>();
   private enemyTextures = new Map<string, PIXI.Texture>();
+  private shieldFrameTextures: PIXI.Texture[] = [];
+  private shieldStartTime: number | null = null;
+  private shieldResolve: (() => void) | null = null;
   private loadPromise: Promise<void> | null = null;
 
-  /** Load combat background and optional player/enemy sprites. Safe to call multiple times. */
+  /** Load combat background and shield sprite sheet (first frame = static pose). Safe to call multiple times. */
   async loadCombatAssets(): Promise<void> {
     if (this.loadPromise) return this.loadPromise;
     this.loadPromise = this.doLoad();
@@ -26,9 +43,25 @@ export class CombatAssetsService {
       this.combatBgTexture = null;
     }
     try {
-      this.playerTexture = (await PIXI.Assets.load(this.resolveUrl(PLAYER_PATH))) as PIXI.Texture;
+      const sheetPath = this.resolveUrl(getShieldSheetPath(DEFAULT_PLAYER_CHARACTER_ID));
+      const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
+      const source = sheetTexture.source;
+      const sheetW = sheetTexture.width;
+      const sheetH = sheetTexture.height;
+      const frameW = Math.floor(sheetW / SHIELD_SHEET_COLS);
+      const frameH = Math.floor(sheetH / SHIELD_SHEET_ROWS);
+      this.shieldFrameTextures = [];
+      for (let i = 0; i < SHIELD_FRAME_COUNT; i++) {
+        const col = i % SHIELD_SHEET_COLS;
+        const row = Math.floor(i / SHIELD_SHEET_COLS);
+        const frame = new PIXI.Rectangle(col * frameW, row * frameH, frameW, frameH);
+        this.shieldFrameTextures.push(new PIXI.Texture({ source, frame }));
+      }
+      if (this.shieldFrameTextures.length > 0) {
+        this.playerTextures.set(DEFAULT_PLAYER_CHARACTER_ID, this.shieldFrameTextures[0]);
+      }
     } catch {
-      this.playerTexture = null;
+      this.shieldFrameTextures = [];
     }
   }
 
@@ -36,8 +69,43 @@ export class CombatAssetsService {
     return this.combatBgTexture;
   }
 
+  /** Returns the current player character texture (e.g. gunboy). For multiple characters, use getPlayerTextureForCharacter(id). */
   getPlayerTexture(): PIXI.Texture | null {
-    return this.playerTexture;
+    return this.playerTextures.get(DEFAULT_PLAYER_CHARACTER_ID) ?? null;
+  }
+
+  /** Returns the current shield animation frame texture, or null if not playing or no frames. */
+  getShieldVideoTexture(): PIXI.Texture | null {
+    if (this.shieldFrameTextures.length === 0 || this.shieldStartTime == null) return null;
+    const elapsed = Date.now() - this.shieldStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), SHIELD_FRAME_COUNT - 1);
+    return this.shieldFrameTextures[frameIndex] ?? null;
+  }
+
+  /** Call each tick while shield is playing. Resolves the play promise when animation is done. */
+  getShieldAnimationDone(): void {
+    if (this.shieldStartTime == null || !this.shieldResolve) return;
+    const elapsed = Date.now() - this.shieldStartTime;
+    if (elapsed >= SHIELD_FRAME_COUNT * SHIELD_FRAME_MS) {
+      this.shieldStartTime = null;
+      const resolve = this.shieldResolve;
+      this.shieldResolve = null;
+      resolve();
+    }
+  }
+
+  /** Plays the shield animation once (sprite sheet frames). Resolves when the animation ends. */
+  playShieldAnimation(): Promise<void> {
+    if (this.shieldFrameTextures.length === 0) return Promise.resolve();
+    this.shieldStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.shieldResolve = resolve;
+    });
+  }
+
+  /** Returns player texture for a given character id (for future character selection). */
+  getPlayerTextureForCharacter(characterId: string): PIXI.Texture | null {
+    return this.playerTextures.get(characterId) ?? null;
   }
 
   /** Returns texture for enemy by id if loaded (e.g. /assets/combat/enemies/slime.png). Load on demand. */

@@ -56,11 +56,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private _runPhase: RunPhase | undefined = undefined;
   private resizeObserver: ResizeObserver | null = null;
   private hoverLerpTicker: ((t: { deltaTime: number }) => void) | null = null;
+  private shieldTicker: (() => void) | null = null;
   /** When in map phase, total height of map content (px) for scroll. */
   mapContentHeight = 0;
   showPauseMenu = false;
   showPauseSettings = false;
   pauseFullscreen = true;
+  /** When true, player shows shield animation video (played when a block card is used). */
+  shieldAnimationPlaying = false;
 
   constructor(
     private bridge: GameBridgeService,
@@ -168,6 +171,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.hoverLerpTicker && this.app) this.app.ticker.remove(this.hoverLerpTicker);
     this.hoverLerpTicker = null;
+    if (this.shieldTicker && this.app) this.app.ticker.remove(this.shieldTicker);
+    this.shieldTicker = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.app?.destroy(true, { children: true, texture: false });
@@ -235,8 +240,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
 
-    // Map phase: render map (nodes, paths, container) and return.
-    if (this._runPhase === 'map' && state.map) {
+    // Map phase and overlays (reward, rest, shop, event, victory): render map as background.
+    if (
+      (this._runPhase === 'map' ||
+        this._runPhase === 'reward' ||
+        this._runPhase === 'rest' ||
+        this._runPhase === 'shop' ||
+        this._runPhase === 'event' ||
+        this._runPhase === 'victory') &&
+      state.map
+    ) {
       const mapContext = {
         getAvailableNextNodes: () => this.bridge.getAvailableNextNodes(),
         getNodeTexture: (type: MapNodeType) => this.mapAssets.getNodeTexture(type),
@@ -244,7 +257,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         onMapContentHeight: (height: number) => { this.mapContentHeight = height; },
         scrollAreaElement: this.scrollAreaRef?.nativeElement,
         markForCheck: () => this.cdr.markForCheck(),
-        onChooseNode: (nodeId: string) => { this.bridge.chooseNode(nodeId); this.redraw(); },
+        onChooseNode:
+          this._runPhase === 'map'
+            ? (nodeId: string) => {
+                this.bridge.chooseNode(nodeId);
+                this.redraw();
+              }
+            : () => {},
         loadMapAssets: () => this.mapAssets.loadMapAssets(),
       };
       drawMapView(mapContext, state, stage, w, h, padding);
@@ -252,7 +271,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Combat phase: ensure combat assets loading, build context and delegate to combat renderer.
+    // Combat phase only: ensure combat assets loading, build context and delegate to combat renderer.
+    if (this._runPhase !== 'combat') return;
     this.combatAssets.loadCombatAssets();
     const hand = state.hand;
     if (this.hoveredCardIndex != null && this.hoveredCardIndex >= hand.length) this.hoveredCardIndex = null;
@@ -290,6 +310,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getPlayerTexture: () => this.combatAssets.getPlayerTexture(),
       getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
       hoverLerp: this.hoverLerp,
+      shieldAnimationPlaying: this.shieldAnimationPlaying,
+      getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
     };
     drawCombatView(combatContext);
   }
@@ -303,6 +325,39 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private cardNeedsEnemyTarget(cardId: string): boolean {
     const def = this.bridge.getCardDef(cardId);
     return def?.effects?.some((e) => e.target === 'enemy') ?? false;
+  }
+
+  /** True if the card has a block effect (player gains block). Used to trigger shield animation. */
+  private cardHasBlockEffect(cardId: string): boolean {
+    const def = this.bridge.getCardDef(cardId);
+    return def?.effects?.some((e) => e.type === 'block' && e.target === 'player') ?? false;
+  }
+
+  /** If the card grants block, play shield animation on the player character. */
+  private triggerShieldAnimationIfBlock(cardId: string): void {
+    if (!this.cardHasBlockEffect(cardId)) return;
+    this.shieldAnimationPlaying = true;
+    if (this.app && !this.shieldTicker) {
+      this.shieldTicker = () => {
+        if (this.shieldAnimationPlaying) {
+          this.redraw();
+          this.cdr.markForCheck();
+          this.combatAssets.getShieldAnimationDone();
+        }
+      };
+      this.app.ticker.add(this.shieldTicker);
+    }
+    this.redraw();
+    this.cdr.markForCheck();
+    this.combatAssets.playShieldAnimation().then(() => {
+      this.shieldAnimationPlaying = false;
+      if (this.shieldTicker && this.app) {
+        this.app.ticker.remove(this.shieldTicker);
+        this.shieldTicker = null;
+      }
+      this.redraw();
+      this.cdr.markForCheck();
+    });
   }
 
   /** Display name for a card (used in hand and reward/rest panels). */
@@ -337,6 +392,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
 
     this.bridge.playCard(cardId, state.enemies.length > 0 ? 0 : undefined);
+    this.triggerShieldAnimationIfBlock(cardId);
     this.redraw();
   }
 
@@ -388,6 +444,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const selIdx = state.hand.indexOf(cardId);
     if (selIdx < 0) {
       this.bridge.playCard(cardId, enemyIndex);
+      this.triggerShieldAnimationIfBlock(cardId);
       this.selectedCardId = null;
       this.hoveredEnemyIndex = null;
       this.redraw();
@@ -422,6 +479,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         flyCard.destroy({ children: true });
         const oldState = state;
         this.bridge.playCard(cardId, enemyIndex);
+        this.triggerShieldAnimationIfBlock(cardId);
         this.sound.playCardPlay();
         const newState = this.bridge.getState()!;
         this.selectedCardId = null;
@@ -495,6 +553,62 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   onRestRemoveCard(cardId: string): void {
     this.bridge.restRemoveCard(cardId);
     this.redraw();
+  }
+
+  getGold(): number {
+    return this.bridge.getState()?.gold ?? 0;
+  }
+
+  getShopState(): GameState['shopState'] {
+    return this.bridge.getShopState();
+  }
+
+  getEventState(): GameState['eventState'] {
+    return this.bridge.getEventState();
+  }
+
+  getEventChoices(): { text: string; outcome: unknown }[] {
+    return this.bridge.getEventState()?.choices ?? [];
+  }
+
+  getRelicName(relicId: string): string {
+    return this.bridge.getRelicName(relicId);
+  }
+
+  onLeaveShop(): void {
+    this.bridge.leaveShop();
+    this.redraw();
+    this.cdr.markForCheck();
+  }
+
+  onPurchaseCard(cardId: string): void {
+    this.bridge.purchaseCard(cardId);
+    this.redraw();
+    this.cdr.markForCheck();
+  }
+
+  onPurchaseRelic(relicId: string): void {
+    this.bridge.purchaseRelic(relicId);
+    this.redraw();
+    this.cdr.markForCheck();
+  }
+
+  onEventChoice(choiceIndex: number): void {
+    this.bridge.executeEventChoice(choiceIndex);
+    this.redraw();
+    this.cdr.markForCheck();
+  }
+
+  onAdvanceToNextAct(): void {
+    this.bridge.advanceToNextAct();
+    this.redraw();
+    this.cdr.markForCheck();
+  }
+
+  onVictoryToMenu(): void {
+    this.bridge.clearState();
+    this.bridge.clearSavedRun();
+    this.router.navigate(['/']);
   }
 
   restRemovableCards(): string[] {

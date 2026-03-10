@@ -1,0 +1,18 @@
+[
+  {
+    "id": "test_relic",
+    "name": "Test Relic",
+    "description": "At the start of each combat, gain 1 max HP.",
+    "triggers": [
+      { "when": "onCombatStart", "effect": { "type": "maxHp", "value": 1 } }
+    ]
+  },
+  {
+    "id": "energy_relic",
+    "name": "Energy Stone",
+    "description": "At the start of each turn, gain 1 additional energy.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  }
+]

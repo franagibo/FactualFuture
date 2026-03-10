@@ -9,19 +9,32 @@ import {
   chooseCardReward as engineChooseCardReward,
   restHeal as engineRestHeal,
   restRemoveCard as engineRestRemoveCard,
+  leaveShop as engineLeaveShop,
+  executeEventChoice as engineExecuteEventChoice,
+  isBossNode as engineIsBossNode,
+  getNodeById as engineGetNodeById,
+  purchaseCard as enginePurchaseCard,
+  purchaseRelic as enginePurchaseRelic,
+  getRunPhaseAfterBossWin as engineGetRunPhaseAfterBossWin,
+  advanceToNextAct as engineAdvanceToNextAct,
+  type ShopPoolConfig,
 } from '../../engine/run';
-import type { GameState, RunPhase } from '../../engine/types';
+import type { GameState, MetaState, RunPhase } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
-import type { EnemyDef, EncounterDef } from '../../engine/loadData';
+import type { EnemyDef, EncounterDef, EventDef, RelicDef } from '../../engine/loadData';
+import { loadEvents, loadRelics } from '../../engine/loadData';
+import { runRelics } from '../../engine/relicRunner';
 
 // Re-export loadData types
 type CardsMap = Map<string, CardDef>;
 type EnemyDefsMap = Map<string, EnemyDef>;
 type EncountersMap = Map<string, EncounterDef>;
+type RelicDefsMap = Map<string, RelicDef>;
 
 const DATA_BASE = 'data';
 const MAP_CONFIG_PATH = `${DATA_BASE}/mapConfig.json`;
 const RUN_SAVE_KEY = 'run-save.json';
+const META_SAVE_KEY = 'meta.json';
 
 declare const window: Window & { electronAPI?: { readSave: (path: string) => Promise<unknown>; writeSave: (path: string, data: unknown) => Promise<void> } };
 
@@ -37,6 +50,10 @@ export class GameBridgeService {
   private encountersMap: EncountersMap | null = null;
   private mapConfig: any | null = null;
   private rewardCardPool: string[] | null = null;
+  private eventPool: EventDef[] | null = null;
+  private relicDefs: RelicDefsMap | null = null;
+  private shopPoolsByAct: Record<string, ShopPoolConfig> = {};
+  private meta: MetaState = { unlockedCards: [], unlockedRelics: [], highestActReached: 0 };
 
   getState(): GameState | null {
     return this.state;
@@ -46,6 +63,10 @@ export class GameBridgeService {
     return this.cardsMap?.get(cardId);
   }
 
+  getRelicName(relicId: string): string {
+    return this.relicDefs?.get(relicId)?.name ?? relicId;
+  }
+
   private async fetchJson<T>(url: string): Promise<T> {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`Failed to load ${url}: ${r.status} ${r.statusText}`);
@@ -53,20 +74,52 @@ export class GameBridgeService {
   }
 
   async ensureDataLoaded(): Promise<void> {
-    if (this.cardsMap && this.enemyDefs && this.encountersMap && this.mapConfig && this.rewardCardPool) {
+    if (
+      this.cardsMap &&
+      this.enemyDefs &&
+      this.encountersMap &&
+      this.mapConfig &&
+      this.rewardCardPool != null &&
+      this.eventPool !== null &&
+      this.relicDefs !== null
+    ) {
       return;
     }
-    const [cards, enemies, encounters, mapConfig]: [CardDef[], EnemyDef[], EncounterDef[], Record<string, unknown>] = await Promise.all([
-      this.fetchJson<CardDef[]>(`${DATA_BASE}/cards.json`),
-      this.fetchJson<EnemyDef[]>(`${DATA_BASE}/enemies.json`),
-      this.fetchJson<EncounterDef[]>(`${DATA_BASE}/encounters.json`),
-      this.fetchJson<Record<string, unknown>>(MAP_CONFIG_PATH),
+    const DATA_PATHS = {
+      cards: `${DATA_BASE}/cards.json`,
+      enemies: `${DATA_BASE}/enemies.json`,
+      encounters: `${DATA_BASE}/encounters.json`,
+      mapConfig: MAP_CONFIG_PATH,
+      events: `${DATA_BASE}/events.json`,
+      relics: `${DATA_BASE}/relics.json`,
+      shopPools: `${DATA_BASE}/shopPools.json`,
+    };
+    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData]: [
+      CardDef[],
+      EnemyDef[],
+      EncounterDef[],
+      Record<string, unknown>,
+      EventDef[],
+      RelicDef[],
+      Record<string, ShopPoolConfig>,
+    ] = await Promise.all([
+      this.fetchJson<CardDef[]>(DATA_PATHS.cards),
+      this.fetchJson<EnemyDef[]>(DATA_PATHS.enemies),
+      this.fetchJson<EncounterDef[]>(DATA_PATHS.encounters),
+      this.fetchJson<Record<string, unknown>>(DATA_PATHS.mapConfig),
+      this.fetchJson<EventDef[]>(DATA_PATHS.events).catch(() => []),
+      this.fetchJson<RelicDef[]>(DATA_PATHS.relics).catch(() => []),
+      this.fetchJson<Record<string, ShopPoolConfig>>(DATA_PATHS.shopPools).catch(() => ({})),
     ]);
     this.cardsMap = loadCards(cards);
     this.enemyDefs = loadEnemies(enemies);
     this.encountersMap = loadEncounters(encounters);
     this.mapConfig = mapConfig;
     this.rewardCardPool = cards.map((c) => c.id);
+    this.eventPool = loadEvents(eventsData);
+    this.relicDefs = loadRelics(relicsData);
+    this.shopPoolsByAct = shopPoolsData;
+    await this.loadMeta();
   }
 
   startRun(): void {
@@ -92,6 +145,42 @@ export class GameBridgeService {
     } else if (typeof localStorage !== 'undefined') {
       localStorage.setItem('run-save', data);
     }
+  }
+
+  async loadMeta(): Promise<void> {
+    let data: unknown = null;
+    if (typeof window !== 'undefined' && window.electronAPI?.readSave) {
+      data = await window.electronAPI.readSave(META_SAVE_KEY);
+    } else if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem('meta-save');
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          return;
+        }
+      }
+    }
+    if (data != null && typeof data === 'object' && 'highestActReached' in data) {
+      const m = data as MetaState;
+      this.meta = {
+        unlockedCards: Array.isArray(m.unlockedCards) ? m.unlockedCards : [],
+        unlockedRelics: Array.isArray(m.unlockedRelics) ? m.unlockedRelics : [],
+        highestActReached: typeof m.highestActReached === 'number' ? m.highestActReached : 0,
+      };
+    }
+  }
+
+  saveMeta(): void {
+    if (typeof window !== 'undefined' && window.electronAPI?.writeSave) {
+      window.electronAPI.writeSave(META_SAVE_KEY, this.meta);
+    } else if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('meta-save', JSON.stringify(this.meta));
+    }
+  }
+
+  getMeta(): MetaState {
+    return { ...this.meta };
   }
 
   /** Remove saved run so Continue is hidden after starting a new run. */
@@ -152,7 +241,9 @@ export class GameBridgeService {
 
   endTurn(): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs) return;
-    this.state = engineEndTurn(this.state, this.cardsMap, this.enemyDefs);
+    let next = engineEndTurn(this.state, this.cardsMap, this.enemyDefs);
+    if (this.relicDefs) next = runRelics(next, 'onTurnStart', this.relicDefs);
+    this.state = next;
     this.maybeHandleCombatWin();
   }
 
@@ -167,16 +258,67 @@ export class GameBridgeService {
 
   chooseNode(nodeId: string): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs || !this.encountersMap || !this.mapConfig) return;
-    const act1 = this.mapConfig['act1'];
-    const encounterId: string | null = act1?.encounterPool?.[0] ?? null;
-    this.state = engineChooseNode(
+    const actKey = `act${this.state.act ?? 1}`;
+    const actConfig = this.mapConfig[actKey] as { encounterPool?: string[]; bossEncounter?: string } | undefined;
+    let encounterId: string | null = null;
+    if (this.state.map) {
+      const node = engineGetNodeById(this.state.map, nodeId);
+      if (node?.type === 'boss' && actConfig?.bossEncounter) {
+        encounterId = actConfig.bossEncounter;
+      } else if ((node?.type === 'combat' || node?.type === 'elite') && actConfig?.encounterPool?.length) {
+        const pool = actConfig.encounterPool;
+        encounterId = pool[Math.floor(Math.random() * pool.length)];
+      }
+    }
+    const shopPool = this.shopPoolsByAct[actKey];
+    let next = engineChooseNode(
       this.state,
       nodeId,
       encounterId,
       this.cardsMap,
       this.enemyDefs,
-      this.encountersMap
+      this.encountersMap,
+      this.eventPool ?? [],
+      shopPool
     );
+    if (next.runPhase === 'combat' && this.relicDefs) {
+      next = runRelics(next, 'onCombatStart', this.relicDefs);
+      next = runRelics(next, 'onTurnStart', this.relicDefs);
+    }
+    this.state = next;
+  }
+
+  leaveShop(): void {
+    if (!this.state) return;
+    this.state = engineLeaveShop(this.state);
+  }
+
+  executeEventChoice(choiceIndex: number): void {
+    if (!this.state) return;
+    this.state = engineExecuteEventChoice(this.state, choiceIndex);
+  }
+
+  getShopState(): GameState['shopState'] {
+    return this.state?.shopState ?? undefined;
+  }
+
+  getEventState(): GameState['eventState'] {
+    return this.state?.eventState ?? undefined;
+  }
+
+  purchaseCard(cardId: string): void {
+    if (!this.state) return;
+    this.state = enginePurchaseCard(this.state, cardId);
+  }
+
+  purchaseRelic(relicId: string): void {
+    if (!this.state) return;
+    this.state = enginePurchaseRelic(this.state, relicId);
+  }
+
+  advanceToNextAct(): void {
+    if (!this.state || !this.mapConfig) return;
+    this.state = engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, import('../../engine/map/mapGenerator').ActConfig & Record<string, unknown>>);
   }
 
   getRewardChoices(): string[] {
@@ -200,7 +342,23 @@ export class GameBridgeService {
 
   private maybeHandleCombatWin(): void {
     if (!this.state || !this.rewardCardPool) return;
-    if (this.state.combatResult === 'win' && this.state.runPhase === 'combat') {
+    if (this.state.combatResult !== 'win' || this.state.runPhase !== 'combat') return;
+    if (engineIsBossNode(this.state)) {
+      const runPhase = engineGetRunPhaseAfterBossWin(this.state);
+      this.state = {
+        ...this.state,
+        runPhase,
+        currentEncounter: null,
+        enemies: [],
+        combatResult: null,
+        rewardCardChoices: undefined,
+      };
+      const act = this.state.act ?? 1;
+      if (act > this.meta.highestActReached) {
+        this.meta = { ...this.meta, highestActReached: act };
+        this.saveMeta();
+      }
+    } else {
       this.state = engineAfterCombatWin(this.state, this.rewardCardPool);
     }
   }

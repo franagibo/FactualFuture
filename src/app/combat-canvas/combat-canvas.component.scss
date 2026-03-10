@@ -243,6 +243,60 @@
   transform: translateY(0) scale(0.98);
   box-shadow: 0 1px 0 #1a1630, 0 2px 6px rgba(0, 0, 0, 0.35);
 }
+.shop-gold {
+  margin-bottom: 12px;
+  font-size: 1rem;
+  color: #ddd;
+}
+.shop-cards, .shop-relics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.shop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(40, 35, 60, 0.8);
+  border-radius: 8px;
+  border: 1px solid rgba(180, 140, 255, 0.25);
+}
+.shop-item-name {
+  min-width: 100px;
+  font-weight: 500;
+}
+.shop-item-price {
+  color: #ffc107;
+  font-weight: 600;
+}
+.btn-shop-buy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.shop-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.event-text {
+  margin-bottom: 16px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: #ccc;
+  max-width: 320px;
+}
+.event-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.victory-panel .reward-title {
+  color: #8f8;
+}
 .steam-warning {
   position: absolute;
   top: 8px;

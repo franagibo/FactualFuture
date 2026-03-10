@@ -6,8 +6,8 @@ export type Phase = 'player' | 'enemy';
 
 export type CombatResult = null | 'win' | 'lose';
 
-/** Run-level phase: map (choose node), combat, reward (pick card), rest (heal/remove card). */
-export type RunPhase = 'map' | 'combat' | 'reward' | 'rest';
+/** Run-level phase: map, combat, reward, rest, shop, event, actComplete (next act), victory (run complete). */
+export type RunPhase = 'map' | 'combat' | 'reward' | 'rest' | 'shop' | 'event' | 'actComplete' | 'victory';
 
 export type MapNodeType = 'combat' | 'elite' | 'rest' | 'shop' | 'event' | 'boss';
 
@@ -65,4 +65,26 @@ export interface GameState {
   floor?: number;
   /** Three card IDs to choose one after combat win. */
   rewardCardChoices?: string[];
+  /** Shop screen: offered cards/relics and prices. */
+  shopState?: {
+    cardIds: string[];
+    relicIds: string[];
+    cardPrices: Record<string, number>;
+    relicPrices: Record<string, number>;
+  };
+  /** Event screen: one event with choices. */
+  eventState?: {
+    eventId: string;
+    text: string;
+    choices: { text: string; outcome: unknown }[];
+  };
+  /** Current act (1-based). Used for multi-act runs. */
+  act?: number;
+}
+
+/** Meta progression (unlocks) stored separately from run. */
+export interface MetaState {
+  unlockedCards: string[];
+  unlockedRelics: string[];
+  highestActReached: number;
 }

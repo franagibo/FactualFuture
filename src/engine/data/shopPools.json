@@ -1,0 +1,22 @@
+{
+  "act1": {
+    "cards": ["strike", "defend", "bash", "heavy_strike", "block", "clash", "pommel_strike", "iron_wave", "shrug_it_off", "body_slam"],
+    "relics": ["test_relic", "energy_relic"],
+    "cardPriceMin": 40,
+    "cardPriceMax": 80,
+    "relicPriceMin": 100,
+    "relicPriceMax": 150,
+    "cardCount": 6,
+    "relicCount": 2
+  },
+  "act2": {
+    "cards": ["strike", "defend", "bash", "heavy_strike", "block", "clash", "pommel_strike", "iron_wave", "shrug_it_off", "body_slam"],
+    "relics": ["test_relic", "energy_relic"],
+    "cardPriceMin": 50,
+    "cardPriceMax": 90,
+    "relicPriceMin": 120,
+    "relicPriceMax": 170,
+    "cardCount": 6,
+    "relicCount": 2
+  }
+}

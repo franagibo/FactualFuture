@@ -1,6 +1,6 @@
 import type { GameState, MapState, RunPhase } from './types';
 import type { CardDef } from './cardDef';
-import type { EnemyDef, EncounterDef } from './loadData';
+import type { EnemyDef, EncounterDef, EventDef } from './loadData';
 import { generateMap, type ActConfig } from './map/mapGenerator';
 import { startCombatFromRunState } from './combat';
 
@@ -59,6 +59,7 @@ export function startRun(
     gold: 0,
     relics: [],
     floor: 0,
+    act: 1,
   };
 }
 
@@ -83,12 +84,238 @@ export function getAvailableNextNodes(state: GameState): string[] {
     .map(([, to]) => to);
 }
 
-function getNodeById(map: MapState, id: string) {
+export function getNodeById(map: MapState, id: string) {
   return map.nodes.find((n) => n.id === id);
+}
+
+/** True if the current node is a boss (used to treat boss win as run victory). */
+export function isBossNode(state: GameState): boolean {
+  if (!state.map || state.currentNodeId == null) return false;
+  const node = getNodeById(state.map, state.currentNodeId);
+  return node?.type === 'boss';
+}
+
+export interface ShopPoolConfig {
+  cards: string[];
+  relics: string[];
+  cardPriceMin: number;
+  cardPriceMax: number;
+  relicPriceMin: number;
+  relicPriceMax: number;
+  cardCount: number;
+  relicCount: number;
+}
+
+function randomInRange(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+/** Enter shop: set runPhase to 'shop'. If pool provided, fill shopState with random cards/relics and prices. */
+export function enterShop(state: GameState, pool?: ShopPoolConfig): GameState {
+  const shopState: GameState['shopState'] = {
+    cardIds: [],
+    relicIds: [],
+    cardPrices: {},
+    relicPrices: {},
+  };
+  if (pool) {
+    const cards = pickRandom(pool.cards, Math.min(pool.cardCount, pool.cards.length));
+    const relics = pickRandom(pool.relics, Math.min(pool.relicCount, pool.relics.length));
+    for (const id of cards) {
+      shopState.cardIds.push(id);
+      shopState.cardPrices[id] = randomInRange(pool.cardPriceMin, pool.cardPriceMax);
+    }
+    for (const id of relics) {
+      shopState.relicIds.push(id);
+      shopState.relicPrices[id] = randomInRange(pool.relicPriceMin, pool.relicPriceMax);
+    }
+  }
+  return {
+    ...state,
+    runPhase: 'shop',
+    shopState,
+  };
+}
+
+/** Purchase a card from shop: spend gold, add to deck, remove from shop offerings. */
+export function purchaseCard(state: GameState, cardId: string): GameState {
+  if (state.runPhase !== 'shop' || !state.shopState) return state;
+  const price = state.shopState.cardPrices[cardId];
+  if (price == null || (state.gold ?? 0) < price) return state;
+  const idx = state.shopState.cardIds.indexOf(cardId);
+  if (idx === -1) return state;
+  const cardIds = state.shopState.cardIds.filter((_, i) => i !== idx);
+  const cardPrices = { ...state.shopState.cardPrices };
+  delete cardPrices[cardId];
+  return {
+    ...state,
+    gold: (state.gold ?? 0) - price,
+    deck: [...(state.deck ?? []), cardId],
+    shopState: {
+      ...state.shopState,
+      cardIds,
+      cardPrices,
+    },
+  };
+}
+
+/** Purchase a relic from shop: spend gold, add to relics, remove from shop offerings. */
+export function purchaseRelic(state: GameState, relicId: string): GameState {
+  if (state.runPhase !== 'shop' || !state.shopState) return state;
+  const price = state.shopState.relicPrices[relicId];
+  if (price == null || (state.gold ?? 0) < price) return state;
+  const idx = state.shopState.relicIds.indexOf(relicId);
+  if (idx === -1) return state;
+  const relicIds = state.shopState.relicIds.filter((_, i) => i !== idx);
+  const relicPrices = { ...state.shopState.relicPrices };
+  delete relicPrices[relicId];
+  return {
+    ...state,
+    gold: (state.gold ?? 0) - price,
+    relics: [...(state.relics ?? []), relicId],
+    shopState: {
+      ...state.shopState,
+      relicIds,
+      relicPrices,
+    },
+  };
+}
+
+/** Leave shop: return to map, clear shopState. */
+export function leaveShop(state: GameState): GameState {
+  if (state.runPhase !== 'shop') return state;
+  return {
+    ...state,
+    runPhase: 'map',
+    shopState: undefined,
+  };
+}
+
+const STUB_EVENT: EventDef = {
+  id: 'stub',
+  text: 'You rest here briefly. Nothing much happens.',
+  choices: [{ text: 'Continue', outcome: { type: 'nothing' } }],
+};
+
+/** Enter event: pick one event from pool (or stub), set runPhase and eventState. */
+export function enterEvent(state: GameState, eventPool: EventDef[]): GameState {
+  const pool = eventPool.length > 0 ? eventPool : [STUB_EVENT];
+  const event = pickRandom(pool, 1)[0];
+  return {
+    ...state,
+    runPhase: 'event',
+    eventState: {
+      eventId: event.id,
+      text: event.text,
+      choices: event.choices.map((c) => ({ text: c.text, outcome: c.outcome })),
+    },
+  };
+}
+
+export interface EventOutcome {
+  type: string;
+  cardId?: string;
+  amount?: number;
+  relicId?: string;
+}
+
+function applyEventOutcome(state: GameState, outcome: unknown): GameState {
+  if (outcome == null || typeof outcome !== 'object' || !('type' in outcome)) return state;
+  const o = outcome as EventOutcome;
+  let next = { ...state };
+  switch (o.type) {
+    case 'addCard':
+      if (o.cardId) next = { ...next, deck: [...(next.deck ?? []), o.cardId] };
+      break;
+    case 'loseCard':
+      if (o.cardId) {
+        const idx = next.deck.indexOf(o.cardId);
+        if (idx !== -1) {
+          const deck = [...next.deck];
+          deck.splice(idx, 1);
+          next = { ...next, deck };
+        }
+      }
+      break;
+    case 'heal':
+      if (o.amount != null) {
+        const maxHp = next.playerMaxHp ?? next.playerHp;
+        next = { ...next, playerHp: Math.min(maxHp, next.playerHp + o.amount) };
+      }
+      break;
+    case 'gold':
+      if (o.amount != null) next = { ...next, gold: (next.gold ?? 0) + o.amount };
+      break;
+    case 'obtainRelic':
+      if (o.relicId) next = { ...next, relics: [...(next.relics ?? []), o.relicId] };
+      break;
+    case 'curse':
+      if (o.cardId) next = { ...next, deck: [...(next.deck ?? []), o.cardId] };
+      break;
+    case 'nothing':
+    default:
+      break;
+  }
+  return next;
+}
+
+/** Execute event choice: apply outcome, return to map, clear eventState. */
+export function executeEventChoice(state: GameState, choiceIndex: number): GameState {
+  if (state.runPhase !== 'event' || !state.eventState) return state;
+  const choice = state.eventState.choices[choiceIndex];
+  if (!choice) return state;
+  const next = applyEventOutcome(state, choice.outcome);
+  return {
+    ...next,
+    runPhase: 'map',
+    eventState: undefined,
+  };
+}
+
+const MAX_ACT = 2;
+
+/** After boss win: if more acts remain, set runPhase to 'actComplete'; else 'victory'. */
+export function getRunPhaseAfterBossWin(state: GameState): RunPhase {
+  const act = state.act ?? 1;
+  return act >= MAX_ACT ? 'victory' : 'actComplete';
+}
+
+/** Advance to next act: new map, act++, runPhase map, currentNodeId null. */
+export function advanceToNextAct(
+  state: GameState,
+  actConfigs: Record<string, ActConfig & Record<string, unknown>>
+): GameState {
+  const nextAct = (state.act ?? 1) + 1;
+  const key = `act${nextAct}`;
+  const raw = actConfigs[key];
+  if (!raw) return state;
+  const actConfig: ActConfig = {
+    combat: raw.combat,
+    elite: raw.elite,
+    rest: raw.rest,
+    shop: raw.shop,
+    event: raw.event,
+    boss: raw.boss,
+  };
+  const seed = (state.floor ?? 0) * 1000 + nextAct * 12345 + (state.turnNumber ?? 0);
+  const map = generateMap(seed, actConfig);
+  return {
+    ...state,
+    act: nextAct,
+    map,
+    currentNodeId: null,
+    runPhase: 'map',
+    floor: 0,
+    currentEncounter: null,
+    enemies: [],
+    combatResult: null,
+    rewardCardChoices: undefined,
+  };
 }
 
 /**
  * Choose a node to move to. Validates adjacency, then starts combat/rest/etc.
+ * eventPool: for event nodes. shopPool: for shop nodes (cards/relics and prices).
  */
 export function chooseNode(
   state: GameState,
@@ -96,7 +323,9 @@ export function chooseNode(
   encounterId: string | null,
   cardsMap: Map<string, CardDef>,
   enemyDefs: Map<string, EnemyDef>,
-  encountersMap: Map<string, EncounterDef>
+  encountersMap: Map<string, EncounterDef>,
+  eventPool: EventDef[] = [],
+  shopPool?: ShopPoolConfig
 ): GameState {
   if (state.runPhase !== 'map' || !state.map) return state;
 
@@ -123,8 +352,9 @@ export function chooseNode(
     case 'rest':
       return { ...next, runPhase: 'rest' };
     case 'shop':
+      return enterShop(next, shopPool);
     case 'event':
-      return next;
+      return enterEvent(next, eventPool);
     default:
       return next;
   }

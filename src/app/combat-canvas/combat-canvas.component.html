@@ -52,6 +52,74 @@
       </div>
     </div>
   }
+  @if (runPhase() === 'shop') {
+    <div class="reward-panel shop-panel">
+      <div class="reward-title">Shop</div>
+      <div class="shop-gold">Gold: {{ getGold() }}</div>
+      @if (getShopState(); as shop) {
+        <div class="shop-cards">
+          @for (cardId of shop.cardIds; track cardId) {
+            <div class="shop-item">
+              <span class="shop-item-name">{{ getCardName(cardId) }}</span>
+              <span class="shop-item-price">{{ shop.cardPrices[cardId] }}g</span>
+              <button
+                type="button"
+                class="btn-rest btn-shop-buy"
+                [disabled]="getGold() < (shop.cardPrices[cardId] || 0)"
+                (click)="onPurchaseCard(cardId)"
+              >
+                Buy
+              </button>
+            </div>
+          }
+        </div>
+        <div class="shop-relics">
+          @for (relicId of shop.relicIds; track relicId) {
+            <div class="shop-item">
+              <span class="shop-item-name">{{ getRelicName(relicId) }}</span>
+              <span class="shop-item-price">{{ shop.relicPrices[relicId] }}g</span>
+              <button
+                type="button"
+                class="btn-rest btn-shop-buy"
+                [disabled]="getGold() < (shop.relicPrices[relicId] || 0)"
+                (click)="onPurchaseRelic(relicId)"
+              >
+                Buy
+              </button>
+            </div>
+          }
+        </div>
+      }
+      <div class="shop-actions">
+        <button type="button" class="btn-rest" (click)="onLeaveShop()">Leave</button>
+      </div>
+    </div>
+  }
+  @if (runPhase() === 'event') {
+    <div class="reward-panel event-panel">
+      <div class="reward-title">Event</div>
+      <div class="event-text">{{ getEventState()?.text }}</div>
+      <div class="event-choices">
+        @for (choice of getEventChoices(); track $index) {
+          <button type="button" class="btn-rest" (click)="onEventChoice($index)">
+            {{ choice.text }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+  @if (runPhase() === 'actComplete') {
+    <div class="reward-panel victory-panel">
+      <div class="reward-title">Act complete!</div>
+      <button type="button" class="btn-rest" (click)="onAdvanceToNextAct()">Next act</button>
+    </div>
+  }
+  @if (runPhase() === 'victory') {
+    <div class="reward-panel victory-panel">
+      <div class="reward-title">You won the run!</div>
+      <button type="button" class="btn-rest" (click)="onVictoryToMenu()">Main menu</button>
+    </div>
+  }
   @if (steamWarning()) {
     <div class="steam-warning">{{ steamWarning() }}</div>
   }
