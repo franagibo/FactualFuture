@@ -384,6 +384,7 @@ export function chooseNode(
 }
 
 const GOLD_PER_COMBAT = 10;
+/** Number of card choices offered after combat; drawn from the character's full card pool. */
 const REWARD_CARD_COUNT = 3;
 
 /** Rarity weights when offering a potion: common 65%, uncommon 25%, rare 10%. */

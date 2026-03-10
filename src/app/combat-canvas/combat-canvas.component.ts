@@ -379,11 +379,19 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           if (el) el.scrollTop = el.scrollHeight;
         });
       }
-      if (prevPhase === 'combat' && this._runPhase === 'map' && this.app) {
+      // Apply same layout fix when exiting combat (to reward, map, etc.) so map/canvas render correctly.
+      if (prevPhase === 'combat' && this.app) {
         this.zone.run(() => this.cdr.detectChanges());
         this.app.resize();
         requestAnimationFrame(() => {
           if (this.app) this.redraw();
+          requestAnimationFrame(() => {
+            if (this.app) {
+              this.zone.run(() => this.cdr.detectChanges());
+              this.app.resize();
+              this.redraw();
+            }
+          });
         });
       }
       return;

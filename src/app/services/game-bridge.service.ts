@@ -343,17 +343,26 @@ export class GameBridgeService {
     return (this.eventPool ?? []).filter((e) => e.act == null || e.act === act);
   }
 
-  /** Reward card pool for current act. When character has cardPoolIds, use it as base; else act pool. Merge with unlocked, filter non-curse. */
+  /** All card IDs that can appear in rewards (non-curse, non-status). Used when character has no pool or pool is tiny. */
+  private getFullPlayableCardPool(): string[] {
+    if (!this.cardsMap) return this.rewardCardPool ?? [];
+    return (this.rewardCardPool ?? []).filter(
+      (id) => this.cardsMap!.get(id) && !this.cardsMap!.get(id)?.isCurse && !this.cardsMap!.get(id)?.isStatus
+    );
+  }
+
+  /** Reward card pool for current act. Uses character cardPoolIds when present; otherwise full playable pool. Never returns a tiny pool. */
   private getRewardCardPoolForAct(actKey: string): string[] {
     const characterId = this.state?.characterId;
     const character = characterId ? this.charactersMap.get(characterId) : undefined;
+    const fullPool = this.getFullPlayableCardPool();
     const base =
       character?.cardPoolIds && character.cardPoolIds.length > 0
         ? character.cardPoolIds
-        : (this.shopPoolsByAct[actKey]?.cards ?? []);
-    let merged = [...new Set([...base, ...this.meta.unlockedCards])];
+        : fullPool;
+    let merged = [...new Set([...base, ...(this.meta.unlockedCards ?? [])])];
     if (this.cardsMap) merged = merged.filter((id) => this.cardsMap!.get(id) && !this.cardsMap!.get(id)?.isCurse && !this.cardsMap!.get(id)?.isStatus);
-    return merged;
+    return merged.length >= 5 ? merged : fullPool;
   }
 
   /** Pick one id from pool; if weights map is provided use weighted random. */
