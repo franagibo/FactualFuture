@@ -5,6 +5,7 @@ import {
   ElementRef,
   ViewChild,
   ChangeDetectorRef,
+  NgZone,
   HostListener,
 } from '@angular/core';
 import { Router } from '@angular/router';
@@ -65,6 +66,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private hoveredNodeId: string | null = null;
   /** True until we have drawn with valid canvas size once (fixes initial map/combat not showing). */
   private hadZeroSize = true;
+  /** Coalesce redraws: if redraw() is called while doRedraw runs, schedule one more next frame. */
+  private redrawAgain = false;
+  /** Guard to avoid re-entrant doRedraw. */
+  private inRedraw = false;
+  /** ResizeObserver: throttle to one redraw per frame. */
+  private resizeRedrawScheduled = false;
   showPauseMenu = false;
   showPauseSettings = false;
   pauseFullscreen = true;
@@ -79,8 +86,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     private combatAssets: CombatAssetsService,
     public sound: SoundService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private zone: NgZone
   ) {}
+
+  /** Run inside Angular zone and mark for check when template (overlays, buttons) must update. */
+  private requestTemplateUpdate(): void {
+    this.zone.run(() => this.cdr.markForCheck());
+  }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
@@ -88,19 +101,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.selectedCardId = null;
       this.hoveredEnemyIndex = null;
       this.redraw();
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
       return;
     }
-    // B18: targeting cancelled above; fall through to open pause menu
     this.showPauseSettings = false;
     this.showPauseMenu = true;
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   closePauseMenu(): void {
     this.showPauseMenu = false;
     this.showPauseSettings = false;
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onPauseContinue(): void {
@@ -113,33 +125,33 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const api = (window as unknown as { electronAPI?: { getSettings?: () => Promise<{ fullscreen?: boolean }> } }).electronAPI;
       api?.getSettings?.().then((s) => {
         this.pauseFullscreen = s?.fullscreen !== false;
-        this.cdr.markForCheck();
+        this.requestTemplateUpdate();
       });
     }
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   closePauseSettings(): void {
     this.showPauseSettings = false;
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   setPauseFullScreen(fullscreen: boolean): void {
     const api = (window as unknown as { electronAPI?: { setFullScreen?: (v: boolean) => void } }).electronAPI;
     if (api?.setFullScreen) api.setFullScreen(fullscreen);
     this.pauseFullscreen = fullscreen;
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   setPauseResolution(width: number, height: number): void {
     const api = (window as unknown as { electronAPI?: { setWindowSize?: (w: number, h: number) => void } }).electronAPI;
     if (api?.setWindowSize) api.setWindowSize(width | 0, height | 0);
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   setPauseSound(muted: boolean): void {
     this.sound.setMuted(muted);
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onExitGame(): void {
@@ -156,7 +168,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.bridge.saveRun();
     this.showPauseMenu = false;
     this.showPauseSettings = false;
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
     this.router.navigate(['/']);
   }
 
@@ -170,7 +182,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
       (window as unknown as { electronAPI: { onSteamWarning: (cb: (m: string) => void) => void } }).electronAPI.onSteamWarning((msg) => {
         this._steamWarning = msg;
-        this.cdr.markForCheck();
+        this.requestTemplateUpdate();
       });
     }
     this.initPixi();
@@ -196,7 +208,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const state = this.bridge.getState();
     this._combatResult = state?.combatResult ?? null;
     this._runPhase = this.bridge.getRunPhase();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
 
     const host = this.canvasHostRef.nativeElement;
     this.app = new PIXI.Application();
@@ -207,40 +219,45 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     });
     host.appendChild(this.app.canvas);
     this.app.stage.eventMode = 'passive' as PIXI.EventMode;
-    this.resizeObserver = new ResizeObserver(() => this.redraw());
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.resizeRedrawScheduled) return;
+      this.resizeRedrawScheduled = true;
+      requestAnimationFrame(() => {
+        this.resizeRedrawScheduled = false;
+        this.redraw();
+      });
+    });
     this.resizeObserver.observe(host);
-    this.hoverLerpTicker = (ticker: PIXI.Ticker) => {
-      if (!this.app) return;
-      const w = this.app.screen.width;
-      const h = this.app.screen.height;
-      const hasValidSize = w > 0 && h > 0;
-      if (!hasValidSize) {
-        this.hadZeroSize = true;
-        this.redraw();
-        return;
-      }
-      // First frame with valid size after 0: force one redraw (ResizeObserver may not fire on initial layout).
-      if (this.hadZeroSize) {
-        this.hadZeroSize = false;
-        this.redraw();
-        return;
-      }
-      if (this._runPhase !== 'combat') return;
-      let changed = false;
-      if (this.hoverLerp.length === this.targetLerp.length) {
-        const factor = 0.2;
-        for (let i = 0; i < this.hoverLerp.length; i++) {
-          const prev = this.hoverLerp[i];
-          this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
-          if (Math.abs(this.hoverLerp[i] - prev) > 0.01) changed = true;
+    this.zone.runOutsideAngular(() => {
+      this.hoverLerpTicker = (ticker: PIXI.Ticker) => {
+        if (!this.app) return;
+        const w = this.app.screen.width;
+        const h = this.app.screen.height;
+        const hasValidSize = w > 0 && h > 0;
+        if (!hasValidSize) {
+          this.hadZeroSize = true;
+          this.redraw();
+          return;
         }
-      }
-      if (changed) {
-        this.redraw();
-        this.cdr.markForCheck();
-      }
-    };
-    this.app.ticker.add(this.hoverLerpTicker);
+        if (this.hadZeroSize) {
+          this.hadZeroSize = false;
+          this.redraw();
+          return;
+        }
+        if (this._runPhase !== 'combat') return;
+        let changed = false;
+        if (this.hoverLerp.length === this.targetLerp.length) {
+          const factor = 0.35;
+          for (let i = 0; i < this.hoverLerp.length; i++) {
+            const prev = this.hoverLerp[i];
+            this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
+            if (Math.abs(this.hoverLerp[i] - prev) > 0.01) changed = true;
+          }
+        }
+        if (changed) this.redraw();
+      };
+    });
+    if (this.hoverLerpTicker) this.app.ticker.add(this.hoverLerpTicker);
     this.redraw();
     // Defer a redraw until after layout: host/canvas may have 0 or wrong size on first paint.
     requestAnimationFrame(() => {
@@ -255,8 +272,32 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Clears stage and draws either map or combat view; syncs combat result and run phase from bridge. */
+  /** Schedules a paint outside Angular (coalesced). Use requestTemplateUpdate() after when the overlay must update. */
   private redraw(): void {
+    if (this.inRedraw) {
+      this.redrawAgain = true;
+      return;
+    }
+    this.zone.runOutsideAngular(() => {
+      this.doRedraw();
+      if (this.redrawAgain) {
+        this.redrawAgain = false;
+        requestAnimationFrame(() => this.redraw());
+      }
+    });
+  }
+
+  /** Clears stage and draws either map or combat view; syncs combat result and run phase from bridge. */
+  private doRedraw(): void {
+    this.inRedraw = true;
+    try {
+      this.doRedrawBody();
+    } finally {
+      this.inRedraw = false;
+    }
+  }
+
+  private doRedrawBody(): void {
     const state = this.bridge.getState();
     if (!state || !this.app) return;
     const w = this.app.screen.width;
@@ -302,14 +343,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           const prev = this.mapContentHeight;
           this.mapContentHeight = height;
           if (height > 0 && height !== prev && this.app) {
-            this.cdr.detectChanges();
+            this.zone.run(() => this.cdr.detectChanges());
             this.app.resize();
             requestAnimationFrame(() => {
               if (this.app) this.redraw();
             });
           }
         },
-        markForCheck: () => this.cdr.markForCheck(),
+        markForCheck: () => this.requestTemplateUpdate(),
         onChooseNode:
           this._runPhase === 'map'
             ? (nodeId: string) => {
@@ -320,16 +361,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         loadMapAssets: () => this.mapAssets.loadMapAssets(),
         hoveredNodeId: this.hoveredNodeId,
         onNodePointerOver: (nodeId: string) => {
+          if (this.hoveredNodeId === nodeId) return;
           this.hoveredNodeId = nodeId;
           this.redraw();
         },
         onNodePointerOut: () => {
+          if (this.hoveredNodeId === null) return;
           this.hoveredNodeId = null;
           this.redraw();
         },
       };
       drawMapView(mapContext, state, stage, w, h, padding);
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
       if (prevPhase !== 'map' && this._runPhase === 'map') {
         requestAnimationFrame(() => {
           const el = this.scrollAreaRef?.nativeElement;
@@ -337,7 +380,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         });
       }
       if (prevPhase === 'combat' && this._runPhase === 'map' && this.app) {
-        this.cdr.detectChanges();
+        this.zone.run(() => this.cdr.detectChanges());
         this.app.resize();
         requestAnimationFrame(() => {
           if (this.app) this.redraw();
@@ -381,7 +424,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       onEnemyPointerOver: (enemyIndex) => { this.hoveredEnemyIndex = enemyIndex; this.redraw(); },
       onEnemyPointerOut: () => { this.hoveredEnemyIndex = null; this.redraw(); },
       cardSprites: this.cardSprites,
-      markForCheck: () => this.cdr.markForCheck(),
+      markForCheck: () => this.requestTemplateUpdate(),
       getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
       getPlayerTexture: () => this.combatAssets.getPlayerTexture(),
       getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
@@ -417,12 +460,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.shieldAnimationPlaying = true;
     this.ensurePlayerAnimationTicker();
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
     this.combatAssets.playShieldAnimation().then(() => {
       this.shieldAnimationPlaying = false;
       this.removePlayerAnimationTickerIfIdle();
       this.redraw();
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
     });
   }
 
@@ -437,12 +480,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.shootingAnimationPlaying = true;
     this.ensurePlayerAnimationTicker();
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
     this.combatAssets.playShootingAnimation().then(() => {
       this.shootingAnimationPlaying = false;
       this.removePlayerAnimationTickerIfIdle();
       this.redraw();
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
     });
   }
 
@@ -453,7 +496,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           this.combatAssets.getShieldAnimationDone();
           this.combatAssets.getShootingAnimationDone();
           this.redraw();
-          this.cdr.markForCheck();
         }
       };
       this.app.ticker.add(this.shieldTicker);
@@ -486,7 +528,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         this.selectedCardId = null;
         this.selectedCardIndex = null;
         this.redraw();
-        this.cdr.markForCheck();
+        this.requestTemplateUpdate();
       }
       return;
     }
@@ -497,7 +539,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.selectedCardId = cardId;
       this.selectedCardIndex = handIndex;
       this.redraw();
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
       return;
     }
 
@@ -523,7 +565,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.selectedCardId = null;
     this.hoveredEnemyIndex = null;
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   /**
@@ -562,7 +604,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.selectedCardIndex = null;
       this.hoveredEnemyIndex = null;
       this.redraw();
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
       return;
     }
     const arcN = state.hand.length > 1 ? (selIdx - center) / (state.hand.length - 1) : 0;
@@ -617,11 +659,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         }
         this.floatingNumbers = [...this.floatingNumbers, ...toAdd];
         this.redraw();
-        this.cdr.markForCheck();
+        this.requestTemplateUpdate();
         if (toAdd.length > 0) {
           setTimeout(() => {
             this.redraw();
-            this.cdr.markForCheck();
+            this.requestTemplateUpdate();
           }, 750);
         }
       }
@@ -641,13 +683,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.sound.playTurnEnd();
     this.showingEnemyTurn = true;
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
     setTimeout(() => {
       this.sound.playTurnStart();
       this.bridge.endTurn();
       this.showingEnemyTurn = false;
       this.redraw();
-      this.cdr.markForCheck();
+      this.requestTemplateUpdate();
     }, 1200);
   }
 
@@ -729,37 +771,37 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (def?.effect?.type === 'damage' && (target === undefined || target < 0)) return;
     this.bridge.usePotion(potionId, target ?? 0);
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onLeaveShop(): void {
     this.bridge.leaveShop();
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onPurchaseCard(cardId: string): void {
     this.bridge.purchaseCard(cardId);
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onPurchaseRelic(relicId: string): void {
     this.bridge.purchaseRelic(relicId);
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onEventChoice(choiceIndex: number): void {
     this.bridge.executeEventChoice(choiceIndex);
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onAdvanceToNextAct(): void {
     this.bridge.advanceToNextAct();
     this.redraw();
-    this.cdr.markForCheck();
+    this.requestTemplateUpdate();
   }
 
   onVictoryToMenu(): void {
