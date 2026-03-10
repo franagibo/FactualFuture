@@ -5,8 +5,10 @@ import {
   ElementRef,
   ViewChild,
   ChangeDetectorRef,
+  ChangeDetectionStrategy,
   NgZone,
   HostListener,
+  signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { CombatAssetsService } from '../services/combat-assets.service';
@@ -30,6 +32,7 @@ import { drawCombatView, type CombatViewContext } from './renderers/combat-view.
   standalone: true,
   templateUrl: './combat-canvas.component.html',
   styleUrls: ['./combat-canvas.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CombatCanvasComponent implements OnInit, OnDestroy {
   @ViewChild('canvasHost', { static: true }) canvasHostRef!: ElementRef<HTMLDivElement>;
@@ -57,6 +60,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private _steamWarning = '';
   private _combatResult: GameState['combatResult'] = null;
   private _runPhase: RunPhase | undefined = undefined;
+  /** Signals for overlay template; updated in doRedrawBody and initPixi so template does not call bridge on every CD. */
+  runPhaseSignal = signal<RunPhase | undefined>(undefined);
+  combatResultSignal = signal<GameState['combatResult']>(null);
+  rewardChoicesSignal = signal<string[]>([]);
+  potionsSignal = signal<string[]>([]);
+  goldSignal = signal(0);
+  shopStateSignal = signal<GameState['shopState']>(undefined);
+  eventStateSignal = signal<GameState['eventState']>(undefined);
+  restRemovableCardsSignal = signal<string[]>([]);
   private resizeObserver: ResizeObserver | null = null;
   private hoverLerpTicker: ((ticker: PIXI.Ticker) => void) | null = null;
   private shieldTicker: (() => void) | null = null;
@@ -72,6 +84,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private inRedraw = false;
   /** ResizeObserver: throttle to one redraw per frame. */
   private resizeRedrawScheduled = false;
+  /** Throttle hover-led redraws to ~30 FPS so we don't redraw every frame during card hover. */
+  private lastHoverRedrawTime = 0;
+  private static readonly HOVER_REDRAW_INTERVAL_MS = 33;
   showPauseMenu = false;
   showPauseSettings = false;
   pauseFullscreen = true;
@@ -90,9 +105,29 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     private zone: NgZone
   ) {}
 
-  /** Run inside Angular zone and mark for check when template (overlays, buttons) must update. */
+  /** Run inside Angular zone, sync overlay signals from bridge, and mark for check. */
   private requestTemplateUpdate(): void {
-    this.zone.run(() => this.cdr.markForCheck());
+    this.zone.run(() => {
+      this.syncOverlaySignals(this.bridge.getState());
+      this.cdr.markForCheck();
+    });
+  }
+
+  /** Update overlay signals from bridge state so template does not call bridge on every CD. When state is provided, also sync _runPhase/_combatResult. */
+  private syncOverlaySignals(state: GameState | null): void {
+    if (state) {
+      this._runPhase = this.bridge.getRunPhase();
+      this._combatResult = state.combatResult ?? null;
+    }
+    this.runPhaseSignal.set(this._runPhase);
+    this.combatResultSignal.set(this._combatResult);
+    if (!state) return;
+    this.rewardChoicesSignal.set(this.bridge.getRewardChoices());
+    this.potionsSignal.set(this.bridge.getPotions());
+    this.goldSignal.set(state.gold ?? 0);
+    this.shopStateSignal.set(state.shopState);
+    this.eventStateSignal.set(state.eventState);
+    this.restRemovableCardsSignal.set(this._runPhase === 'rest' ? Array.from(new Set(state.deck ?? [])) : []);
   }
 
   @HostListener('document:keydown.escape')
@@ -173,9 +208,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   steamWarning = () => this._steamWarning;
-  combatResult = () => this._combatResult;
-  runPhase = () => this._runPhase;
-  rewardChoices = () => this.bridge.getRewardChoices();
 
   ngOnInit(): void {
     this.sound.loadMutedPreference();
@@ -208,6 +240,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const state = this.bridge.getState();
     this._combatResult = state?.combatResult ?? null;
     this._runPhase = this.bridge.getRunPhase();
+    this.syncOverlaySignals(state);
     this.requestTemplateUpdate();
 
     const host = this.canvasHostRef.nativeElement;
@@ -228,36 +261,41 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       });
     });
     this.resizeObserver.observe(host);
-    this.zone.runOutsideAngular(() => {
-      this.hoverLerpTicker = (ticker: PIXI.Ticker) => {
-        if (!this.app) return;
-        const w = this.app.screen.width;
-        const h = this.app.screen.height;
-        const hasValidSize = w > 0 && h > 0;
-        if (!hasValidSize) {
-          this.hadZeroSize = true;
+    const runTickerOutsideZone = (): void => {
+      if (!this.app) return;
+      const w = this.app.screen.width;
+      const h = this.app.screen.height;
+      const hasValidSize = w > 0 && h > 0;
+      if (!hasValidSize) {
+        this.hadZeroSize = true;
+        this.redraw();
+        return;
+      }
+      if (this.hadZeroSize) {
+        this.hadZeroSize = false;
+        this.redraw();
+        return;
+      }
+      if (this._runPhase !== 'combat') return;
+      let changed = false;
+      if (this.hoverLerp.length === this.targetLerp.length) {
+        const factor = 0.35;
+        for (let i = 0; i < this.hoverLerp.length; i++) {
+          const prev = this.hoverLerp[i];
+          this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
+          if (Math.abs(this.hoverLerp[i] - prev) > 0.02) changed = true;
+        }
+      }
+      if (changed) {
+        const now = performance.now();
+        if (now - this.lastHoverRedrawTime >= CombatCanvasComponent.HOVER_REDRAW_INTERVAL_MS) {
+          this.lastHoverRedrawTime = now;
           this.redraw();
-          return;
         }
-        if (this.hadZeroSize) {
-          this.hadZeroSize = false;
-          this.redraw();
-          return;
-        }
-        if (this._runPhase !== 'combat') return;
-        let changed = false;
-        if (this.hoverLerp.length === this.targetLerp.length) {
-          const factor = 0.35;
-          for (let i = 0; i < this.hoverLerp.length; i++) {
-            const prev = this.hoverLerp[i];
-            this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
-            if (Math.abs(this.hoverLerp[i] - prev) > 0.01) changed = true;
-          }
-        }
-        if (changed) this.redraw();
-      };
-    });
-    if (this.hoverLerpTicker) this.app.ticker.add(this.hoverLerpTicker);
+      }
+    };
+    this.hoverLerpTicker = (_ticker: PIXI.Ticker) => this.zone.runOutsideAngular(runTickerOutsideZone);
+    this.zone.runOutsideAngular(() => this.app!.ticker.add(this.hoverLerpTicker!));
     this.redraw();
     // Defer a redraw until after layout: host/canvas may have 0 or wrong size on first paint.
     requestAnimationFrame(() => {
@@ -312,6 +350,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const prevPhase = this._runPhase;
     this._combatResult = state.combatResult;
     this._runPhase = this.bridge.getRunPhase();
+    this.syncOverlaySignals(state);
     if (state.combatResult === 'win' && prevResult !== 'win') this.sound.playVictory();
     if (state.combatResult === 'lose' && prevResult !== 'lose') this.sound.playDefeat();
     if (this._runPhase === 'combat' && prevPhase !== 'combat') this.sound.playCombatStart();
@@ -499,14 +538,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   private ensurePlayerAnimationTicker(): void {
     if (this.app && !this.shieldTicker) {
-      this.shieldTicker = () => {
+      const runShieldTickerOutsideZone = (): void => {
         if (this.shieldAnimationPlaying || this.shootingAnimationPlaying) {
           this.combatAssets.getShieldAnimationDone();
           this.combatAssets.getShootingAnimationDone();
           this.redraw();
         }
       };
-      this.app.ticker.add(this.shieldTicker);
+      this.shieldTicker = () => this.zone.runOutsideAngular(runShieldTickerOutsideZone);
+      this.zone.runOutsideAngular(() => this.app!.ticker.add(this.shieldTicker!));
     }
   }
 

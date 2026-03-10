@@ -541,5 +541,4 @@ export function drawCombatView(context: CombatViewContext): void {
   drawTargetingArrow(context, layout);
   drawFloatingNumbers(context);
   drawEnemyTurnBanner(context);
-  context.markForCheck();
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { playCard as enginePlayCard, endTurn as engineEndTurn } from '../../engine/combat';
 import { loadCards, loadEnemies, loadEncounters } from '../../engine/loadData';
 import {
@@ -55,6 +55,8 @@ declare const window: Window & { electronAPI?: { readSave: (path: string) => Pro
 @Injectable({ providedIn: 'root' })
 export class GameBridgeService {
   private state: GameState | null = null;
+  /** Exposed so components can read state without calling getState() on every CD. */
+  readonly stateSignal = signal<GameState | null>(null);
   private cardsMap: CardsMap | null = null;
   private enemyDefs: EnemyDefsMap | null = null;
   private encountersMap: EncountersMap | null = null;
@@ -74,6 +76,11 @@ export class GameBridgeService {
 
   getState(): GameState | null {
     return this.state;
+  }
+
+  private setState(next: GameState | null): void {
+    this.state = next;
+    this.stateSignal.set(next);
   }
 
   getCardDef(cardId: string): CardDef | undefined {
@@ -99,7 +106,7 @@ export class GameBridgeService {
   usePotion(potionId: string, targetEnemyIndex?: number): void {
     if (!this.state) return;
     const def = this.potionDefs.get(potionId);
-    this.state = engineUsePotion(this.state, potionId, targetEnemyIndex ?? null, def, this.cardsMap ?? undefined);
+    this.setState(engineUsePotion(this.state, potionId, targetEnemyIndex ?? null, def, this.cardsMap ?? undefined));
     this.maybeHandleCombatWin();
   }
 
@@ -174,10 +181,10 @@ export class GameBridgeService {
     const character = this.charactersMap.get(characterId);
     const starterDeck = character?.starterDeck;
     const seed = Date.now() & 0xffffffff;
-    this.state = engineStartRun(seed, act1, {
+    this.setState(engineStartRun(seed, act1, {
       starterDeck: starterDeck?.length ? starterDeck : undefined,
       characterId: character ? characterId : undefined,
-    });
+    }));
   }
 
   getCharacters(): CharacterDef[] {
@@ -193,7 +200,7 @@ export class GameBridgeService {
   }
 
   clearState(): void {
-    this.state = null;
+    this.setState(null);
   }
 
   /** Save current run to disk (Electron) or localStorage (browser). Call when quitting to menu. */
@@ -292,7 +299,7 @@ export class GameBridgeService {
       }
     }
     if (data != null && typeof data === 'object' && 'runPhase' in data) {
-      this.state = data as GameState;
+      this.setState(data as GameState);
       return true;
     }
     return false;
@@ -300,7 +307,7 @@ export class GameBridgeService {
 
   playCard(cardId: string, target?: number, handIndex?: number): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs) return;
-    this.state = enginePlayCard(this.state, cardId, target ?? null, this.cardsMap, this.enemyDefs, handIndex);
+    this.setState(enginePlayCard(this.state, cardId, target ?? null, this.cardsMap, this.enemyDefs, handIndex));
     this.maybeHandleCombatWin();
   }
 
@@ -308,7 +315,7 @@ export class GameBridgeService {
     if (!this.state || !this.cardsMap || !this.enemyDefs) return;
     let next = engineEndTurn(this.state, this.cardsMap, this.enemyDefs);
     if (this.relicDefs) next = runRelics(next, 'onTurnStart', this.relicDefs);
-    this.state = next;
+    this.setState(next);
     this.maybeHandleCombatWin();
   }
 
@@ -424,17 +431,17 @@ export class GameBridgeService {
       next = runRelics(next, 'onCombatStart', this.relicDefs);
       next = runRelics(next, 'onTurnStart', this.relicDefs);
     }
-    this.state = next;
+    this.setState(next);
   }
 
   leaveShop(): void {
     if (!this.state) return;
-    this.state = engineLeaveShop(this.state);
+    this.setState(engineLeaveShop(this.state));
   }
 
   executeEventChoice(choiceIndex: number): void {
     if (!this.state) return;
-    this.state = engineExecuteEventChoice(this.state, choiceIndex);
+    this.setState(engineExecuteEventChoice(this.state, choiceIndex));
   }
 
   getShopState(): GameState['shopState'] {
@@ -448,7 +455,7 @@ export class GameBridgeService {
   purchaseCard(cardId: string): void {
     if (!this.state) return;
     const price = this.state.shopState?.cardPrices?.[cardId] ?? 0;
-    this.state = enginePurchaseCard(this.state, cardId);
+    this.setState(enginePurchaseCard(this.state, cardId));
     if (price > 0) {
       this.meta = {
         ...this.meta,
@@ -461,7 +468,7 @@ export class GameBridgeService {
   purchaseRelic(relicId: string): void {
     if (!this.state) return;
     const price = this.state.shopState?.relicPrices?.[relicId] ?? 0;
-    this.state = enginePurchaseRelic(this.state, relicId);
+    this.setState(enginePurchaseRelic(this.state, relicId));
     if (price > 0) {
       this.meta = {
         ...this.meta,
@@ -474,7 +481,7 @@ export class GameBridgeService {
   advanceToNextAct(): void {
     if (!this.state || !this.mapConfig) return;
     const previousAct = this.state.act ?? 1;
-    this.state = engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, import('../../engine/map/mapGenerator').ActConfig & Record<string, unknown>>);
+    this.setState(engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, import('../../engine/map/mapGenerator').ActConfig & Record<string, unknown>>));
     const newAct = this.state.act ?? 1;
     if (newAct === 2 && previousAct === 1 && this.meta.highestActReached < 2) {
       for (const id of UNLOCK_ON_ACT2_CARDS) {
@@ -493,17 +500,17 @@ export class GameBridgeService {
 
   chooseReward(cardId: string): void {
     if (!this.state) return;
-    this.state = engineChooseCardReward(this.state, cardId);
+    this.setState(engineChooseCardReward(this.state, cardId));
   }
 
   restHeal(): void {
     if (!this.state) return;
-    this.state = engineRestHeal(this.state);
+    this.setState(engineRestHeal(this.state));
   }
 
   restRemoveCard(cardId: string): void {
     if (!this.state) return;
-    this.state = engineRestRemoveCard(this.state, cardId);
+    this.setState(engineRestRemoveCard(this.state, cardId));
   }
 
   private maybeHandleCombatWin(): void {
@@ -511,14 +518,14 @@ export class GameBridgeService {
     if (this.state.combatResult !== 'win' || this.state.runPhase !== 'combat') return;
     if (engineIsBossNode(this.state)) {
       const runPhase = engineGetRunPhaseAfterBossWin(this.state);
-      this.state = {
+      this.setState({
         ...this.state,
         runPhase,
         currentEncounter: null,
         enemies: [],
         combatResult: null,
         rewardCardChoices: undefined,
-      };
+      });
       const act = this.state.act ?? 1;
       if (act > this.meta.highestActReached) {
         this.meta = { ...this.meta, highestActReached: act };
@@ -533,11 +540,11 @@ export class GameBridgeService {
     } else {
       const actKey = `act${this.state.act ?? 1}`;
       const rewardPool = this.getRewardCardPoolForAct(actKey);
-      this.state = engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!);
+      this.setState(engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!));
       const maxPotions = 3;
       if (this.state.potions && this.state.potions.length < maxPotions && Math.random() < 0.4) {
         const potionId = enginePickRandomPotionByRarity(this.potionDefs);
-        if (potionId) this.state = { ...this.state, potions: [...this.state.potions, potionId] };
+        if (potionId) this.setState({ ...this.state, potions: [...this.state.potions, potionId] });
       }
       this.meta = {
         ...this.meta,

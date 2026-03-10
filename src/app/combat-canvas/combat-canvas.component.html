@@ -1,13 +1,13 @@
-<div class="canvas-wrap" [class.map-mode]="runPhase() === 'map'">
+<div class="canvas-wrap" [class.map-mode]="runPhaseSignal() === 'map'">
   <div #scrollArea class="scroll-area">
-    <div class="game-view-inner" [style.height]="(runPhase() === 'map' && mapContentHeight) ? (mapContentHeight + 'px') : '100%'">
+    <div class="game-view-inner" [style.height]="(runPhaseSignal() === 'map' && mapContentHeight) ? (mapContentHeight + 'px') : '100%'">
       <div #canvasHost class="pixi-host"></div>
     </div>
   </div>
   <div class="overlay-actions">
-    @if (runPhase() === 'combat') {
+    @if (runPhaseSignal() === 'combat') {
       <div class="potion-bar">
-        @for (potionId of getPotions(); track potionId + $index) {
+        @for (potionId of potionsSignal(); track potionId + $index) {
           <button
             type="button"
             class="btn-potion"
@@ -24,19 +24,19 @@
       <button type="button" class="btn-end" (click)="onEndTurn()" [disabled]="!canEndTurn()">
         End turn
       </button>
-      @if (combatResult()) {
-        <div class="result" [class.win]="combatResult() === 'win'" [class.lose]="combatResult() === 'lose'">
-          {{ combatResult() === 'win' ? 'Victory!' : 'Systems down' }}
+      @if (combatResultSignal()) {
+        <div class="result" [class.win]="combatResultSignal() === 'win'" [class.lose]="combatResultSignal() === 'lose'">
+          {{ combatResultSignal() === 'win' ? 'Victory!' : 'Systems down' }}
         </div>
         <button type="button" class="btn-restart" (click)="onRestart()">Restart</button>
       }
     }
   </div>
-  @if (runPhase() === 'reward') {
+  @if (runPhaseSignal() === 'reward') {
     <div class="reward-panel">
       <div class="reward-title">Choose salvage</div>
       <div class="reward-cards">
-        @for (cardId of rewardChoices(); track cardId) {
+        @for (cardId of rewardChoicesSignal(); track cardId) {
           <button type="button" class="reward-card" [attr.title]="getCardTooltip(cardId)" (click)="onChooseReward(cardId)">
             {{ getCardName(cardId) }}
           </button>
@@ -44,7 +44,7 @@
       </div>
     </div>
   }
-  @if (runPhase() === 'rest') {
+  @if (runPhaseSignal() === 'rest') {
     <div class="rest-panel">
       <div class="rest-title">Repair bay</div>
       <div class="rest-actions">
@@ -52,7 +52,7 @@
       </div>
       <div class="rest-subtitle">Jettison a card from your loadout:</div>
       <div class="rest-cards">
-        @for (cardId of restRemovableCards(); track cardId) {
+        @for (cardId of restRemovableCardsSignal(); track cardId) {
           <button
             type="button"
             class="btn-rest-card"
@@ -65,11 +65,11 @@
       </div>
     </div>
   }
-  @if (runPhase() === 'shop') {
+  @if (runPhaseSignal() === 'shop') {
     <div class="reward-panel shop-panel">
       <div class="reward-title">Shop</div>
-      <div class="shop-gold">Credits: {{ getGold() }}</div>
-      @if (getShopState(); as shop) {
+      <div class="shop-gold">Credits: {{ goldSignal() }}</div>
+      @if (shopStateSignal(); as shop) {
         <div class="shop-cards">
           @for (cardId of shop.cardIds; track cardId) {
             <div class="shop-item" [attr.title]="getCardTooltip(cardId)">
@@ -78,7 +78,7 @@
               <button
                 type="button"
                 class="btn-rest btn-shop-buy"
-                [disabled]="getGold() < (shop.cardPrices[cardId] || 0)"
+                [disabled]="goldSignal() < (shop.cardPrices[cardId] || 0)"
                 (click)="onPurchaseCard(cardId)"
               >
                 Buy
@@ -94,7 +94,7 @@
               <button
                 type="button"
                 class="btn-rest btn-shop-buy"
-                [disabled]="getGold() < (shop.relicPrices[relicId] || 0)"
+                [disabled]="goldSignal() < (shop.relicPrices[relicId] || 0)"
                 (click)="onPurchaseRelic(relicId)"
               >
                 Buy
@@ -108,12 +108,12 @@
       </div>
     </div>
   }
-  @if (runPhase() === 'event') {
+  @if (runPhaseSignal() === 'event') {
     <div class="reward-panel event-panel">
       <div class="reward-title">Event</div>
-      <div class="event-text">{{ getEventState()?.text }}</div>
+      <div class="event-text">{{ eventStateSignal()?.text }}</div>
       <div class="event-choices">
-        @for (choice of getEventChoices(); track $index) {
+        @for (choice of (eventStateSignal()?.choices ?? []); track $index) {
           <button type="button" class="btn-rest" (click)="onEventChoice($index)">
             {{ choice.text }}
           </button>
@@ -121,13 +121,13 @@
       </div>
     </div>
   }
-  @if (runPhase() === 'actComplete') {
+  @if (runPhaseSignal() === 'actComplete') {
     <div class="reward-panel victory-panel">
       <div class="reward-title">Sector clear!</div>
       <button type="button" class="btn-rest" (click)="onAdvanceToNextAct()">Next sector</button>
     </div>
   }
-  @if (runPhase() === 'victory') {
+  @if (runPhaseSignal() === 'victory') {
     <div class="reward-panel victory-panel">
       <div class="reward-title">Mission complete!</div>
       <button type="button" class="btn-rest" (click)="onVictoryToMenu()">Command</button>

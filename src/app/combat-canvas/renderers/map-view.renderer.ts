@@ -136,7 +136,6 @@ export function drawMapView(
   const BOTTOM_MARGIN = 130;
   const mapContentHeight = (maxFloor + 1) * FLOOR_SPACING + padding * 2 + BOTTOM_MARGIN;
   context.onMapContentHeight(mapContentHeight);
-  context.markForCheck();
 
   const floors: string[][] = [];
   nodes.forEach((n) => {

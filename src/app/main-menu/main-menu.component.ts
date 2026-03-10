@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
@@ -6,6 +6,7 @@ import { GameBridgeService } from '../services/game-bridge.service';
 @Component({
   selector: 'app-main-menu',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="menu-wrap">
       <div class="menu-panel">
