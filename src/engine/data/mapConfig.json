@@ -6,8 +6,17 @@
     "shop": 1,
     "event": 1,
     "boss": 1,
-    "encounterPool": ["first_contact", "solo_scout", "solo_drone", "solo_crawler", "solo_shield", "double_drones", "swarm", "leader_and_adds", "dual_heavy"],
-    "eliteEncounterPool": ["leader_and_adds", "dual_heavy"],
+    "encounterPool": [
+      "sts_cultist", "sts_jaw_worm", "sts_two_louses", "sts_slimes_ma_sa", "sts_slimes_ma_ss", "sts_slimes_ms_sa", "sts_slimes_ms_ss",
+      "sts_gremlin_gang", "sts_large_slime_acid", "sts_large_slime_spike", "sts_lots_of_slimes", "sts_blue_slaver", "sts_red_slaver",
+      "sts_three_louses", "sts_two_fungi", "sts_exordium_thugs", "sts_exordium_wildlife", "sts_looter"
+    ],
+    "encounterWeights": {
+      "sts_cultist": 25, "sts_jaw_worm": 25, "sts_two_louses": 25, "sts_slimes_ma_sa": 6, "sts_slimes_ma_ss": 6, "sts_slimes_ms_sa": 6, "sts_slimes_ms_ss": 7,
+      "sts_gremlin_gang": 6, "sts_large_slime_acid": 12, "sts_large_slime_spike": 12, "sts_lots_of_slimes": 6, "sts_blue_slaver": 12, "sts_red_slaver": 6,
+      "sts_three_louses": 12, "sts_two_fungi": 12, "sts_exordium_thugs": 9, "sts_exordium_wildlife": 9, "sts_looter": 12
+    },
+    "eliteEncounterPool": ["sts_sentry_guardian", "sts_three_cultists", "sts_gremlin_gang"],
     "bossEncounter": "boss_act1"
   },
   "act2": {
@@ -17,8 +26,35 @@
     "shop": 1,
     "event": 1,
     "boss": 1,
-    "encounterPool": ["solo_drone", "solo_crawler", "solo_shield", "solo_alpha", "solo_void", "double_drones", "swarm", "leader_and_adds", "dual_heavy", "alpha_and_probes"],
-    "eliteEncounterPool": ["solo_alpha", "leader_and_adds", "dual_heavy", "alpha_and_probes"],
+    "encounterPool": [
+      "sts_spheric_guardian", "sts_chosen", "sts_shelled_parasite", "sts_three_byrds", "sts_two_thieves",
+      "sts_chosen_byrd", "sts_cultist_chosen", "sts_sentry_guardian", "sts_snake_plant", "sts_snecko",
+      "sts_centurion_mystic", "sts_three_cultists", "sts_shelled_fungi"
+    ],
+    "encounterWeights": {
+      "sts_spheric_guardian": 20, "sts_chosen": 20, "sts_shelled_parasite": 20, "sts_three_byrds": 20, "sts_two_thieves": 20,
+      "sts_chosen_byrd": 7, "sts_cultist_chosen": 10, "sts_sentry_guardian": 7, "sts_snake_plant": 21, "sts_snecko": 14,
+      "sts_centurion_mystic": 21, "sts_three_cultists": 10, "sts_shelled_fungi": 10
+    },
+    "eliteEncounterPool": ["sts_sentry_guardian", "sts_three_cultists", "sts_gremlin_gang"],
+    "bossEncounter": "boss_act1"
+  },
+  "act3": {
+    "combat": 4,
+    "elite": 0,
+    "rest": 2,
+    "shop": 1,
+    "event": 1,
+    "boss": 1,
+    "encounterPool": [
+      "sts_three_darklings", "sts_orb_walker", "sts_three_shapes", "sts_four_shapes", "sts_maw",
+      "sts_guardian_two_shapes", "sts_writhing_mass", "sts_jaw_worm_horde", "sts_spire_growth", "sts_transient"
+    ],
+    "encounterWeights": {
+      "sts_three_darklings": 33, "sts_orb_walker": 33, "sts_three_shapes": 34, "sts_four_shapes": 12, "sts_maw": 12,
+      "sts_guardian_two_shapes": 12, "sts_writhing_mass": 12, "sts_jaw_worm_horde": 12, "sts_spire_growth": 12, "sts_transient": 12
+    },
+    "eliteEncounterPool": ["sts_sentry_guardian", "sts_three_cultists", "sts_gremlin_gang"],
     "bossEncounter": "boss_act1"
   }
 }

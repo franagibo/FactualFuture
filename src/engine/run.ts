@@ -7,12 +7,19 @@ import { startCombatFromRunState } from './combat';
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
 
-/** Initial run deck: 5 Strike, 4 Defend, 1 Bash (same as Phase 1). */
-const INITIAL_RUN_DECK = [
+/** Default starter deck when no character is specified (backward compat). */
+const DEFAULT_STARTER_DECK = [
   'strike', 'strike', 'strike', 'strike', 'strike',
   'defend', 'defend', 'defend', 'defend',
   'bash',
 ];
+
+export interface StartRunOptions {
+  /** Starter deck card IDs. If omitted, DEFAULT_STARTER_DECK is used. */
+  starterDeck?: string[];
+  /** Character id for this run (stored in state for UI/persistence). */
+  characterId?: string;
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const out = [...arr];
@@ -31,13 +38,17 @@ function pickRandom<T>(arr: T[], count: number): T[] {
 
 /**
  * Create initial run state: map generated, runPhase='map', deck shuffled, at map start.
+ * @param options.starterDeck - Card IDs for initial deck (default: Gunboy-style starter).
+ * @param options.characterId - Character id stored in state for UI and persistence.
  */
 export function startRun(
   seed: number,
-  actConfig: ActConfig
+  actConfig: ActConfig,
+  options?: StartRunOptions
 ): GameState {
   const map = generateMap(seed, actConfig);
-  const deck = shuffle([...INITIAL_RUN_DECK]);
+  const starterDeck = options?.starterDeck?.length ? options.starterDeck : DEFAULT_STARTER_DECK;
+  const deck = shuffle([...starterDeck]);
 
   return {
     playerHp: INITIAL_PLAYER_HP,
@@ -61,6 +72,7 @@ export function startRun(
     potions: [],
     floor: 0,
     act: 1,
+    characterId: options?.characterId,
   };
 }
 

@@ -1,6 +1,6 @@
 import type { GameState, EnemyState, EnemyIntent } from './types';
 import type { CardDef } from './cardDef';
-import type { EnemyDef, EncounterDef } from './loadData';
+import type { EnemyDef, EncounterDef, EnemyTrigger } from './loadData';
 import { runEffects, discardHandAndDraw } from './effectRunner';
 
 const INITIAL_PLAYER_HP = 70;
@@ -8,8 +8,8 @@ const INITIAL_MAX_ENERGY = 3;
 const HAND_SIZE_START = 5;
 const DRAW_PER_TURN = 5;
 
-/** Initial deck: 5 Strike, 4 Defend, 1 Bash */
-const INITIAL_DECK_IDS = [
+/** Default deck when no starter deck is provided (e.g. tests). */
+const DEFAULT_STARTER_DECK_IDS = [
   'strike', 'strike', 'strike', 'strike', 'strike',
   'defend', 'defend', 'defend', 'defend',
   'bash',
@@ -48,11 +48,66 @@ function setEnemyIntents(
   });
 }
 
+/**
+ * Process HP-based triggers (e.g. split at 50%). When an enemy's HP is at or below the trigger
+ * threshold, the trigger action runs (e.g. replace with spawns). Spawned enemies get intent 'none'
+ * for the rest of the current turn. Extensible for future trigger types.
+ */
+export function processHpThresholdTriggers(
+  state: GameState,
+  enemyDefs: Map<string, EnemyDef>
+): GameState {
+  const triggers = state.enemies.flatMap((e) => {
+    const def = enemyDefs.get(e.id);
+    if (!def?.triggers?.length || e.hp <= 0) return [];
+    return def.triggers.filter(
+      (t): t is EnemyTrigger => t.trigger === 'hp_below_percent' && (e.hp / e.maxHp) * 100 <= t.value
+    ).map((t) => ({ enemy: e, def, trigger: t }));
+  });
+  if (triggers.length === 0) return state;
+
+  const newEnemies: EnemyState[] = [];
+  const replaced = new Set(triggers.map(({ enemy }) => enemy));
+  for (const e of state.enemies) {
+    if (!replaced.has(e)) {
+      newEnemies.push(e);
+      continue;
+    }
+    const t = triggers.find((x) => x.enemy === e);
+    if (!t || t.trigger.action !== 'split') {
+      newEnemies.push(e);
+      continue;
+    }
+    const spawnDef = enemyDefs.get(t.trigger.spawnEnemyId);
+    if (!spawnDef) {
+      newEnemies.push(e);
+      continue;
+    }
+    for (let i = 0; i < t.trigger.spawnCount; i++) {
+      newEnemies.push({
+        id: spawnDef.id,
+        name: spawnDef.name,
+        hp: e.hp,
+        maxHp: spawnDef.maxHp,
+        block: 0,
+        intent: { type: 'none', value: 0 },
+        size: spawnDef.size,
+      });
+    }
+  }
+  return { ...state, enemies: newEnemies };
+}
+
+/**
+ * Create combat state for an encounter.
+ * @param starterDeck - Optional card IDs for initial deck; if omitted, DEFAULT_STARTER_DECK_IDS is used.
+ */
 export function createInitialState(
   cardsMap: Map<string, CardDef>,
   enemyDefs: Map<string, EnemyDef>,
   encountersMap: Map<string, EncounterDef>,
-  encounterId: string
+  encounterId: string,
+  starterDeck?: string[]
 ): GameState {
   const encounter = encountersMap.get(encounterId);
   if (!encounter) {
@@ -65,6 +120,7 @@ export function createInitialState(
       deck: [],
       hand: [],
       discard: [],
+      exhaustPile: [],
       energy: 0,
       maxEnergy: INITIAL_MAX_ENERGY,
       turnNumber: 0,
@@ -73,7 +129,8 @@ export function createInitialState(
     };
   }
 
-  const deck = shuffle([...INITIAL_DECK_IDS]);
+  const deckIds = starterDeck?.length ? starterDeck : DEFAULT_STARTER_DECK_IDS;
+  const deck = shuffle([...deckIds]);
   const hand: string[] = [];
   const restDeck = [...deck];
   for (let i = 0; i < HAND_SIZE_START && restDeck.length > 0; i++) {
@@ -104,6 +161,7 @@ export function createInitialState(
     deck: restDeck,
     hand,
     discard: [],
+    exhaustPile: [],
     energy: INITIAL_MAX_ENERGY,
     maxEnergy: INITIAL_MAX_ENERGY,
     turnNumber: 1,
@@ -153,6 +211,8 @@ export function startCombatFromRunState(
     deck: restDeck,
     hand,
     discard: [],
+    exhaustPile: [],
+    strengthStacks: 0,
     currentEncounter: encounterId,
     phase: 'player',
     energy: state.maxEnergy,
@@ -169,6 +229,7 @@ export function playCard(
   cardId: string,
   targetEnemyIndex: number | null,
   cardsMap: Map<string, CardDef>,
+  enemyDefs: Map<string, EnemyDef>,
   handIndexOverride?: number
 ): GameState {
   if (state.phase !== 'player' || state.combatResult) return state;
@@ -182,14 +243,18 @@ export function playCard(
   if (state.energy < card.cost) return state;
 
   const newHand = state.hand.filter((_, i) => i !== handIndex);
-  const newDiscard = [...state.discard, cardId];
+  const exhaustPile = state.exhaustPile ?? [];
+  const newDiscard = card.exhaust ? state.discard : [...state.discard, cardId];
+  const newExhaustPile = card.exhaust ? [...exhaustPile, cardId] : exhaustPile;
   let next: GameState = {
     ...state,
     hand: newHand,
     discard: newDiscard,
+    exhaustPile: newExhaustPile,
     energy: state.energy - card.cost,
   };
-  next = runEffects(card, next, targetEnemyIndex);
+  next = runEffects(card, next, targetEnemyIndex, cardsMap);
+  next = processHpThresholdTriggers(next, enemyDefs);
 
   // Check combat result
   const allDead = next.enemies.every((e) => e.hp <= 0);
@@ -215,7 +280,9 @@ export function endTurn(
     if (intent.type === 'attack') {
       let dmg = intent.value;
       const frail = (next.frailStacks ?? 0) > 0 ? 1 + 0.25 * (next.frailStacks ?? 0) : 1;
-      dmg = Math.ceil(dmg * frail);
+      const weak = (next.playerWeakStacks ?? 0) > 0 ? 1 + 0.25 * (next.playerWeakStacks ?? 0) : 1;
+      const vuln = (next.playerVulnerableStacks ?? 0) > 0 ? 1.5 : 1;
+      dmg = Math.ceil(dmg * frail * weak * vuln);
       if (next.playerBlock > 0) {
         const blockReduce = Math.min(next.playerBlock, dmg);
         next = { ...next, playerBlock: next.playerBlock - blockReduce };
@@ -230,6 +297,12 @@ export function endTurn(
         en[idx] = { ...en[idx], block: (en[idx].block || 0) + intent.value };
         next = { ...next, enemies: en };
       }
+    }
+    if (intent.type === 'debuff') {
+      next = { ...next, playerWeakStacks: (next.playerWeakStacks ?? 0) + intent.value };
+    }
+    if (intent.type === 'vulnerable') {
+      next = { ...next, playerVulnerableStacks: (next.playerVulnerableStacks ?? 0) + intent.value };
     }
   }
 
@@ -250,6 +323,8 @@ export function endTurn(
     energy: next.maxEnergy,
     turnNumber: next.turnNumber + 1,
     frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
+    playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),
+    playerVulnerableStacks: Math.max(0, (next.playerVulnerableStacks ?? 0) - 1),
     enemies: setEnemyIntents(decayedEnemies, enemyDefs),
   };
   return next;

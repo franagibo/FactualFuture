@@ -27,7 +27,7 @@ export interface MapState {
 }
 
 export interface EnemyIntent {
-  type: 'attack' | 'block' | 'debuff' | 'none';
+  type: 'attack' | 'block' | 'debuff' | 'vulnerable' | 'none';
   value: number;
 }
 
@@ -55,6 +55,8 @@ export interface GameState {
   deck: string[];
   hand: string[];
   discard: string[];
+  /** Cards removed for the rest of this combat (exhaust mechanic). */
+  exhaustPile?: string[];
   energy: number;
   maxEnergy: number;
   turnNumber: number;
@@ -84,10 +86,18 @@ export interface GameState {
   };
   /** Current act (1-based). Used for multi-act runs. */
   act?: number;
+  /** Playable character id for this run (e.g. "gunboy"). Drives starter deck and card pools. */
+  characterId?: string;
   /** Potion IDs (max 3). One-time use in combat. */
   potions?: string[];
   /** Frail stacks on player; damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
   frailStacks?: number;
+  /** Strength: extra damage per stack when dealing attack damage (per combat). */
+  strengthStacks?: number;
+  /** Weak on player: attack damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
+  playerWeakStacks?: number;
+  /** Vulnerable on player: damage taken multiplied by 1.5, decay by 1 per turn. */
+  playerVulnerableStacks?: number;
 }
 
 /** Meta progression (unlocks) and run statistics, stored separately from run. */

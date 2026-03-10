@@ -1,101 +1,164 @@
 [
-  {
-    "id": "jaw_worm",
-    "name": "Drone Scout",
-    "maxHp": 40,
-    "intents": [
-      { "weight": 1, "intent": { "type": "attack", "value": 11 } },
-      { "weight": 1, "intent": { "type": "block", "value": 6 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 7 } }
-    ]
-  },
-  {
-    "id": "act1_boss",
-    "name": "Hive Guardian",
-    "maxHp": 80,
-    "size": "large",
-    "intents": [
-      { "weight": 2, "intent": { "type": "attack", "value": 10 } },
-      { "weight": 1, "intent": { "type": "block", "value": 12 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 15 } }
-    ]
-  },
-  {
-    "id": "spore_crawler",
-    "name": "Spore Crawler",
-    "maxHp": 28,
-    "intents": [
-      { "weight": 2, "intent": { "type": "debuff", "value": 2 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 5 } }
-    ]
-  },
-  {
-    "id": "assault_drone",
-    "name": "Assault Drone",
-    "maxHp": 44,
-    "intents": [
-      { "weight": 2, "intent": { "type": "attack", "value": 9 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 14 } }
-    ]
-  },
-  {
-    "id": "shield_drone",
-    "name": "Shield Drone",
-    "maxHp": 38,
-    "intents": [
-      { "weight": 1, "intent": { "type": "block", "value": 10 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 6 } },
-      { "weight": 1, "intent": { "type": "block", "value": 7 } }
-    ]
-  },
-  {
-    "id": "swarm_larva",
-    "name": "Swarm Larva",
-    "maxHp": 12,
-    "intents": [
-      { "weight": 2, "intent": { "type": "attack", "value": 3 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 5 } }
-    ]
-  },
-  {
-    "id": "probe",
-    "name": "Probe",
-    "maxHp": 10,
-    "size": "small",
-    "intents": [
-      { "weight": 1, "intent": { "type": "attack", "value": 4 } },
-      { "weight": 1, "intent": { "type": "block", "value": 3 } }
-    ]
-  },
-  {
-    "id": "heavy_drone",
-    "name": "Heavy Drone",
-    "maxHp": 58,
-    "intents": [
-      { "weight": 2, "intent": { "type": "attack", "value": 12 } },
-      { "weight": 1, "intent": { "type": "block", "value": 14 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 18 } }
-    ]
-  },
-  {
-    "id": "alpha_xenomorph",
-    "name": "Alpha Xenomorph",
-    "maxHp": 52,
-    "size": "large",
-    "intents": [
-      { "weight": 2, "intent": { "type": "attack", "value": 11 } },
-      { "weight": 1, "intent": { "type": "debuff", "value": 2 } },
-      { "weight": 1, "intent": { "type": "attack", "value": 16 } }
-    ]
-  },
-  {
-    "id": "void_crawler",
-    "name": "Void Crawler",
-    "maxHp": 36,
-    "intents": [
-      { "weight": 2, "intent": { "type": "attack", "value": 8 } },
-      { "weight": 1, "intent": { "type": "block", "value": 9 } },
-      { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
-    ]
-  }
+  { "id": "acid_slime_s", "name": "Acid Slime (S)", "maxHp": 8, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 3 } },
+    { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
+  ]},
+  { "id": "acid_slime_m", "name": "Acid Slime (M)", "maxHp": 28, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 7 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } },
+    { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
+  ]},
+  { "id": "acid_slime_l", "name": "Acid Slime (L)", "maxHp": 65, "size": "large", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 16 } },
+    { "weight": 1, "intent": { "type": "debuff", "value": 2 } }
+  ], "triggers": [{ "trigger": "hp_below_percent", "value": 50, "action": "split", "spawnEnemyId": "acid_slime_m", "spawnCount": 2 }]},
+  { "id": "spike_slime_s", "name": "Spike Slime (S)", "maxHp": 10, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 5 } }
+  ]},
+  { "id": "spike_slime_m", "name": "Spike Slime (M)", "maxHp": 30, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } }
+  ]},
+  { "id": "spike_slime_l", "name": "Spike Slime (L)", "maxHp": 68, "size": "large", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 16 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 18 } }
+  ], "triggers": [{ "trigger": "hp_below_percent", "value": 50, "action": "split", "spawnEnemyId": "spike_slime_m", "spawnCount": 2 }]},
+  { "id": "cultist", "name": "Cultist", "maxHp": 48, "intents": [
+    { "weight": 1, "intent": { "type": "none", "value": 0 } },
+    { "weight": 2, "intent": { "type": "attack", "value": 6 } }
+  ]},
+  { "id": "jaw_worm", "name": "Jaw Worm", "maxHp": 40, "intents": [
+    { "weight": 25, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 30, "intent": { "type": "attack", "value": 7 } },
+    { "weight": 45, "intent": { "type": "block", "value": 6 } }
+  ]},
+  { "id": "red_louse", "name": "Red Louse", "maxHp": 10, "size": "small", "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 6 } },
+    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+  ]},
+  { "id": "green_louse", "name": "Green Louse", "maxHp": 11, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "debuff", "value": 2 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 6 } }
+  ]},
+  { "id": "fungi_beast", "name": "Fungi Beast", "maxHp": 22, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 8 } },
+    { "weight": 1, "intent": { "type": "vulnerable", "value": 2 } }
+  ]},
+  { "id": "blue_slaver", "name": "Blue Slaver", "maxHp": 46, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 7 } },
+    { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
+  ]},
+  { "id": "red_slaver", "name": "Red Slaver", "maxHp": 46, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 8 } },
+    { "weight": 1, "intent": { "type": "vulnerable", "value": 2 } }
+  ]},
+  { "id": "looter", "name": "Looter", "maxHp": 22, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 10 } },
+    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+  ]},
+  { "id": "mugger", "name": "Mugger", "maxHp": 22, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 10 } },
+    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+  ]},
+  { "id": "mad_gremlin", "name": "Mad Gremlin", "maxHp": 20, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 4 } }
+  ]},
+  { "id": "sneaky_gremlin", "name": "Sneaky Gremlin", "maxHp": 10, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 9 } }
+  ]},
+  { "id": "fat_gremlin", "name": "Fat Gremlin", "maxHp": 13, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 4 } },
+    { "weight": 1, "intent": { "type": "vulnerable", "value": 1 } }
+  ]},
+  { "id": "gremlin_wizard", "name": "Gremlin Wizard", "maxHp": 23, "size": "small", "intents": [
+    { "weight": 1, "intent": { "type": "none", "value": 0 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 25 } }
+  ]},
+  { "id": "shield_gremlin", "name": "Shield Gremlin", "maxHp": 14, "size": "small", "intents": [
+    { "weight": 2, "intent": { "type": "block", "value": 8 } },
+    { "weight": 1, "intent": { "type": "block", "value": 8 } }
+  ]},
+  { "id": "spheric_guardian", "name": "Spheric Guardian", "maxHp": 44, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 1, "intent": { "type": "block", "value": 9 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 13 } }
+  ]},
+  { "id": "chosen", "name": "Chosen", "maxHp": 72, "intents": [
+    { "weight": 1, "intent": { "type": "debuff", "value": 2 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 7 } }
+  ]},
+  { "id": "shelled_parasite", "name": "Shelled Parasite", "maxHp": 52, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 6 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 9 } },
+    { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
+  ]},
+  { "id": "byrd", "name": "Byrd", "maxHp": 12, "size": "small", "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 5 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } },
+    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+  ]},
+  { "id": "snake_plant", "name": "Snake Plant", "maxHp": 58, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 8 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 4 } }
+  ]},
+  { "id": "snecko", "name": "Snecko", "maxHp": 114, "size": "large", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 8 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 18 } }
+  ]},
+  { "id": "centurion", "name": "Centurion", "maxHp": 90, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 7 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 5 } }
+  ]},
+  { "id": "mystic", "name": "Mystic", "maxHp": 50, "intents": [
+    { "weight": 1, "intent": { "type": "none", "value": 0 } },
+    { "weight": 1, "intent": { "type": "block", "value": 0 } }
+  ]},
+  { "id": "sentry", "name": "Sentry", "maxHp": 38, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 8 } }
+  ]},
+  { "id": "darkling", "name": "Darkling", "maxHp": 48, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 6 } },
+    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+  ]},
+  { "id": "orb_walker", "name": "Orb Walker", "maxHp": 90, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 15 } }
+  ]},
+  { "id": "repulsor", "name": "Repulsor", "maxHp": 40, "intents": [
+    { "weight": 1, "intent": { "type": "debuff", "value": 1 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } }
+  ]},
+  { "id": "spiker", "name": "Spiker", "maxHp": 44, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } }
+  ]},
+  { "id": "exploder", "name": "Exploder", "maxHp": 40, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 15 } }
+  ]},
+  { "id": "maw", "name": "Maw", "maxHp": 300, "size": "large", "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 20 } }
+  ]},
+  { "id": "spire_growth", "name": "Spire Growth", "maxHp": 64, "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 10 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 16 } }
+  ]},
+  { "id": "transient", "name": "Transient", "maxHp": 999, "size": "large", "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 40 } }
+  ]},
+  { "id": "writhing_mass", "name": "Writhing Mass", "maxHp": 160, "intents": [
+    { "weight": 1, "intent": { "type": "attack", "value": 16 } },
+    { "weight": 1, "intent": { "type": "debuff", "value": 2 } },
+    { "weight": 1, "intent": { "type": "vulnerable", "value": 2 } }
+  ]},
+  { "id": "act1_boss", "name": "Hexaghost", "maxHp": 250, "size": "large", "intents": [
+    { "weight": 2, "intent": { "type": "attack", "value": 6 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 12 } },
+    { "weight": 1, "intent": { "type": "block", "value": 12 } }
+  ]}
 ]

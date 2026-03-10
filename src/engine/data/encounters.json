@@ -1,58 +1,46 @@
 [
-  {
-    "id": "first_contact",
-    "enemies": ["jaw_worm"]
-  },
-  {
-    "id": "tutorial",
-    "enemies": ["jaw_worm"]
-  },
-  {
-    "id": "solo_scout",
-    "enemies": ["jaw_worm"]
-  },
-  {
-    "id": "solo_drone",
-    "enemies": ["assault_drone"]
-  },
-  {
-    "id": "solo_crawler",
-    "enemies": ["spore_crawler"]
-  },
-  {
-    "id": "solo_shield",
-    "enemies": ["shield_drone"]
-  },
-  {
-    "id": "boss_act1",
-    "enemies": ["act1_boss"]
-  },
-  {
-    "id": "double_drones",
-    "enemies": ["assault_drone", "assault_drone"]
-  },
-  {
-    "id": "swarm",
-    "enemies": ["swarm_larva", "swarm_larva", "swarm_larva"]
-  },
-  {
-    "id": "leader_and_adds",
-    "enemies": ["heavy_drone", "swarm_larva", "swarm_larva"]
-  },
-  {
-    "id": "dual_heavy",
-    "enemies": ["heavy_drone", "heavy_drone"]
-  },
-  {
-    "id": "solo_alpha",
-    "enemies": ["alpha_xenomorph"]
-  },
-  {
-    "id": "alpha_and_probes",
-    "enemies": ["alpha_xenomorph", "probe", "probe"]
-  },
-  {
-    "id": "solo_void",
-    "enemies": ["void_crawler"]
-  }
+  { "id": "sts_slimes_ma_sa", "enemies": ["acid_slime_m", "acid_slime_s"] },
+  { "id": "sts_slimes_ma_ss", "enemies": ["acid_slime_m", "spike_slime_s"] },
+  { "id": "sts_slimes_ms_sa", "enemies": ["spike_slime_m", "acid_slime_s"] },
+  { "id": "sts_slimes_ms_ss", "enemies": ["spike_slime_m", "spike_slime_s"] },
+  { "id": "sts_cultist", "enemies": ["cultist"] },
+  { "id": "sts_jaw_worm", "enemies": ["jaw_worm"] },
+  { "id": "sts_two_louses", "enemies": ["red_louse", "green_louse"] },
+  { "id": "sts_small_slimes", "enemies": ["acid_slime_s", "spike_slime_s"] },
+  { "id": "sts_gremlin_gang", "enemies": ["mad_gremlin", "sneaky_gremlin", "fat_gremlin", "shield_gremlin"] },
+  { "id": "sts_large_slime_acid", "enemies": ["acid_slime_l"] },
+  { "id": "sts_large_slime_spike", "enemies": ["spike_slime_l"] },
+  { "id": "sts_lots_of_slimes", "enemies": ["spike_slime_s", "spike_slime_s", "spike_slime_s", "acid_slime_s", "acid_slime_s"] },
+  { "id": "sts_blue_slaver", "enemies": ["blue_slaver"] },
+  { "id": "sts_red_slaver", "enemies": ["red_slaver"] },
+  { "id": "sts_three_louses", "enemies": ["red_louse", "green_louse", "red_louse"] },
+  { "id": "sts_two_fungi", "enemies": ["fungi_beast", "fungi_beast"] },
+  { "id": "sts_exordium_thugs", "enemies": ["acid_slime_m", "looter"] },
+  { "id": "sts_exordium_wildlife", "enemies": ["fungi_beast", "red_louse", "green_louse"] },
+  { "id": "sts_looter", "enemies": ["looter"] },
+  { "id": "sts_spheric_guardian", "enemies": ["spheric_guardian"] },
+  { "id": "sts_chosen", "enemies": ["chosen"] },
+  { "id": "sts_shelled_parasite", "enemies": ["shelled_parasite"] },
+  { "id": "sts_three_byrds", "enemies": ["byrd", "byrd", "byrd"] },
+  { "id": "sts_two_thieves", "enemies": ["looter", "mugger"] },
+  { "id": "sts_chosen_byrd", "enemies": ["chosen", "byrd"] },
+  { "id": "sts_cultist_chosen", "enemies": ["cultist", "chosen"] },
+  { "id": "sts_sentry_guardian", "enemies": ["sentry", "spheric_guardian"] },
+  { "id": "sts_two_sentries", "enemies": ["sentry", "sentry"] },
+  { "id": "sts_snake_plant", "enemies": ["snake_plant"] },
+  { "id": "sts_snecko", "enemies": ["snecko"] },
+  { "id": "sts_centurion_mystic", "enemies": ["centurion", "mystic"] },
+  { "id": "sts_three_cultists", "enemies": ["cultist", "cultist", "cultist"] },
+  { "id": "sts_shelled_fungi", "enemies": ["shelled_parasite", "fungi_beast"] },
+  { "id": "sts_three_darklings", "enemies": ["darkling", "darkling", "darkling"] },
+  { "id": "sts_orb_walker", "enemies": ["orb_walker"] },
+  { "id": "sts_three_shapes", "enemies": ["repulsor", "spiker", "exploder"] },
+  { "id": "sts_four_shapes", "enemies": ["repulsor", "spiker", "exploder", "repulsor"] },
+  { "id": "sts_guardian_two_shapes", "enemies": ["spheric_guardian", "repulsor", "spiker"] },
+  { "id": "sts_maw", "enemies": ["maw"] },
+  { "id": "sts_spire_growth", "enemies": ["spire_growth"] },
+  { "id": "sts_transient", "enemies": ["transient"] },
+  { "id": "sts_writhing_mass", "enemies": ["writhing_mass"] },
+  { "id": "sts_jaw_worm_horde", "enemies": ["jaw_worm", "jaw_worm", "jaw_worm"] },
+  { "id": "boss_act1", "enemies": ["act1_boss"] }
 ]

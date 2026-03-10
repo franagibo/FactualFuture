@@ -6,15 +6,33 @@ import type { CardDef, CardEffect } from '../../../engine/cardDef';
  */
 export function formatEffect(e: CardEffect): string {
   switch (e.type) {
-    case 'damage': return `Deal ${e.value} damage`;
+    case 'damage':
+      return e.strengthScale
+        ? `Deal ${e.value} damage (+${e.strengthScale} per Strength)`
+        : `Deal ${e.value} damage`;
     case 'block': return `Gain ${e.value} block`;
     case 'heal': return `Heal ${e.value}`;
     case 'draw': return e.value === 1 ? 'Draw 1 card' : `Draw ${e.value} cards`;
     case 'vulnerable': return `Apply ${e.value} Vulnerable`;
     case 'weak': return `Apply ${e.value} Weak`;
     case 'frail': return `Apply ${e.value} Frail`;
-    case 'damageEqualToBlock': return 'Damage equal to block';
+    case 'damageEqualToBlock': return 'Damage equal to your block';
     case 'energy': return `Gain ${e.value} energy`;
+    case 'strength': return `Gain ${e.value} Strength`;
+    case 'damageAll': return `Deal ${e.value} damage to ALL enemies`;
+    case 'vulnerableAll': return `Apply ${e.value} Vulnerable to ALL enemies`;
+    case 'weakAll': return `Apply ${e.value} Weak to ALL enemies`;
+    case 'exhaustRandom': return `Exhaust ${e.value} random card(s) from your hand`;
+    case 'exhaustHand': return 'Exhaust your hand';
+    case 'exhaustHandNonAttack': return 'Exhaust all non-Attack cards in your hand';
+    case 'exhaustHandNonAttackGainBlock': return `Exhaust all non-Attack in hand. Gain ${e.value} block per card.`;
+    case 'exhaustHandDealDamage': return `Exhaust your hand. Deal ${e.value} damage per card to an enemy.`;
+    case 'exhume': return `Put ${e.value} card(s) from exhaust into your hand`;
+    case 'addCopyToDiscard': return 'Add a copy of this card to your discard pile';
+    case 'addCardToDiscard': return 'Add a card to your discard pile';
+    case 'loseHp': return `Lose ${e.value} HP`;
+    case 'multiHit': return `Deal ${e.value} damage ${e.times ?? 2} times`;
+    case 'doubleBlock': return 'Double your block';
     default: return '';
   }
 }

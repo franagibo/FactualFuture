@@ -20,6 +20,8 @@ import {
   usePotion as engineUsePotion,
   type ShopPoolConfig,
 } from '../../engine/run';
+import type { CharacterDef } from '../../engine/loadData';
+import { loadCharacters } from '../../engine/loadData';
 import type { GameState, MetaState, RunPhase } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import type { EnemyDef, EncounterDef, EventDef, PotionDef, RelicDef } from '../../engine/loadData';
@@ -61,6 +63,7 @@ export class GameBridgeService {
   private relicDefs: RelicDefsMap | null = null;
   private shopPoolsByAct: Record<string, ShopPoolConfig> = {};
   private potionDefs: Map<string, PotionDef> = new Map();
+  private charactersMap: Map<string, CharacterDef> = new Map();
   private meta: MetaState = {
     unlockedCards: [],
     unlockedRelics: [],
@@ -126,8 +129,9 @@ export class GameBridgeService {
       relics: `${DATA_BASE}/relics.json`,
       shopPools: `${DATA_BASE}/shopPools.json`,
       potions: `${DATA_BASE}/potions.json`,
+      characters: `${DATA_BASE}/characters.json`,
     };
-    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData, potionsData]: [
+    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData, potionsData, charactersData]: [
       CardDef[],
       EnemyDef[],
       EncounterDef[],
@@ -136,6 +140,7 @@ export class GameBridgeService {
       RelicDef[],
       Record<string, ShopPoolConfig>,
       PotionDef[],
+      CharacterDef[],
     ] = await Promise.all([
       this.fetchJson<CardDef[]>(DATA_PATHS.cards),
       this.fetchJson<EnemyDef[]>(DATA_PATHS.enemies),
@@ -145,6 +150,7 @@ export class GameBridgeService {
       this.fetchJson<RelicDef[]>(DATA_PATHS.relics).catch(() => []),
       this.fetchJson<Record<string, ShopPoolConfig>>(DATA_PATHS.shopPools).catch(() => ({})),
       this.fetchJson<PotionDef[]>(DATA_PATHS.potions).catch(() => []),
+      this.fetchJson<CharacterDef[]>(DATA_PATHS.characters).catch(() => []),
     ]);
     this.cardsMap = loadCards(cards);
     this.enemyDefs = loadEnemies(enemies);
@@ -155,16 +161,34 @@ export class GameBridgeService {
     this.relicDefs = loadRelics(relicsData);
     this.shopPoolsByAct = shopPoolsData;
     this.potionDefs = loadPotions(potionsData);
+    this.charactersMap = loadCharacters(Array.isArray(charactersData) ? charactersData : []);
     await this.loadMeta();
   }
 
-  startRun(): void {
+  /** Start a new run. Uses characterId's starter deck and stores characterId in state. Default character: gunboy. */
+  startRun(characterId: string = 'gunboy'): void {
     if (!this.mapConfig) return;
     const act1 = this.mapConfig['act1'];
     if (!act1) return;
-    // Simple seed for now
+    const character = this.charactersMap.get(characterId);
+    const starterDeck = character?.starterDeck;
     const seed = Date.now() & 0xffffffff;
-    this.state = engineStartRun(seed, act1);
+    this.state = engineStartRun(seed, act1, {
+      starterDeck: starterDeck?.length ? starterDeck : undefined,
+      characterId: character ? characterId : undefined,
+    });
+  }
+
+  getCharacters(): CharacterDef[] {
+    return Array.from(this.charactersMap.values());
+  }
+
+  getCharacter(id: string): CharacterDef | undefined {
+    return this.charactersMap.get(id);
+  }
+
+  getCurrentCharacterId(): string | undefined {
+    return this.state?.characterId;
   }
 
   clearState(): void {
@@ -274,8 +298,8 @@ export class GameBridgeService {
   }
 
   playCard(cardId: string, target?: number, handIndex?: number): void {
-    if (!this.state || !this.cardsMap) return;
-    this.state = enginePlayCard(this.state, cardId, target ?? 0, this.cardsMap, handIndex);
+    if (!this.state || !this.cardsMap || !this.enemyDefs) return;
+    this.state = enginePlayCard(this.state, cardId, target ?? null, this.cardsMap, this.enemyDefs, handIndex);
     this.maybeHandleCombatWin();
   }
 
@@ -296,14 +320,21 @@ export class GameBridgeService {
     return engineGetAvailableNextNodes(this.state);
   }
 
-  /** Merge act shop pool with meta unlocks; exclude curse cards from shop. */
+  /** Merge act shop pool with meta unlocks; exclude curse cards. When character has cardPoolIds, shop cards = character pool + unlocked. */
   private getMergedShopPool(actKey: string): ShopPoolConfig | undefined {
     const base = this.shopPoolsByAct[actKey];
     if (!base) return undefined;
-    const rawCards = [...new Set([...(base.cards ?? []), ...this.meta.unlockedCards])];
-    const cards = this.cardsMap ? rawCards.filter((id) => !this.cardsMap!.get(id)?.isCurse) : rawCards;
+    const characterId = this.state?.characterId;
+    const character = characterId ? this.charactersMap.get(characterId) : undefined;
+    let rawCards: string[];
+    if (character?.cardPoolIds && character.cardPoolIds.length > 0) {
+      rawCards = [...new Set([...character.cardPoolIds, ...this.meta.unlockedCards])];
+    } else {
+      rawCards = [...new Set([...(base.cards ?? []), ...this.meta.unlockedCards])];
+    }
+    if (this.cardsMap) rawCards = rawCards.filter((id) => !this.cardsMap!.get(id)?.isCurse);
     const relics = [...new Set([...(base.relics ?? []), ...this.meta.unlockedRelics])];
-    return { ...base, cards, relics };
+    return { ...base, cards: rawCards, relics };
   }
 
   /** Event pool for current act: events with no act or matching act. */
@@ -311,32 +342,60 @@ export class GameBridgeService {
     return (this.eventPool ?? []).filter((e) => e.act == null || e.act === act);
   }
 
-  /** Reward card pool for current act: act pool + unlocked, only IDs that exist in cardsMap and are not curses. */
+  /** Reward card pool for current act. When character has cardPoolIds, use it as base; else act pool. Merge with unlocked, filter non-curse. */
   private getRewardCardPoolForAct(actKey: string): string[] {
-    const base = this.shopPoolsByAct[actKey]?.cards ?? [];
-    const merged = [...new Set([...base, ...this.meta.unlockedCards])];
-    if (!this.cardsMap) return merged;
-    return merged.filter((id) => {
-      const def = this.cardsMap!.get(id);
-      return def && !def.isCurse;
-    });
+    const characterId = this.state?.characterId;
+    const character = characterId ? this.charactersMap.get(characterId) : undefined;
+    const base =
+      character?.cardPoolIds && character.cardPoolIds.length > 0
+        ? character.cardPoolIds
+        : (this.shopPoolsByAct[actKey]?.cards ?? []);
+    let merged = [...new Set([...base, ...this.meta.unlockedCards])];
+    if (this.cardsMap) merged = merged.filter((id) => this.cardsMap!.get(id) && !this.cardsMap!.get(id)?.isCurse);
+    return merged;
+  }
+
+  /** Pick one id from pool; if weights map is provided use weighted random. */
+  private pickEncounter(pool: string[], weights?: Record<string, number>): string {
+    if (weights && Object.keys(weights).length > 0) {
+      let total = 0;
+      for (const id of pool) total += weights[id] ?? 0;
+      if (total <= 0) return pool[Math.floor(Math.random() * pool.length)];
+      let r = Math.random() * total;
+      for (const id of pool) {
+        const w = weights[id] ?? 0;
+        if (r < w) return id;
+        r -= w;
+      }
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   chooseNode(nodeId: string): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs || !this.encountersMap || !this.mapConfig) return;
     const actKey = `act${this.state.act ?? 1}`;
-    const actConfig = this.mapConfig[actKey] as { encounterPool?: string[]; eliteEncounterPool?: string[]; bossEncounter?: string } | undefined;
+    const actConfig = this.mapConfig[actKey] as {
+      encounterPool?: string[];
+      eliteEncounterPool?: string[];
+      bossEncounter?: string;
+      encounterWeights?: Record<string, number>;
+      eliteEncounterWeights?: Record<string, number>;
+    } | undefined;
     let encounterId: string | null = null;
     if (this.state.map) {
       const node = engineGetNodeById(this.state.map, nodeId);
       if (node?.type === 'boss' && actConfig?.bossEncounter) {
         encounterId = actConfig.bossEncounter;
       } else if (node?.type === 'elite' && actConfig?.eliteEncounterPool?.length) {
-        const pool = actConfig.eliteEncounterPool;
-        encounterId = pool[Math.floor(Math.random() * pool.length)];
+        encounterId = this.pickEncounter(
+          actConfig.eliteEncounterPool,
+          actConfig.eliteEncounterWeights
+        );
       } else if ((node?.type === 'combat' || node?.type === 'elite') && actConfig?.encounterPool?.length) {
-        const pool = actConfig.encounterPool;
-        encounterId = pool[Math.floor(Math.random() * pool.length)];
+        encounterId = this.pickEncounter(
+          actConfig.encounterPool,
+          actConfig.encounterWeights
+        );
       }
     }
     const shopPool = this.getMergedShopPool(actKey);

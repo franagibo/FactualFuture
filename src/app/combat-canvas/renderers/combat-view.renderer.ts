@@ -27,6 +27,9 @@ function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], va
     case 'debuff':
       g.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, half).lineTo(half, INTENT_ICON_SIZE).lineTo(0, half).closePath().fill(fill).stroke(stroke);
       break;
+    case 'vulnerable':
+      g.rect(2, 2, INTENT_ICON_SIZE - 4, INTENT_ICON_SIZE - 4).fill(fill).stroke(stroke);
+      break;
     case 'none':
     default:
       g.circle(half, half, half - 2).fill(fill).stroke(stroke);
@@ -34,7 +37,7 @@ function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], va
   }
   container.addChild(g);
   const label =
-    type === 'none' ? '?' : type === 'attack' ? `Attack ${value}` : type === 'block' ? `Block ${value}` : type === 'debuff' ? `Debuff ${value}` : `? ${value}`;
+    type === 'none' ? '?' : type === 'attack' ? `Attack ${value}` : type === 'block' ? `Block ${value}` : type === 'debuff' ? `Weak ${value}` : type === 'vulnerable' ? `Vuln ${value}` : `? ${value}`;
   const valueText = new PIXI.Text({
     text: label,
     style: { fontFamily: 'system-ui', fontSize: 10, fill: 0xffdd88, fontWeight: 'bold' },
