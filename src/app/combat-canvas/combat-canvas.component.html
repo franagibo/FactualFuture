@@ -1,0 +1,94 @@
+<div class="canvas-wrap" [class.map-mode]="runPhase() === 'map'">
+  <div #scrollArea class="scroll-area">
+    <div class="game-view-inner" [style.height]="(runPhase() === 'map' && mapContentHeight) ? (mapContentHeight + 'px') : '100%'">
+      <div #canvasHost class="pixi-host"></div>
+    </div>
+  </div>
+  <div class="overlay-actions">
+    @if (runPhase() === 'combat') {
+      @if (selectedCardId) {
+        <button type="button" class="btn-cancel-target" (click)="cancelTargeting()">Cancel target</button>
+      }
+      <button type="button" class="btn-end" (click)="onEndTurn()" [disabled]="!canEndTurn()">
+        End turn
+      </button>
+      @if (combatResult()) {
+        <div class="result" [class.win]="combatResult() === 'win'" [class.lose]="combatResult() === 'lose'">
+          {{ combatResult() === 'win' ? 'You win!' : 'Defeat' }}
+        </div>
+        <button type="button" class="btn-restart" (click)="onRestart()">Restart</button>
+      }
+    }
+  </div>
+  @if (runPhase() === 'reward') {
+    <div class="reward-panel">
+      <div class="reward-title">Choose your reward</div>
+      <div class="reward-cards">
+        @for (cardId of rewardChoices(); track cardId) {
+          <button type="button" class="reward-card" (click)="onChooseReward(cardId)">
+            {{ getCardName(cardId) }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+  @if (runPhase() === 'rest') {
+    <div class="rest-panel">
+      <div class="rest-title">Rest site</div>
+      <div class="rest-actions">
+        <button type="button" class="btn-rest" (click)="onRestHeal()">Heal</button>
+      </div>
+      <div class="rest-subtitle">Remove a card from your deck:</div>
+      <div class="rest-cards">
+        @for (cardId of restRemovableCards(); track cardId) {
+          <button
+            type="button"
+            class="btn-rest-card"
+            (click)="onRestRemoveCard(cardId)"
+          >
+            {{ getCardName(cardId) }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+  @if (steamWarning()) {
+    <div class="steam-warning">{{ steamWarning() }}</div>
+  }
+  @if (showPauseMenu) {
+    <div class="quit-backdrop" (click)="closePauseMenu()"></div>
+    <div class="quit-modal pause-modal">
+      @if (!showPauseSettings) {
+        <div class="quit-title">Menu</div>
+        <div class="pause-actions">
+          <button type="button" class="btn-quit btn-pause" (click)="onPauseContinue()">Continue</button>
+          <button type="button" class="btn-quit btn-pause" (click)="openPauseSettings()">Settings</button>
+          <button type="button" class="btn-quit btn-pause" (click)="confirmQuitToMenu()">Main menu</button>
+          @if (isElectron()) {
+            <button type="button" class="btn-quit btn-pause btn-pause-exit" (click)="onExitGame()">Exit game</button>
+          }
+        </div>
+      } @else {
+        <div class="quit-title">Settings</div>
+        @if (isElectron()) {
+          <div class="pause-settings-section">
+            <div class="pause-settings-label">Display</div>
+            <div class="pause-settings-options">
+              <button type="button" class="btn-quit btn-pause" [class.active]="pauseFullscreen" (click)="setPauseFullScreen(true)">Fullscreen</button>
+              <button type="button" class="btn-quit btn-pause" [class.active]="!pauseFullscreen" (click)="setPauseFullScreen(false)">Windowed</button>
+            </div>
+          </div>
+          <div class="pause-settings-section">
+            <div class="pause-settings-label">Resolution</div>
+            <div class="pause-settings-options">
+              <button type="button" class="btn-quit btn-pause" (click)="setPauseResolution(1920, 1080)">1920 × 1080</button>
+              <button type="button" class="btn-quit btn-pause" (click)="setPauseResolution(1600, 900)">1600 × 900</button>
+              <button type="button" class="btn-quit btn-pause" (click)="setPauseResolution(1280, 720)">1280 × 720</button>
+            </div>
+          </div>
+        }
+        <button type="button" class="btn-quit btn-pause btn-pause-back" (click)="closePauseSettings()">Back</button>
+      }
+    </div>
+  }
+</div>
