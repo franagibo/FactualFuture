@@ -103,6 +103,8 @@ export interface GameState {
   frailStacks?: number;
   /** Strength: extra damage per stack when dealing attack damage (per combat). */
   strengthStacks?: number;
+  /** Strength to subtract at end of current turn (e.g. Flex potion). */
+  playerStrengthDecayAtEnd?: number;
   /** Weak on player: attack damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
   playerWeakStacks?: number;
   /** Vulnerable on player: damage taken multiplied by 1.5, decay by 1 per turn. */

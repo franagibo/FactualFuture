@@ -339,11 +339,14 @@ export function endTurn(
     vulnerableStacks: Math.max(0, (e.vulnerableStacks ?? 0) - 1),
     weakStacks: Math.max(0, (e.weakStacks ?? 0) - 1),
   }));
+  const decayStrength = next.playerStrengthDecayAtEnd ?? 0;
   next = {
     ...next,
     phase: 'player',
     energy: Math.max(0, next.maxEnergy - voidCount),
     turnNumber: next.turnNumber + 1,
+    strengthStacks: Math.max(0, (next.strengthStacks ?? 0) - decayStrength),
+    playerStrengthDecayAtEnd: 0,
     frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
     playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),
     playerVulnerableStacks: Math.max(0, (next.playerVulnerableStacks ?? 0) - 1),

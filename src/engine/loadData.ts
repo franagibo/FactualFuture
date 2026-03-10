@@ -50,11 +50,15 @@ export interface RelicDef {
   triggers: { when: string; effect: { type: string; value?: number } }[];
 }
 
+export type PotionRarity = 'common' | 'uncommon' | 'rare';
+
 export interface PotionDef {
   id: string;
   name: string;
   description: string;
-  effect: { type: string; value: number };
+  /** common 65%, uncommon 25%, rare 10% when offered. */
+  rarity: PotionRarity;
+  effect: { type: string; value: number; value2?: number };
 }
 
 /** Playable character: owns starter deck and optional card pool for rewards/shops. */

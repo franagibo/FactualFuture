@@ -1,8 +1,9 @@
 import type { GameState, MapState, RunPhase } from './types';
 import type { CardDef } from './cardDef';
-import type { EnemyDef, EncounterDef, EventDef } from './loadData';
+import type { EnemyDef, EncounterDef, EventDef, PotionDef } from './loadData';
 import { generateMap, type ActConfig } from './map/mapGenerator';
 import { startCombatFromRunState } from './combat';
+import { drawCards } from './effectRunner';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -385,6 +386,25 @@ export function chooseNode(
 const GOLD_PER_COMBAT = 10;
 const REWARD_CARD_COUNT = 3;
 
+/** Rarity weights when offering a potion: common 65%, uncommon 25%, rare 10%. */
+const POTION_RARITY_WEIGHTS = { common: 65, uncommon: 25, rare: 10 } as const;
+
+/**
+ * Pick one potion id at random using rarity distribution (65% common, 25% uncommon, 10% rare).
+ * Returns null if no potions defined.
+ */
+export function pickRandomPotionByRarity(potions: Map<string, PotionDef>): string | null {
+  const list = Array.from(potions.values());
+  if (list.length === 0) return null;
+  const byRarity = { common: list.filter((p) => p.rarity === 'common'), uncommon: list.filter((p) => p.rarity === 'uncommon'), rare: list.filter((p) => p.rarity === 'rare') };
+  const r = Math.random() * 100;
+  let pool: PotionDef[] = byRarity.rare;
+  if (r < POTION_RARITY_WEIGHTS.common) pool = byRarity.common;
+  else if (r < POTION_RARITY_WEIGHTS.common + POTION_RARITY_WEIGHTS.uncommon) pool = byRarity.uncommon;
+  if (pool.length === 0) pool = list;
+  return pool[Math.floor(Math.random() * pool.length)].id;
+}
+
 /** Remove all status cards (Burn, Dazed, etc.) from deck, hand, and discard. Status cards are combat-only. */
 export function stripStatusCards(state: GameState, cardsMap: Map<string, CardDef>): GameState {
   const isStatus = (id: string) => cardsMap.get(id)?.isStatus === true;
@@ -466,12 +486,20 @@ export function restRemoveCard(state: GameState, cardId: string): GameState {
 
 /** Potion def for usePotion (effect only). */
 export interface PotionEffectDef {
-  effect: { type: string; value: number };
+  effect: { type: string; value: number; value2?: number };
+}
+
+function applyDamageToEnemyInRun(enemy: GameState['enemies'][0], dmg: number): { block: number; hp: number } {
+  const vuln = (enemy as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
+  const total = Math.floor(dmg * (vuln > 0 ? 1.5 : 1));
+  const blockReduce = Math.min(enemy.block, total);
+  const hpReduce = Math.min(enemy.hp, total - blockReduce);
+  return { block: enemy.block - blockReduce, hp: Math.max(0, enemy.hp - hpReduce) };
 }
 
 /**
  * Use one potion in combat: apply effect, remove one instance from potions.
- * For damage potions, targetEnemyIndex must be a valid alive enemy.
+ * For single-target damage potions, targetEnemyIndex must be a valid alive enemy.
  */
 export function usePotion(
   state: GameState,
@@ -494,19 +522,37 @@ export function usePotion(
     next = { ...next, playerBlock: next.playerBlock + effect.value };
   } else if (effect.type === 'damage' && targetEnemyIndex != null && next.enemies[targetEnemyIndex]?.hp > 0) {
     const enemy = next.enemies[targetEnemyIndex];
-    const vuln = (enemy as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
-    const dmg = Math.floor(effect.value * (vuln > 0 ? 1.5 : 1));
-    const blockReduce = Math.min(enemy.block, dmg);
-    const hpReduce = dmg - blockReduce;
+    const dmg = effect.value;
+    const { block, hp } = applyDamageToEnemyInRun(enemy, dmg);
     const enemies = [...next.enemies];
-    enemies[targetEnemyIndex] = {
-      ...enemy,
-      block: enemy.block - blockReduce,
-      hp: Math.max(0, enemy.hp - hpReduce),
-    };
+    enemies[targetEnemyIndex] = { ...enemy, block, hp };
     next = { ...next, enemies };
-    const allDead = enemies.every((e) => e.hp <= 0);
-    if (allDead) next = { ...next, combatResult: 'win' };
+    if (enemies.every((e) => e.hp <= 0)) next = { ...next, combatResult: 'win' };
+  } else if (effect.type === 'damageAll') {
+    const enemies = next.enemies.map((e) => (e.hp <= 0 ? e : { ...e, ...applyDamageToEnemyInRun(e, effect.value) }));
+    next = { ...next, enemies };
+    if (enemies.every((e) => e.hp <= 0)) next = { ...next, combatResult: 'win' };
+  } else if (effect.type === 'energy') {
+    next = { ...next, energy: next.energy + effect.value };
+  } else if (effect.type === 'strength') {
+    next = { ...next, strengthStacks: (next.strengthStacks ?? 0) + effect.value };
+  } else if (effect.type === 'strengthWithDecay') {
+    const gain = effect.value;
+    const decay = effect.value2 ?? effect.value;
+    next = { ...next, strengthStacks: (next.strengthStacks ?? 0) + gain, playerStrengthDecayAtEnd: (next.playerStrengthDecayAtEnd ?? 0) + decay };
+  } else if (effect.type === 'draw') {
+    next = drawCards(next, effect.value);
+  } else if (effect.type === 'vulnerableAll') {
+    const enemies = next.enemies.map((e) => (e.hp <= 0 ? e : { ...e, vulnerableStacks: (e.vulnerableStacks ?? 0) + effect.value }));
+    next = { ...next, enemies };
+  } else if (effect.type === 'weakAll') {
+    const enemies = next.enemies.map((e) => (e.hp <= 0 ? e : { ...e, weakStacks: (e.weakStacks ?? 0) + effect.value }));
+    next = { ...next, enemies };
+  } else if (effect.type === 'maxHp') {
+    const add = effect.value;
+    next = { ...next, playerMaxHp: (next.playerMaxHp ?? next.playerHp) + add, playerHp: next.playerHp + add };
+  } else if (effect.type === 'escape') {
+    next = { ...next, combatResult: 'win', runPhase: 'map', currentEncounter: null, enemies: [] };
   }
 
   return next;

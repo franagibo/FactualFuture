@@ -18,6 +18,7 @@ import {
   getRunPhaseAfterBossWin as engineGetRunPhaseAfterBossWin,
   advanceToNextAct as engineAdvanceToNextAct,
   usePotion as engineUsePotion,
+  pickRandomPotionByRarity as enginePickRandomPotionByRarity,
   type ShopPoolConfig,
 } from '../../engine/run';
 import type { CharacterDef } from '../../engine/loadData';
@@ -524,6 +525,11 @@ export class GameBridgeService {
       const actKey = `act${this.state.act ?? 1}`;
       const rewardPool = this.getRewardCardPoolForAct(actKey);
       this.state = engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!);
+      const maxPotions = 3;
+      if (this.state.potions && this.state.potions.length < maxPotions && Math.random() < 0.4) {
+        const potionId = enginePickRandomPotionByRarity(this.potionDefs);
+        if (potionId) this.state = { ...this.state, potions: [...this.state.potions, potionId] };
+      }
       this.meta = {
         ...this.meta,
         runStats: { combatsWon: (this.meta.runStats?.combatsWon ?? 0) + 1, goldSpent: this.meta.runStats?.goldSpent ?? 0 },
