@@ -11,6 +11,11 @@ function getShieldSheetPath(characterId: string): string {
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shield.png`;
 }
 
+/** Shooting animation sprite sheet (6x6 grid). Path: /assets/characters/{id}/{id}_shooting.png. Used for strike/attack. */
+function getShootingSheetPath(characterId: string): string {
+  return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shooting.png`;
+}
+
 const SHIELD_SHEET_COLS = 6;
 const SHIELD_SHEET_ROWS = 6;
 const SHIELD_FRAME_MS = 80;
@@ -27,6 +32,9 @@ export class CombatAssetsService {
   private shieldFrameTextures: PIXI.Texture[] = [];
   private shieldStartTime: number | null = null;
   private shieldResolve: (() => void) | null = null;
+  private shootingFrameTextures: PIXI.Texture[] = [];
+  private shootingStartTime: number | null = null;
+  private shootingResolve: (() => void) | null = null;
   private loadPromise: Promise<void> | null = null;
 
   /** Load combat background and shield sprite sheet (first frame = static pose). Safe to call multiple times. */
@@ -45,31 +53,43 @@ export class CombatAssetsService {
     try {
       const sheetPath = this.resolveUrl(getShieldSheetPath(DEFAULT_PLAYER_CHARACTER_ID));
       const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
-      const source = sheetTexture.source;
-      const sheetW = sheetTexture.width;
-      const sheetH = sheetTexture.height;
-      const frameW = Math.floor(sheetW / SHIELD_SHEET_COLS);
-      const frameH = Math.floor(sheetH / SHIELD_SHEET_ROWS);
-      this.shieldFrameTextures = [];
-      for (let i = 0; i < SHIELD_FRAME_COUNT; i++) {
-        const col = i % SHIELD_SHEET_COLS;
-        const row = Math.floor(i / SHIELD_SHEET_COLS);
-        const frame = new PIXI.Rectangle(col * frameW, row * frameH, frameW, frameH);
-        this.shieldFrameTextures.push(new PIXI.Texture({ source, frame }));
-      }
+      this.shieldFrameTextures = this.buildSheetFrames(sheetTexture);
       if (this.shieldFrameTextures.length > 0) {
         this.playerTextures.set(DEFAULT_PLAYER_CHARACTER_ID, this.shieldFrameTextures[0]);
       }
     } catch {
       this.shieldFrameTextures = [];
     }
+    try {
+      const shootingPath = this.resolveUrl(getShootingSheetPath(DEFAULT_PLAYER_CHARACTER_ID));
+      const shootingTexture = (await PIXI.Assets.load(shootingPath)) as PIXI.Texture;
+      this.shootingFrameTextures = this.buildSheetFrames(shootingTexture);
+    } catch {
+      this.shootingFrameTextures = [];
+    }
+  }
+
+  private buildSheetFrames(sheetTexture: PIXI.Texture): PIXI.Texture[] {
+    const source = sheetTexture.source;
+    const sheetW = sheetTexture.width;
+    const sheetH = sheetTexture.height;
+    const frameW = Math.floor(sheetW / SHIELD_SHEET_COLS);
+    const frameH = Math.floor(sheetH / SHIELD_SHEET_ROWS);
+    const out: PIXI.Texture[] = [];
+    for (let i = 0; i < SHIELD_FRAME_COUNT; i++) {
+      const col = i % SHIELD_SHEET_COLS;
+      const row = Math.floor(i / SHIELD_SHEET_COLS);
+      const frame = new PIXI.Rectangle(col * frameW, row * frameH, frameW, frameH);
+      out.push(new PIXI.Texture({ source, frame }));
+    }
+    return out;
   }
 
   getCombatBgTexture(): PIXI.Texture | null {
     return this.combatBgTexture;
   }
 
-  /** Returns the current player character texture (e.g. gunboy). For multiple characters, use getPlayerTextureForCharacter(id). */
+  /** Returns the current player character texture (first frame of shield sheet). */
   getPlayerTexture(): PIXI.Texture | null {
     return this.playerTextures.get(DEFAULT_PLAYER_CHARACTER_ID) ?? null;
   }
@@ -100,6 +120,35 @@ export class CombatAssetsService {
     this.shieldStartTime = Date.now();
     return new Promise((resolve) => {
       this.shieldResolve = resolve;
+    });
+  }
+
+  /** Returns the current shooting animation frame texture, or null if not playing or no frames. */
+  getShootingTexture(): PIXI.Texture | null {
+    if (this.shootingFrameTextures.length === 0 || this.shootingStartTime == null) return null;
+    const elapsed = Date.now() - this.shootingStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), SHIELD_FRAME_COUNT - 1);
+    return this.shootingFrameTextures[frameIndex] ?? null;
+  }
+
+  /** Call each tick while shooting is playing. Resolves the play promise when animation is done. */
+  getShootingAnimationDone(): void {
+    if (this.shootingStartTime == null || !this.shootingResolve) return;
+    const elapsed = Date.now() - this.shootingStartTime;
+    if (elapsed >= SHIELD_FRAME_COUNT * SHIELD_FRAME_MS) {
+      this.shootingStartTime = null;
+      const resolve = this.shootingResolve;
+      this.shootingResolve = null;
+      resolve();
+    }
+  }
+
+  /** Plays the shooting animation once (sprite sheet frames). Resolves when the animation ends. */
+  playShootingAnimation(): Promise<void> {
+    if (this.shootingFrameTextures.length === 0) return Promise.resolve();
+    this.shootingStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.shootingResolve = resolve;
     });
   }
 

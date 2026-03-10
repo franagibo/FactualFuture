@@ -1,14 +1,14 @@
 [
   {
     "id": "stub",
-    "text": "You rest here briefly. Nothing much happens.",
+    "text": "You power down briefly. Systems nominal.",
     "choices": [
       { "text": "Continue", "outcome": { "type": "nothing" } }
     ]
   },
   {
     "id": "heal_event",
-    "text": "A stranger offers to tend your wounds.",
+    "text": "A med bay terminal offers to patch your suit and inject nanites.",
     "choices": [
       { "text": "Accept (Heal 15 HP)", "outcome": { "type": "heal", "amount": 15 } },
       { "text": "Decline", "outcome": { "type": "nothing" } }
@@ -16,19 +16,73 @@
   },
   {
     "id": "gold_event",
-    "text": "You find a small cache of coins.",
+    "text": "You find a salvage cache—credits and spare parts.",
     "choices": [
-      { "text": "Take the gold", "outcome": { "type": "gold", "amount": 25 } },
+      { "text": "Take the credits", "outcome": { "type": "gold", "amount": 25 } },
       { "text": "Leave it", "outcome": { "type": "nothing" } }
     ]
   },
   {
     "id": "card_event",
-    "text": "A merchant offers you a card.",
+    "text": "A loadout terminal offers a new tactic chip.",
     "choices": [
       { "text": "Take Strike", "outcome": { "type": "addCard", "cardId": "strike" } },
-      { "text": "Take Defend", "outcome": { "type": "addCard", "cardId": "defend" } },
+      { "text": "Take Barrier", "outcome": { "type": "addCard", "cardId": "defend" } },
       { "text": "Refuse", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "derelict_ship",
+    "text": "A derelict ship drifts nearby. Scans show a small cargo hold and minor hull breaches.",
+    "choices": [
+      { "text": "Salvage (gain 35 credits)", "outcome": { "type": "gold", "amount": 35 } },
+      { "text": "Use the med bay (Heal 20 HP)", "outcome": { "type": "heal", "amount": 20 } },
+      { "text": "Leave", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "upgrade_station",
+    "text": "An abandoned upgrade station. One port is still active.",
+    "choices": [
+      { "text": "Download Plasma Shot", "outcome": { "type": "addCard", "cardId": "plasma_shot" } },
+      { "text": "Download Reactive Plating", "outcome": { "type": "addCard", "cardId": "reactive_plating" } },
+      { "text": "Skip", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "friendly_drone",
+    "text": "A damaged service drone beeps and offers to share power and repair data.",
+    "choices": [
+      { "text": "Accept repair (Heal 10 HP)", "outcome": { "type": "heal", "amount": 10 } },
+      { "text": "Drain its power cell (15 credits)", "outcome": { "type": "gold", "amount": 15 } },
+      { "text": "Ignore", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "potion_cache",
+    "text": "You find a small cache of consumables—repair gel and a shield injector.",
+    "choices": [
+      { "text": "Take Repair Gel", "outcome": { "type": "addPotion", "potionId": "heal_potion" } },
+      { "text": "Take Shield Injector", "outcome": { "type": "addPotion", "potionId": "block_potion" } },
+      { "text": "Leave them", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "cursed_circuit",
+    "text": "A corrupted data node. Downloading it might add a permanent flaw to your loadout.",
+    "choices": [
+      { "text": "Download (add Injury)", "outcome": { "type": "curse", "cardId": "injury" } },
+      { "text": "Skip", "outcome": { "type": "nothing" } }
+    ]
+  },
+  {
+    "id": "act2_elite_cache",
+    "text": "An elite cache from a cleared sector. High-grade salvage and intel.",
+    "act": 2,
+    "choices": [
+      { "text": "Take Void Grenade card", "outcome": { "type": "addCard", "cardId": "void_grenade" } },
+      { "text": "Take 50 credits", "outcome": { "type": "gold", "amount": 50 } },
+      { "text": "Leave it", "outcome": { "type": "nothing" } }
     ]
   }
 ]

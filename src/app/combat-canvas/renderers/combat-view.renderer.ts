@@ -62,6 +62,7 @@ export interface CombatViewContext {
   padding: number;
   hoveredCardIndex: number | null;
   selectedCardId: string | null;
+  selectedCardIndex: number | null;
   hoveredEnemyIndex: number | null;
   floatingNumbers: FloatingNumber[];
   showingEnemyTurn: boolean;
@@ -82,9 +83,12 @@ export interface CombatViewContext {
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
   /** B15: Per-card hover influence 0..1 for smooth lift/scale; same length as hand. If absent, use binary from hoveredCardIndex/selectedCardId. */
   hoverLerp?: number[];
-  /** When true, player sprite shows shield animation video instead of static texture. */
+  /** When true, player sprite shows shield animation instead of static texture. */
   shieldAnimationPlaying?: boolean;
   getShieldVideoTexture?: () => PIXI.Texture | null;
+  /** When true, player sprite shows shooting animation (e.g. for strike card). */
+  shootingAnimationPlaying?: boolean;
+  getShootingTexture?: () => PIXI.Texture | null;
 }
 
 const L = COMBAT_LAYOUT;
@@ -119,8 +123,9 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const playerContainer = new PIXI.Container();
   playerContainer.x = playerZoneX - playerPlaceholderW / 2;
   playerContainer.y = baselineBottom - playerPlaceholderH;
+  const shootingTex = ctx.shootingAnimationPlaying && ctx.getShootingTexture?.() ? ctx.getShootingTexture() : null;
   const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
-  const playerTex = shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
+  const playerTex = shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
     const sprite = new PIXI.Sprite(playerTex);
     sprite.anchor.set(0.5, 1);
@@ -189,12 +194,12 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const cost = ctx.getCardCost(cardId);
     const playable = state.energy >= cost;
     const isHovered = ctx.hoveredCardIndex === i;
-    const isSelected = ctx.selectedCardId === cardId;
+    const isSelected = ctx.selectedCardIndex === i;
     const lerp = useHoverLerp ? (ctx.hoverLerp![i] ?? 0) : ((isHovered && playable) || isSelected ? 1 : 0);
     const applyHover = lerp > 0.5;
 
     const arcNorm = hand.length > 1 ? (i - center) / (hand.length - 1) : 0;
-    const baseY = handY + arcAmplitude * (1 - 4 * arcNorm * arcNorm);
+    const baseY = handY + arcAmplitude * (4 * arcNorm * arcNorm);
     const rot = (i - center) * cardRotationRad;
     const cardX = startX + i * cardSpacing;
     const cardY = baseY - lerp * hoverLift;
@@ -310,6 +315,9 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   const totalEnemyWidth = enemies.length * enemyPlaceholderW + (enemies.length - 1) * enemyGap;
   const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
 
+  const sizeScale = (size: 'small' | 'medium' | 'large' | undefined): number =>
+    size === 'small' ? 0.8 : size === 'large' ? 1.2 : 1;
+
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     const isAlive = e.hp > 0;
@@ -349,15 +357,12 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       hitOverlay.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius).fill({ color: 0xff4444, alpha: 0.35 });
       container.addChild(hitOverlay);
     }
-    if (isHoveredEnemy) {
-      container.scale.set(1.05);
-      container.pivot.set(enemyPlaceholderW / 2, enemyPlaceholderH / 2);
-      container.x = baseEnemyX + enemyPlaceholderW / 2;
-      container.y = baseEnemyY + enemyPlaceholderH / 2;
-    } else {
-      container.x = baseEnemyX;
-      container.y = baseEnemyY;
-    }
+    const hitPop = wasJustHit ? 1.06 : 1;
+    const scale = sizeScale(e.size) * (isHoveredEnemy ? 1.05 : 1) * hitPop;
+    container.pivot.set(enemyPlaceholderW / 2, enemyPlaceholderH / 2);
+    container.x = baseEnemyX + enemyPlaceholderW / 2;
+    container.y = baseEnemyY + enemyPlaceholderH / 2;
+    container.scale.set(scale);
     const nameT = new PIXI.Text({
       text: e.name,
       style: { fontFamily: 'system-ui', fontSize: 13, fill: 0xeeeeee },
@@ -378,18 +383,34 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       drawIntentIcon(container, 'none', 0, 8, 46);
     }
     const vulnerableStacks = (e as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
+    const weakStacks = (e as { weakStacks?: number }).weakStacks ?? 0;
+    let statusY = 6;
     if (vulnerableStacks > 0) {
       const vW = 32;
       const vBg = new PIXI.Graphics();
-      vBg.roundRect(enemyPlaceholderW - vW - 4, 6, vW, 14, 3).fill({ color: 0x9944aa, alpha: 0.9 }).stroke({ width: 1, color: 0xcc66dd });
+      vBg.roundRect(enemyPlaceholderW - vW - 4, statusY, vW, 14, 3).fill({ color: 0x9944aa, alpha: 0.9 }).stroke({ width: 1, color: 0xcc66dd });
       container.addChild(vBg);
       const vText = new PIXI.Text({
         text: `Vuln ${vulnerableStacks}`,
         style: { fontFamily: 'system-ui', fontSize: 9, fill: 0xffffff, fontWeight: 'bold' },
       });
       vText.x = enemyPlaceholderW - vW - 2;
-      vText.y = 7;
+      vText.y = statusY + 1;
       container.addChild(vText);
+      statusY += 18;
+    }
+    if (weakStacks > 0) {
+      const wW = 28;
+      const wBg = new PIXI.Graphics();
+      wBg.roundRect(enemyPlaceholderW - wW - 4, statusY, wW, 14, 3).fill({ color: 0x6a6a44, alpha: 0.9 }).stroke({ width: 1, color: 0x999966 });
+      container.addChild(wBg);
+      const wText = new PIXI.Text({
+        text: `Weak ${weakStacks}`,
+        style: { fontFamily: 'system-ui', fontSize: 9, fill: 0xffffff, fontWeight: 'bold' },
+      });
+      wText.x = enemyPlaceholderW - wW - 2;
+      wText.y = statusY + 1;
+      container.addChild(wText);
     }
     if (isValidTarget) {
       container.eventMode = 'static';
@@ -426,7 +447,7 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
   if (hoveredEnemyIndex >= enemies.length || enemies[hoveredEnemyIndex].hp <= 0) return;
 
   const hand = state.hand;
-  const selIdx = hand.indexOf(selectedCardId);
+  const selIdx = ctx.selectedCardIndex != null && ctx.selectedCardIndex < hand.length ? ctx.selectedCardIndex : hand.indexOf(selectedCardId);
   if (selIdx < 0) return;
 
   const L2 = COMBAT_LAYOUT;
@@ -436,7 +457,7 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
 
   const arcN = layout.handLength > 1 ? (selIdx - layout.center) / (layout.handLength - 1) : 0;
   const fromX = layout.startX + selIdx * layout.cardSpacing;
-  const fromY = layout.handY + layout.arcAmplitude * (1 - 4 * arcN * arcN) - layout.hoverLift;
+  const fromY = layout.handY + layout.arcAmplitude * (4 * arcN * arcN) - layout.hoverLift;
   const toX = layout.ex + hoveredEnemyIndex * (enemyPlaceholderW + enemyGap);
   const toY = layout.enemyStartY + enemyPlaceholderH / 2;
 

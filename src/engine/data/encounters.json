@@ -1,10 +1,58 @@
 [
   {
+    "id": "first_contact",
+    "enemies": ["jaw_worm"]
+  },
+  {
     "id": "tutorial",
     "enemies": ["jaw_worm"]
   },
   {
+    "id": "solo_scout",
+    "enemies": ["jaw_worm"]
+  },
+  {
+    "id": "solo_drone",
+    "enemies": ["assault_drone"]
+  },
+  {
+    "id": "solo_crawler",
+    "enemies": ["spore_crawler"]
+  },
+  {
+    "id": "solo_shield",
+    "enemies": ["shield_drone"]
+  },
+  {
     "id": "boss_act1",
     "enemies": ["act1_boss"]
+  },
+  {
+    "id": "double_drones",
+    "enemies": ["assault_drone", "assault_drone"]
+  },
+  {
+    "id": "swarm",
+    "enemies": ["swarm_larva", "swarm_larva", "swarm_larva"]
+  },
+  {
+    "id": "leader_and_adds",
+    "enemies": ["heavy_drone", "swarm_larva", "swarm_larva"]
+  },
+  {
+    "id": "dual_heavy",
+    "enemies": ["heavy_drone", "heavy_drone"]
+  },
+  {
+    "id": "solo_alpha",
+    "enemies": ["alpha_xenomorph"]
+  },
+  {
+    "id": "alpha_and_probes",
+    "enemies": ["alpha_xenomorph", "probe", "probe"]
+  },
+  {
+    "id": "solo_void",
+    "enemies": ["void_crawler"]
   }
 ]

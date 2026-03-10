@@ -5,6 +5,8 @@ export interface EnemyDef {
   name: string;
   maxHp: number;
   intents: { weight: number; intent: { type: string; value: number } }[];
+  /** Optional size for display scale: small (0.8), medium (1), large (1.2). Default medium. */
+  size?: 'small' | 'medium' | 'large';
 }
 
 export interface EncounterDef {
@@ -16,6 +18,8 @@ export interface EventDef {
   id: string;
   text: string;
   choices: { text: string; outcome: unknown }[];
+  /** If set, event only appears in this act. */
+  act?: number;
 }
 
 export interface RelicDef {
@@ -23,6 +27,19 @@ export interface RelicDef {
   name: string;
   description: string;
   triggers: { when: string; effect: { type: string; value?: number } }[];
+}
+
+export interface PotionDef {
+  id: string;
+  name: string;
+  description: string;
+  effect: { type: string; value: number };
+}
+
+export function loadPotions(data: PotionDef[]): Map<string, PotionDef> {
+  const map = new Map<string, PotionDef>();
+  for (const p of data) map.set(p.id, p);
+  return map;
 }
 
 export function loadCards(data: CardDef[]): Map<string, CardDef> {

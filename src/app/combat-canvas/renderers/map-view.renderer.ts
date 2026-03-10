@@ -11,10 +11,13 @@ export interface MapViewContext {
   getNodeTexture(type: MapNodeType): PIXI.Texture | null;
   getMapBgTexture(): PIXI.Texture | null;
   onMapContentHeight(height: number): void;
-  scrollAreaElement: HTMLElement | undefined;
   markForCheck(): void;
   onChooseNode(nodeId: string): void;
   loadMapAssets(): void;
+  /** For map node tooltip: id of node currently hovered, or null. */
+  hoveredNodeId: string | null;
+  onNodePointerOver(nodeId: string): void;
+  onNodePointerOut(): void;
 }
 
 /**
@@ -134,10 +137,6 @@ export function drawMapView(
   const mapContentHeight = (maxFloor + 1) * FLOOR_SPACING + padding * 2 + BOTTOM_MARGIN;
   context.onMapContentHeight(mapContentHeight);
   context.markForCheck();
-  setTimeout(() => {
-    const el = context.scrollAreaElement;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, 120);
 
   const floors: string[][] = [];
   nodes.forEach((n) => {
@@ -295,6 +294,18 @@ export function drawMapView(
     }
   };
 
+  const nodeTypeLabel = (type: MapNodeType): string => {
+    switch (type) {
+      case 'combat': return 'Combat';
+      case 'elite': return 'Elite';
+      case 'rest': return 'Repair bay';
+      case 'shop': return 'Shop';
+      case 'event': return 'Event';
+      case 'boss': return 'Boss';
+      default: return type;
+    }
+  };
+
   const NODE_ICON_SIZE = 44;
   const BOSS_ICON_SIZE = 52;
 
@@ -348,15 +359,32 @@ export function drawMapView(
       container.addChildAt(ring, 0);
     }
 
+    container.eventMode = 'static';
+    container.hitArea = new PIXI.Circle(0, 0, Math.max(size / 2, r) + 8);
+    const nodeId = n.id;
+    container.on('pointerover', () => context.onNodePointerOver(nodeId));
+    container.on('pointerout', () => context.onNodePointerOut());
     if (isAvailable) {
-      container.eventMode = 'static';
       container.cursor = 'pointer';
-      container.hitArea = new PIXI.Circle(0, 0, Math.max(size / 2, r) + 8);
-      const nodeId = n.id;
-      container.on('pointerdown', () => {
-        context.onChooseNode(nodeId);
-      });
+      container.on('pointerdown', () => context.onChooseNode(nodeId));
     }
     stage.addChild(container);
+  }
+
+  if (context.hoveredNodeId) {
+    const hovered = nodes.find((x) => x.id === context.hoveredNodeId);
+    const pos = hovered ? posById.get(hovered.id) : null;
+    if (hovered && pos) {
+      const label = nodeTypeLabel(hovered.type);
+      const tooltip = new PIXI.Text({
+        text: label,
+        style: { fontFamily: 'system-ui', fontSize: 12, fill: 0xffffff, fontWeight: 'bold' },
+      });
+      tooltip.anchor.set(0.5, 1);
+      tooltip.x = pos.x;
+      tooltip.y = pos.y - (hovered.type === 'boss' ? BOSS_ICON_SIZE : NODE_ICON_SIZE) / 2 - 6;
+      tooltip.zIndex = 10;
+      stage.addChild(tooltip);
+    }
   }
 }

@@ -6,7 +6,8 @@
     "shop": 1,
     "event": 1,
     "boss": 1,
-    "encounterPool": ["tutorial"],
+    "encounterPool": ["first_contact", "solo_scout", "solo_drone", "solo_crawler", "solo_shield", "double_drones", "swarm", "leader_and_adds", "dual_heavy"],
+    "eliteEncounterPool": ["leader_and_adds", "dual_heavy"],
     "bossEncounter": "boss_act1"
   },
   "act2": {
@@ -16,7 +17,8 @@
     "shop": 1,
     "event": 1,
     "boss": 1,
-    "encounterPool": ["tutorial"],
+    "encounterPool": ["solo_drone", "solo_crawler", "solo_shield", "solo_alpha", "solo_void", "double_drones", "swarm", "leader_and_adds", "dual_heavy", "alpha_and_probes"],
+    "eliteEncounterPool": ["solo_alpha", "leader_and_adds", "dual_heavy", "alpha_and_probes"],
     "bossEncounter": "boss_act1"
   }
 }

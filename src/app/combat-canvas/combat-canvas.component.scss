@@ -60,8 +60,29 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   z-index: 1000;
   pointer-events: auto;
+}
+.potion-bar {
+  display: flex;
+  gap: 8px;
+  margin-right: 8px;
+}
+.btn-potion {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: #e0e0e0;
+  border: 1px solid #5a5a7a;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #3a3a5a 0%, #2a2a4a 100%);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.btn-potion:hover {
+  background: linear-gradient(180deg, #4a4a6a 0%, #3a3a5a 100%);
+  transform: translateY(-1px);
 }
 .btn-end, .btn-restart {
   position: relative;

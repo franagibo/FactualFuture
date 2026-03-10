@@ -91,6 +91,7 @@ export function createInitialState(
       maxHp: def.maxHp,
       block: 0,
       intent,
+      size: def.size,
     };
   });
 
@@ -143,6 +144,7 @@ export function startCombatFromRunState(
       maxHp: def.maxHp,
       block: 0,
       intent,
+      size: def.size,
     };
   });
 
@@ -166,12 +168,16 @@ export function playCard(
   state: GameState,
   cardId: string,
   targetEnemyIndex: number | null,
-  cardsMap: Map<string, CardDef>
+  cardsMap: Map<string, CardDef>,
+  handIndexOverride?: number
 ): GameState {
   if (state.phase !== 'player' || state.combatResult) return state;
   const card = cardsMap.get(cardId);
   if (!card) return state;
-  const handIndex = state.hand.indexOf(cardId);
+  const handIndex =
+    handIndexOverride != null && handIndexOverride >= 0 && handIndexOverride < state.hand.length && state.hand[handIndexOverride] === cardId
+      ? handIndexOverride
+      : state.hand.indexOf(cardId);
   if (handIndex === -1) return state;
   if (state.energy < card.cost) return state;
 
@@ -208,6 +214,8 @@ export function endTurn(
     if (!intent) continue;
     if (intent.type === 'attack') {
       let dmg = intent.value;
+      const frail = (next.frailStacks ?? 0) > 0 ? 1 + 0.25 * (next.frailStacks ?? 0) : 1;
+      dmg = Math.ceil(dmg * frail);
       if (next.playerBlock > 0) {
         const blockReduce = Math.min(next.playerBlock, dmg);
         next = { ...next, playerBlock: next.playerBlock - blockReduce };
@@ -234,12 +242,14 @@ export function endTurn(
   const decayedEnemies = next.enemies.map((e) => ({
     ...e,
     vulnerableStacks: Math.max(0, (e.vulnerableStacks ?? 0) - 1),
+    weakStacks: Math.max(0, (e.weakStacks ?? 0) - 1),
   }));
   next = {
     ...next,
     phase: 'player',
     energy: next.maxEnergy,
     turnNumber: next.turnNumber + 1,
+    frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
     enemies: setEnemyIntents(decayedEnemies, enemyDefs),
   };
   return next;

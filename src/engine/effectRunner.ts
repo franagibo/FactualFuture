@@ -39,6 +39,8 @@ export function runEffects(
           const enemy = enemies[targetEnemyIndex];
           let dmg = effect.value;
           if ((enemy.vulnerableStacks ?? 0) > 0) dmg = Math.ceil(dmg * 1.5);
+          const weak = (enemy.weakStacks ?? 0) > 0 ? 1 + 0.25 * (enemy.weakStacks ?? 0) : 1;
+          dmg = Math.ceil(dmg * weak);
           dmg = Math.min(dmg, enemy.block + enemy.hp);
           let remain = dmg;
           if (enemy.block > 0) {
@@ -82,10 +84,26 @@ export function runEffects(
           next = drawOne(next);
         }
         break;
+      case 'energy':
+        if (effect.target === 'player' && effect.value != null) {
+          next = { ...next, energy: next.energy + effect.value };
+        }
+        break;
       case 'vulnerable':
         if (effect.target === 'enemy' && targetEnemyIndex != null && enemies[targetEnemyIndex]) {
           const enemy = enemies[targetEnemyIndex];
           enemy.vulnerableStacks = (enemy.vulnerableStacks ?? 0) + effect.value;
+        }
+        break;
+      case 'weak':
+        if (effect.target === 'enemy' && targetEnemyIndex != null && enemies[targetEnemyIndex]) {
+          const enemy = enemies[targetEnemyIndex];
+          enemy.weakStacks = (enemy.weakStacks ?? 0) + effect.value;
+        }
+        break;
+      case 'frail':
+        if (effect.target === 'player') {
+          next = { ...next, frailStacks: (next.frailStacks ?? 0) + effect.value };
         }
         break;
     }

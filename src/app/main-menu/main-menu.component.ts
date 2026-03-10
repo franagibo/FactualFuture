@@ -1,5 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
+import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
 
 @Component({
@@ -9,6 +10,23 @@ import { GameBridgeService } from '../services/game-bridge.service';
     <div class="menu-wrap">
       <div class="menu-panel">
         <h1 class="menu-title">Slay the Spire Like</h1>
+        @if (meta) {
+          <div class="unlocks-section">
+            <div class="unlocks-label">Unlocks</div>
+            @if (meta.unlockedCards.length > 0 || meta.unlockedRelics.length > 0) {
+              <div class="unlocks-list">
+                @for (id of meta.unlockedCards; track id) {
+                  <span class="unlock-item">{{ getCardDisplayName(id) }}</span>
+                }
+                @for (id of meta.unlockedRelics; track id) {
+                  <span class="unlock-item">{{ getRelicDisplayName(id) }}</span>
+                }
+              </div>
+            } @else {
+              <div class="unlocks-hint">Reach sector 2 or win a run to unlock more content.</div>
+            }
+          </div>
+        }
         <div class="menu-actions">
           @if (showContinue) {
             <button type="button" class="menu-btn menu-btn-primary" (click)="onContinue()">
@@ -256,6 +274,32 @@ import { GameBridgeService } from '../services/game-bridge.service';
         margin-top: 0.5rem;
         width: 100%;
       }
+      .unlocks-section {
+        margin-bottom: 1rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+      }
+      .unlocks-label {
+        font-size: 0.75rem;
+        color: #aaa;
+        margin-bottom: 0.35rem;
+      }
+      .unlocks-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+      .unlock-item {
+        font-size: 0.8rem;
+        color: #ccc;
+        background: rgba(80,70,120,0.4);
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+      }
+      .unlocks-hint {
+        font-size: 0.8rem;
+        color: #888;
+      }
     `,
   ],
 })
@@ -263,6 +307,7 @@ export class MainMenuComponent implements OnInit {
   public showSettings = false;
   showContinue = false;
   fullscreen = true;
+  meta: MetaState | null = null;
 
   constructor(
     private router: Router,
@@ -270,11 +315,20 @@ export class MainMenuComponent implements OnInit {
     private cdr: ChangeDetectorRef
   ) {}
 
-  ngOnInit(): void {
-    this.bridge.hasSavedRun().then((has) => {
-      this.showContinue = has;
-      this.cdr.markForCheck();
-    });
+  async ngOnInit(): Promise<void> {
+    await this.bridge.ensureDataLoaded();
+    this.meta = this.bridge.getMeta();
+    const has = await this.bridge.hasSavedRun();
+    this.showContinue = has;
+    this.cdr.markForCheck();
+  }
+
+  getCardDisplayName(cardId: string): string {
+    return this.bridge.getCardDef(cardId)?.name ?? cardId;
+  }
+
+  getRelicDisplayName(relicId: string): string {
+    return this.bridge.getRelicName(relicId);
   }
 
   isElectron(): boolean {

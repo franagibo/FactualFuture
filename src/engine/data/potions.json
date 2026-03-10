@@ -1,0 +1,20 @@
+[
+  {
+    "id": "heal_potion",
+    "name": "Repair Gel",
+    "description": "Heal 10 HP.",
+    "effect": { "type": "heal", "value": 10 }
+  },
+  {
+    "id": "block_potion",
+    "name": "Shield Injector",
+    "description": "Gain 12 Block.",
+    "effect": { "type": "block", "value": 12 }
+  },
+  {
+    "id": "damage_potion",
+    "name": "Plasma Vial",
+    "description": "Deal 15 damage to an enemy.",
+    "effect": { "type": "damage", "value": 15 }
+  }
+]

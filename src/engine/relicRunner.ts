@@ -34,7 +34,11 @@ export function runRelics(
         case 'energy':
           if (eff.value != null) {
             next = { ...next, energy: next.energy + eff.value, maxEnergy: (next.maxEnergy ?? 3) + 0 };
-            // For "this turn only" we don't increase maxEnergy; we just add energy. So we're good.
+          }
+          break;
+        case 'block':
+          if (eff.value != null) {
+            next = { ...next, playerBlock: (next.playerBlock ?? 0) + eff.value };
           }
           break;
         case 'draw':

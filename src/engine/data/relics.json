@@ -1,7 +1,7 @@
 [
   {
     "id": "test_relic",
-    "name": "Test Relic",
+    "name": "Reactor Core",
     "description": "At the start of each combat, gain 1 max HP.",
     "triggers": [
       { "when": "onCombatStart", "effect": { "type": "maxHp", "value": 1 } }
@@ -9,7 +9,31 @@
   },
   {
     "id": "energy_relic",
-    "name": "Energy Stone",
+    "name": "Power Cell",
+    "description": "At the start of each turn, gain 1 additional energy.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "plating_fragment",
+    "name": "Plating Fragment",
+    "description": "At the start of each combat, gain 5 Block.",
+    "triggers": [
+      { "when": "onCombatStart", "effect": { "type": "block", "value": 5 } }
+    ]
+  },
+  {
+    "id": "data_chip",
+    "name": "Data Chip",
+    "description": "At the start of each combat, gain 2 max HP.",
+    "triggers": [
+      { "when": "onCombatStart", "effect": { "type": "maxHp", "value": 2 } }
+    ]
+  },
+  {
+    "id": "turbo_injector",
+    "name": "Turbo Injector",
     "description": "At the start of each turn, gain 1 additional energy.",
     "triggers": [
       { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }

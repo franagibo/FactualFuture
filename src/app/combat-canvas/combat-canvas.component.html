@@ -6,6 +6,18 @@
   </div>
   <div class="overlay-actions">
     @if (runPhase() === 'combat') {
+      <div class="potion-bar">
+        @for (potionId of getPotions(); track potionId + $index) {
+          <button
+            type="button"
+            class="btn-potion"
+            [attr.title]="getPotionTooltip(potionId)"
+            (click)="onUsePotion(potionId)"
+          >
+            {{ getPotionName(potionId) }}
+          </button>
+        }
+      </div>
       @if (selectedCardId) {
         <button type="button" class="btn-cancel-target" (click)="cancelTargeting()">Cancel target</button>
       }
@@ -14,7 +26,7 @@
       </button>
       @if (combatResult()) {
         <div class="result" [class.win]="combatResult() === 'win'" [class.lose]="combatResult() === 'lose'">
-          {{ combatResult() === 'win' ? 'You win!' : 'Defeat' }}
+          {{ combatResult() === 'win' ? 'Victory!' : 'Systems down' }}
         </div>
         <button type="button" class="btn-restart" (click)="onRestart()">Restart</button>
       }
@@ -22,10 +34,10 @@
   </div>
   @if (runPhase() === 'reward') {
     <div class="reward-panel">
-      <div class="reward-title">Choose your reward</div>
+      <div class="reward-title">Choose salvage</div>
       <div class="reward-cards">
         @for (cardId of rewardChoices(); track cardId) {
-          <button type="button" class="reward-card" (click)="onChooseReward(cardId)">
+          <button type="button" class="reward-card" [attr.title]="getCardTooltip(cardId)" (click)="onChooseReward(cardId)">
             {{ getCardName(cardId) }}
           </button>
         }
@@ -34,16 +46,17 @@
   }
   @if (runPhase() === 'rest') {
     <div class="rest-panel">
-      <div class="rest-title">Rest site</div>
+      <div class="rest-title">Repair bay</div>
       <div class="rest-actions">
-        <button type="button" class="btn-rest" (click)="onRestHeal()">Heal</button>
+        <button type="button" class="btn-rest" (click)="onRestHeal()">Repair hull</button>
       </div>
-      <div class="rest-subtitle">Remove a card from your deck:</div>
+      <div class="rest-subtitle">Jettison a card from your loadout:</div>
       <div class="rest-cards">
         @for (cardId of restRemovableCards(); track cardId) {
           <button
             type="button"
             class="btn-rest-card"
+            [attr.title]="getCardTooltip(cardId)"
             (click)="onRestRemoveCard(cardId)"
           >
             {{ getCardName(cardId) }}
@@ -55,13 +68,13 @@
   @if (runPhase() === 'shop') {
     <div class="reward-panel shop-panel">
       <div class="reward-title">Shop</div>
-      <div class="shop-gold">Gold: {{ getGold() }}</div>
+      <div class="shop-gold">Credits: {{ getGold() }}</div>
       @if (getShopState(); as shop) {
         <div class="shop-cards">
           @for (cardId of shop.cardIds; track cardId) {
-            <div class="shop-item">
+            <div class="shop-item" [attr.title]="getCardTooltip(cardId)">
               <span class="shop-item-name">{{ getCardName(cardId) }}</span>
-              <span class="shop-item-price">{{ shop.cardPrices[cardId] }}g</span>
+              <span class="shop-item-price">{{ shop.cardPrices[cardId] }}c</span>
               <button
                 type="button"
                 class="btn-rest btn-shop-buy"
@@ -75,9 +88,9 @@
         </div>
         <div class="shop-relics">
           @for (relicId of shop.relicIds; track relicId) {
-            <div class="shop-item">
+            <div class="shop-item" [attr.title]="getRelicTooltip(relicId)">
               <span class="shop-item-name">{{ getRelicName(relicId) }}</span>
-              <span class="shop-item-price">{{ shop.relicPrices[relicId] }}g</span>
+              <span class="shop-item-price">{{ shop.relicPrices[relicId] }}c</span>
               <button
                 type="button"
                 class="btn-rest btn-shop-buy"
@@ -110,14 +123,14 @@
   }
   @if (runPhase() === 'actComplete') {
     <div class="reward-panel victory-panel">
-      <div class="reward-title">Act complete!</div>
-      <button type="button" class="btn-rest" (click)="onAdvanceToNextAct()">Next act</button>
+      <div class="reward-title">Sector clear!</div>
+      <button type="button" class="btn-rest" (click)="onAdvanceToNextAct()">Next sector</button>
     </div>
   }
   @if (runPhase() === 'victory') {
     <div class="reward-panel victory-panel">
-      <div class="reward-title">You won the run!</div>
-      <button type="button" class="btn-rest" (click)="onVictoryToMenu()">Main menu</button>
+      <div class="reward-title">Mission complete!</div>
+      <button type="button" class="btn-rest" (click)="onVictoryToMenu()">Command</button>
     </div>
   }
   @if (steamWarning()) {

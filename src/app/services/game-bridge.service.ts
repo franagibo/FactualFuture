@@ -17,12 +17,13 @@ import {
   purchaseRelic as enginePurchaseRelic,
   getRunPhaseAfterBossWin as engineGetRunPhaseAfterBossWin,
   advanceToNextAct as engineAdvanceToNextAct,
+  usePotion as engineUsePotion,
   type ShopPoolConfig,
 } from '../../engine/run';
 import type { GameState, MetaState, RunPhase } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
-import type { EnemyDef, EncounterDef, EventDef, RelicDef } from '../../engine/loadData';
-import { loadEvents, loadRelics } from '../../engine/loadData';
+import type { EnemyDef, EncounterDef, EventDef, PotionDef, RelicDef } from '../../engine/loadData';
+import { loadEvents, loadPotions, loadRelics } from '../../engine/loadData';
 import { runRelics } from '../../engine/relicRunner';
 
 // Re-export loadData types
@@ -35,6 +36,12 @@ const DATA_BASE = 'data';
 const MAP_CONFIG_PATH = `${DATA_BASE}/mapConfig.json`;
 const RUN_SAVE_KEY = 'run-save.json';
 const META_SAVE_KEY = 'meta.json';
+
+/** Unlocks granted when reaching Act 2 for the first time. */
+const UNLOCK_ON_ACT2_CARDS = ['plasma_shot', 'reactive_plating', 'overclock'];
+const UNLOCK_ON_ACT2_RELICS = ['plating_fragment'];
+/** Unlock granted on run victory. */
+const UNLOCK_ON_VICTORY_RELIC = 'turbo_injector';
 
 declare const window: Window & { electronAPI?: { readSave: (path: string) => Promise<unknown>; writeSave: (path: string, data: unknown) => Promise<void> } };
 
@@ -53,7 +60,13 @@ export class GameBridgeService {
   private eventPool: EventDef[] | null = null;
   private relicDefs: RelicDefsMap | null = null;
   private shopPoolsByAct: Record<string, ShopPoolConfig> = {};
-  private meta: MetaState = { unlockedCards: [], unlockedRelics: [], highestActReached: 0 };
+  private potionDefs: Map<string, PotionDef> = new Map();
+  private meta: MetaState = {
+    unlockedCards: [],
+    unlockedRelics: [],
+    highestActReached: 0,
+    runStats: { combatsWon: 0, goldSpent: 0 },
+  };
 
   getState(): GameState | null {
     return this.state;
@@ -65,6 +78,25 @@ export class GameBridgeService {
 
   getRelicName(relicId: string): string {
     return this.relicDefs?.get(relicId)?.name ?? relicId;
+  }
+
+  getRelicDescription(relicId: string): string {
+    return this.relicDefs?.get(relicId)?.description ?? '';
+  }
+
+  getPotionDef(potionId: string): PotionDef | undefined {
+    return this.potionDefs.get(potionId);
+  }
+
+  getPotions(): string[] {
+    return this.state?.potions ?? [];
+  }
+
+  usePotion(potionId: string, targetEnemyIndex?: number): void {
+    if (!this.state) return;
+    const def = this.potionDefs.get(potionId);
+    this.state = engineUsePotion(this.state, potionId, targetEnemyIndex ?? 0, def);
+    this.maybeHandleCombatWin();
   }
 
   private async fetchJson<T>(url: string): Promise<T> {
@@ -93,8 +125,9 @@ export class GameBridgeService {
       events: `${DATA_BASE}/events.json`,
       relics: `${DATA_BASE}/relics.json`,
       shopPools: `${DATA_BASE}/shopPools.json`,
+      potions: `${DATA_BASE}/potions.json`,
     };
-    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData]: [
+    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData, potionsData]: [
       CardDef[],
       EnemyDef[],
       EncounterDef[],
@@ -102,6 +135,7 @@ export class GameBridgeService {
       EventDef[],
       RelicDef[],
       Record<string, ShopPoolConfig>,
+      PotionDef[],
     ] = await Promise.all([
       this.fetchJson<CardDef[]>(DATA_PATHS.cards),
       this.fetchJson<EnemyDef[]>(DATA_PATHS.enemies),
@@ -110,6 +144,7 @@ export class GameBridgeService {
       this.fetchJson<EventDef[]>(DATA_PATHS.events).catch(() => []),
       this.fetchJson<RelicDef[]>(DATA_PATHS.relics).catch(() => []),
       this.fetchJson<Record<string, ShopPoolConfig>>(DATA_PATHS.shopPools).catch(() => ({})),
+      this.fetchJson<PotionDef[]>(DATA_PATHS.potions).catch(() => []),
     ]);
     this.cardsMap = loadCards(cards);
     this.enemyDefs = loadEnemies(enemies);
@@ -119,6 +154,7 @@ export class GameBridgeService {
     this.eventPool = loadEvents(eventsData);
     this.relicDefs = loadRelics(relicsData);
     this.shopPoolsByAct = shopPoolsData;
+    this.potionDefs = loadPotions(potionsData);
     await this.loadMeta();
   }
 
@@ -163,10 +199,14 @@ export class GameBridgeService {
     }
     if (data != null && typeof data === 'object' && 'highestActReached' in data) {
       const m = data as MetaState;
+      const rs = m.runStats;
       this.meta = {
         unlockedCards: Array.isArray(m.unlockedCards) ? m.unlockedCards : [],
         unlockedRelics: Array.isArray(m.unlockedRelics) ? m.unlockedRelics : [],
         highestActReached: typeof m.highestActReached === 'number' ? m.highestActReached : 0,
+        runStats: rs && typeof rs.combatsWon === 'number' && typeof rs.goldSpent === 'number'
+          ? { combatsWon: rs.combatsWon, goldSpent: rs.goldSpent }
+          : { combatsWon: 0, goldSpent: 0 },
       };
     }
   }
@@ -233,9 +273,9 @@ export class GameBridgeService {
     return false;
   }
 
-  playCard(cardId: string, target?: number): void {
+  playCard(cardId: string, target?: number, handIndex?: number): void {
     if (!this.state || !this.cardsMap) return;
-    this.state = enginePlayCard(this.state, cardId, target ?? 0, this.cardsMap);
+    this.state = enginePlayCard(this.state, cardId, target ?? 0, this.cardsMap, handIndex);
     this.maybeHandleCombatWin();
   }
 
@@ -256,21 +296,51 @@ export class GameBridgeService {
     return engineGetAvailableNextNodes(this.state);
   }
 
+  /** Merge act shop pool with meta unlocks; exclude curse cards from shop. */
+  private getMergedShopPool(actKey: string): ShopPoolConfig | undefined {
+    const base = this.shopPoolsByAct[actKey];
+    if (!base) return undefined;
+    const rawCards = [...new Set([...(base.cards ?? []), ...this.meta.unlockedCards])];
+    const cards = this.cardsMap ? rawCards.filter((id) => !this.cardsMap!.get(id)?.isCurse) : rawCards;
+    const relics = [...new Set([...(base.relics ?? []), ...this.meta.unlockedRelics])];
+    return { ...base, cards, relics };
+  }
+
+  /** Event pool for current act: events with no act or matching act. */
+  private getEventPoolForAct(act: number): EventDef[] {
+    return (this.eventPool ?? []).filter((e) => e.act == null || e.act === act);
+  }
+
+  /** Reward card pool for current act: act pool + unlocked, only IDs that exist in cardsMap and are not curses. */
+  private getRewardCardPoolForAct(actKey: string): string[] {
+    const base = this.shopPoolsByAct[actKey]?.cards ?? [];
+    const merged = [...new Set([...base, ...this.meta.unlockedCards])];
+    if (!this.cardsMap) return merged;
+    return merged.filter((id) => {
+      const def = this.cardsMap!.get(id);
+      return def && !def.isCurse;
+    });
+  }
+
   chooseNode(nodeId: string): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs || !this.encountersMap || !this.mapConfig) return;
     const actKey = `act${this.state.act ?? 1}`;
-    const actConfig = this.mapConfig[actKey] as { encounterPool?: string[]; bossEncounter?: string } | undefined;
+    const actConfig = this.mapConfig[actKey] as { encounterPool?: string[]; eliteEncounterPool?: string[]; bossEncounter?: string } | undefined;
     let encounterId: string | null = null;
     if (this.state.map) {
       const node = engineGetNodeById(this.state.map, nodeId);
       if (node?.type === 'boss' && actConfig?.bossEncounter) {
         encounterId = actConfig.bossEncounter;
+      } else if (node?.type === 'elite' && actConfig?.eliteEncounterPool?.length) {
+        const pool = actConfig.eliteEncounterPool;
+        encounterId = pool[Math.floor(Math.random() * pool.length)];
       } else if ((node?.type === 'combat' || node?.type === 'elite') && actConfig?.encounterPool?.length) {
         const pool = actConfig.encounterPool;
         encounterId = pool[Math.floor(Math.random() * pool.length)];
       }
     }
-    const shopPool = this.shopPoolsByAct[actKey];
+    const shopPool = this.getMergedShopPool(actKey);
+    const eventPool = this.getEventPoolForAct(this.state.act ?? 1);
     let next = engineChooseNode(
       this.state,
       nodeId,
@@ -278,7 +348,7 @@ export class GameBridgeService {
       this.cardsMap,
       this.enemyDefs,
       this.encountersMap,
-      this.eventPool ?? [],
+      eventPool,
       shopPool
     );
     if (next.runPhase === 'combat' && this.relicDefs) {
@@ -308,17 +378,44 @@ export class GameBridgeService {
 
   purchaseCard(cardId: string): void {
     if (!this.state) return;
+    const price = this.state.shopState?.cardPrices?.[cardId] ?? 0;
     this.state = enginePurchaseCard(this.state, cardId);
+    if (price > 0) {
+      this.meta = {
+        ...this.meta,
+        runStats: { combatsWon: this.meta.runStats?.combatsWon ?? 0, goldSpent: (this.meta.runStats?.goldSpent ?? 0) + price },
+      };
+      this.saveMeta();
+    }
   }
 
   purchaseRelic(relicId: string): void {
     if (!this.state) return;
+    const price = this.state.shopState?.relicPrices?.[relicId] ?? 0;
     this.state = enginePurchaseRelic(this.state, relicId);
+    if (price > 0) {
+      this.meta = {
+        ...this.meta,
+        runStats: { combatsWon: this.meta.runStats?.combatsWon ?? 0, goldSpent: (this.meta.runStats?.goldSpent ?? 0) + price },
+      };
+      this.saveMeta();
+    }
   }
 
   advanceToNextAct(): void {
     if (!this.state || !this.mapConfig) return;
+    const previousAct = this.state.act ?? 1;
     this.state = engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, import('../../engine/map/mapGenerator').ActConfig & Record<string, unknown>>);
+    const newAct = this.state.act ?? 1;
+    if (newAct === 2 && previousAct === 1 && this.meta.highestActReached < 2) {
+      for (const id of UNLOCK_ON_ACT2_CARDS) {
+        if (!this.meta.unlockedCards.includes(id)) this.meta.unlockedCards = [...this.meta.unlockedCards, id];
+      }
+      for (const id of UNLOCK_ON_ACT2_RELICS) {
+        if (!this.meta.unlockedRelics.includes(id)) this.meta.unlockedRelics = [...this.meta.unlockedRelics, id];
+      }
+      this.saveMeta();
+    }
   }
 
   getRewardChoices(): string[] {
@@ -341,7 +438,7 @@ export class GameBridgeService {
   }
 
   private maybeHandleCombatWin(): void {
-    if (!this.state || !this.rewardCardPool) return;
+    if (!this.state) return;
     if (this.state.combatResult !== 'win' || this.state.runPhase !== 'combat') return;
     if (engineIsBossNode(this.state)) {
       const runPhase = engineGetRunPhaseAfterBossWin(this.state);
@@ -358,8 +455,21 @@ export class GameBridgeService {
         this.meta = { ...this.meta, highestActReached: act };
         this.saveMeta();
       }
+      if (runPhase === 'victory') {
+        if (!this.meta.unlockedRelics.includes(UNLOCK_ON_VICTORY_RELIC)) {
+          this.meta = { ...this.meta, unlockedRelics: [...this.meta.unlockedRelics, UNLOCK_ON_VICTORY_RELIC] };
+          this.saveMeta();
+        }
+      }
     } else {
-      this.state = engineAfterCombatWin(this.state, this.rewardCardPool);
+      const actKey = `act${this.state.act ?? 1}`;
+      const rewardPool = this.getRewardCardPoolForAct(actKey);
+      this.state = engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []));
+      this.meta = {
+        ...this.meta,
+        runStats: { combatsWon: (this.meta.runStats?.combatsWon ?? 0) + 1, goldSpent: this.meta.runStats?.goldSpent ?? 0 },
+      };
+      this.saveMeta();
     }
   }
 }

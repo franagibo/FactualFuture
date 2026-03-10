@@ -58,6 +58,7 @@ export function startRun(
     currentNodeId: null,
     gold: 0,
     relics: [],
+    potions: [],
     floor: 0,
     act: 1,
   };
@@ -217,7 +218,10 @@ export interface EventOutcome {
   cardId?: string;
   amount?: number;
   relicId?: string;
+  potionId?: string;
 }
+
+const MAX_POTIONS = 3;
 
 function applyEventOutcome(state: GameState, outcome: unknown): GameState {
   if (outcome == null || typeof outcome !== 'object' || !('type' in outcome)) return state;
@@ -251,6 +255,12 @@ function applyEventOutcome(state: GameState, outcome: unknown): GameState {
       break;
     case 'curse':
       if (o.cardId) next = { ...next, deck: [...(next.deck ?? []), o.cardId] };
+      break;
+    case 'addPotion':
+      if (o.potionId) {
+        const current = next.potions ?? [];
+        if (current.length < MAX_POTIONS) next = { ...next, potions: [...current, o.potionId] };
+      }
       break;
     case 'nothing':
     default:
@@ -427,4 +437,52 @@ export function restRemoveCard(state: GameState, cardId: string): GameState {
     runPhase: 'map',
     deck,
   };
+}
+
+/** Potion def for usePotion (effect only). */
+export interface PotionEffectDef {
+  effect: { type: string; value: number };
+}
+
+/**
+ * Use one potion in combat: apply effect, remove one instance from potions.
+ * For damage potions, targetEnemyIndex must be a valid alive enemy.
+ */
+export function usePotion(
+  state: GameState,
+  potionId: string,
+  targetEnemyIndex: number | null,
+  potionDef: PotionEffectDef | undefined
+): GameState {
+  if (state.runPhase !== 'combat' || state.phase !== 'player' || state.combatResult) return state;
+  const list = state.potions ?? [];
+  const idx = list.indexOf(potionId);
+  if (idx === -1 || !potionDef) return state;
+
+  const effect = potionDef.effect;
+  let next: GameState = { ...state, potions: list.filter((_, i) => i !== idx) };
+
+  if (effect.type === 'heal') {
+    const maxHp = next.playerMaxHp ?? next.playerHp;
+    next = { ...next, playerHp: Math.min(maxHp, next.playerHp + effect.value) };
+  } else if (effect.type === 'block') {
+    next = { ...next, playerBlock: next.playerBlock + effect.value };
+  } else if (effect.type === 'damage' && targetEnemyIndex != null && next.enemies[targetEnemyIndex]?.hp > 0) {
+    const enemy = next.enemies[targetEnemyIndex];
+    const vuln = (enemy as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
+    const dmg = Math.floor(effect.value * (vuln > 0 ? 1.5 : 1));
+    const blockReduce = Math.min(enemy.block, dmg);
+    const hpReduce = dmg - blockReduce;
+    const enemies = [...next.enemies];
+    enemies[targetEnemyIndex] = {
+      ...enemy,
+      block: enemy.block - blockReduce,
+      hp: Math.max(0, enemy.hp - hpReduce),
+    };
+    next = { ...next, enemies };
+    const allDead = enemies.every((e) => e.hp <= 0);
+    if (allDead) next = { ...next, combatResult: 'win' };
+  }
+
+  return next;
 }

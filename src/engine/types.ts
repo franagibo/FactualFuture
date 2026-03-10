@@ -40,6 +40,10 @@ export interface EnemyState {
   intent: EnemyIntent | null;
   /** B17: Vulnerable stacks; damage taken multiplied by 1.5, decay by 1 per turn. */
   vulnerableStacks?: number;
+  /** Weak stacks; damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
+  weakStacks?: number;
+  /** Display scale: small (0.8), medium (1), large (1.2). From EnemyDef. */
+  size?: 'small' | 'medium' | 'large';
 }
 
 export interface GameState {
@@ -80,11 +84,20 @@ export interface GameState {
   };
   /** Current act (1-based). Used for multi-act runs. */
   act?: number;
+  /** Potion IDs (max 3). One-time use in combat. */
+  potions?: string[];
+  /** Frail stacks on player; damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
+  frailStacks?: number;
 }
 
-/** Meta progression (unlocks) stored separately from run. */
+/** Meta progression (unlocks) and run statistics, stored separately from run. */
 export interface MetaState {
   unlockedCards: string[];
   unlockedRelics: string[];
   highestActReached: number;
+  /** Lifetime / aggregate stats (optional). */
+  runStats?: {
+    combatsWon: number;
+    goldSpent: number;
+  };
 }

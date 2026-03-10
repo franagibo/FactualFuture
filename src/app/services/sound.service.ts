@@ -7,6 +7,9 @@ const PATHS = {
   block: `${AUDIO_BASE}block.mp3`,
   turnStart: `${AUDIO_BASE}turn-start.mp3`,
   turnEnd: `${AUDIO_BASE}turn-end.mp3`,
+  victory: `${AUDIO_BASE}victory.mp3`,
+  defeat: `${AUDIO_BASE}defeat.mp3`,
+  combatStart: `${AUDIO_BASE}combat-start.mp3`,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -62,5 +65,17 @@ export class SoundService {
 
   playTurnEnd(): void {
     this.play(PATHS.turnEnd);
+  }
+
+  playVictory(): void {
+    this.play(PATHS.victory);
+  }
+
+  playDefeat(): void {
+    this.play(PATHS.defeat);
+  }
+
+  playCombatStart(): void {
+    this.play(PATHS.combatStart);
   }
 }
