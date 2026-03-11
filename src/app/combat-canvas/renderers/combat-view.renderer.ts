@@ -4,7 +4,7 @@
  */
 import * as PIXI from 'pixi.js';
 import type { GameState, EnemyIntent } from '../../../engine/types';
-import { COMBAT_LAYOUT } from '../constants/combat-layout.constants';
+import { COMBAT_LAYOUT, getCombatSlotBounds, getCardArtRect } from '../constants/combat-layout.constants';
 
 const INTENT_ICON_SIZE = 16;
 
@@ -84,6 +84,8 @@ export interface CombatViewContext {
   getCombatBgTexture?: () => PIXI.Texture | null;
   getPlayerTexture?: () => PIXI.Texture | null;
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
+  /** Optional card art texture lookup; if absent or null, a solid placeholder is shown. */
+  getCardArtTexture?: (cardId: string) => PIXI.Texture | null;
   /** B15: Per-card hover influence 0..1 for smooth lift/scale; same length as hand. If absent, use binary from hoveredCardIndex/selectedCardId. */
   hoverLerp?: number[];
   /** When true, player sprite shows shield animation instead of static texture. */
@@ -92,23 +94,35 @@ export interface CombatViewContext {
   /** When true, player sprite shows shooting animation (e.g. for strike card). */
   shootingAnimationPlaying?: boolean;
   getShootingTexture?: () => PIXI.Texture | null;
+  /** Text scale for card and overlay fonts (default 1). */
+  textScale?: number;
+  /** When 'off', floating numbers and hit flashes are not drawn. */
+  vfxIntensity?: 'full' | 'reduced' | 'off';
 }
 
 const L = COMBAT_LAYOUT;
 
+function scaledFontSize(base: number, ctx: CombatViewContext): number {
+  const scale = ctx.textScale ?? 1;
+  return Math.round(base * scale);
+}
+
 /** B13: Draw combat background (sprite or dark rect) at zIndex 0. */
 function drawCombatBackground(ctx: CombatViewContext): void {
   const { stage, w, h } = ctx;
+  const bgBounds = getCombatSlotBounds('combatBg', w, h);
   const tex = ctx.getCombatBgTexture?.() ?? null;
   if (tex) {
     const bg = new PIXI.Sprite(tex);
-    bg.width = w;
-    bg.height = h;
+    bg.x = bgBounds.x;
+    bg.y = bgBounds.y;
+    bg.width = bgBounds.width;
+    bg.height = bgBounds.height;
     bg.zIndex = 0;
     stage.addChild(bg);
   } else {
     const bg = new PIXI.Graphics();
-    bg.rect(0, 0, w, h).fill(0x1a1a2e);
+    bg.rect(bgBounds.x, bgBounds.y, bgBounds.width, bgBounds.height).fill(0x1a1a2e);
     bg.zIndex = 0;
     stage.addChild(bg);
   }
@@ -118,14 +132,13 @@ function drawCombatBackground(ctx: CombatViewContext): void {
 /** Draws the player character (sprite if available, else placeholder Graphics) and block-gain flash if any. */
 function drawPlayerArea(ctx: CombatViewContext): void {
   const { state, stage, w, h } = ctx;
-  const playerZoneX = w * L.playerZoneXRatio;
-  const baselineBottom = h * L.baselineBottomRatio;
-  const playerPlaceholderW = L.playerPlaceholderW;
-  const playerPlaceholderH = L.playerPlaceholderH;
+  const playerBounds = getCombatSlotBounds('player', w, h);
+  const playerPlaceholderW = playerBounds.width || L.playerPlaceholderW;
+  const playerPlaceholderH = playerBounds.height || L.playerPlaceholderH;
 
   const playerContainer = new PIXI.Container();
-  playerContainer.x = playerZoneX - playerPlaceholderW / 2;
-  playerContainer.y = baselineBottom - playerPlaceholderH;
+  playerContainer.x = playerBounds.x;
+  playerContainer.y = playerBounds.y;
   const shootingTex = ctx.shootingAnimationPlaying && ctx.getShootingTexture?.() ? ctx.getShootingTexture() : null;
   const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
   const playerTex = shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
@@ -145,7 +158,7 @@ function drawPlayerArea(ctx: CombatViewContext): void {
     playerHead.circle(50, 28, 22).fill({ color: 0x4a5a7a }).stroke({ width: 2, color: 0x6a7a9a });
     playerContainer.addChild(playerHead);
   }
-  const showBlockFlash = ctx.floatingNumbers.some((f) => f.type === 'block');
+  const showBlockFlash = ctx.vfxIntensity !== 'off' && ctx.floatingNumbers.some((f) => f.type === 'block');
   if (showBlockFlash) {
     const blockOverlay = new PIXI.Graphics();
     blockOverlay.roundRect(0, 0, playerPlaceholderW, playerPlaceholderH, L.enemyCornerRadius).fill({ color: 0x44ff88, alpha: 0.3 });
@@ -157,15 +170,14 @@ function drawPlayerArea(ctx: CombatViewContext): void {
 /** Draws HP, block, and energy text below the player character (centered). */
 function drawHpText(ctx: CombatViewContext): void {
   const { state, stage, w, h } = ctx;
-  const playerZoneX = w * L.playerZoneXRatio;
-  const baselineBottom = h * L.baselineBottomRatio;
+  const hpBounds = getCombatSlotBounds('hpBlockEnergy', w, h);
   const hpText = new PIXI.Text({
     text: `HP: ${state.playerHp}/${state.playerMaxHp}  Block: ${state.playerBlock}  Energy: ${state.energy}/${state.maxEnergy}`,
-    style: { fontFamily: 'system-ui', fontSize: 18, fill: 0xeeeeee },
+    style: { fontFamily: 'system-ui', fontSize: scaledFontSize(18, ctx), fill: 0xeeeeee },
   });
   hpText.anchor.set(0.5, 0);
-  hpText.x = playerZoneX;
-  hpText.y = baselineBottom + 8;
+  hpText.x = hpBounds.x;
+  hpText.y = hpBounds.y;
   stage.addChild(hpText);
 }
 
@@ -229,7 +241,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     container.addChild(costBg);
     const costText = new PIXI.Text({
       text: String(cost),
-      style: { fontFamily: 'system-ui', fontSize: 14, fill: costColor },
+      style: { fontFamily: 'system-ui', fontSize: scaledFontSize(14, ctx), fill: costColor },
     });
     costText.anchor.set(0.5, 0.5);
     costText.x = costRadius + 6;
@@ -240,26 +252,44 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const nameDisplay = name.length > 12 ? name.slice(0, 12) + '…' : name;
     const nameText = new PIXI.Text({
       text: nameDisplay,
-      style: { fontFamily: 'system-ui', fontSize: 12, fill: 0xcccccc },
+      style: { fontFamily: 'system-ui', fontSize: scaledFontSize(12, ctx), fill: 0xeeeeee, fontWeight: 'bold' },
     });
     nameText.x = 8;
     nameText.y = 28;
     container.addChild(nameText);
 
-    const artTop = 48;
-    const artHeight = 50;
-    const artArea = new PIXI.Graphics();
-    artArea.roundRect(8, artTop, cardWidth - 16, artHeight, 4).fill({ color: 0x1e1e32 });
-    container.addChild(artArea);
+    const artRect = getCardArtRect(cardWidth, cardHeight);
+    const artBg = new PIXI.Graphics();
+    artBg.roundRect(artRect.x, artRect.y, artRect.width, artRect.height, 4).fill({ color: 0x1e1e32 });
+    container.addChild(artBg);
+    const artTex = ctx.getCardArtTexture?.(cardId) ?? null;
+    if (artTex) {
+      const artSprite = new PIXI.Sprite(artTex);
+      artSprite.x = artRect.x;
+      artSprite.y = artRect.y;
+      artSprite.width = artRect.width;
+      artSprite.height = artRect.height;
+      container.addChild(artSprite);
+    }
 
     const effectDesc = ctx.getCardEffectDescription(cardId);
-    const effectText = new PIXI.Text({
-      text: effectDesc.slice(0, 22) + (effectDesc.length > 22 ? '…' : ''),
-      style: { fontFamily: 'system-ui', fontSize: 10, fill: 0xaaaaaa },
-    });
-    effectText.x = 8;
-    effectText.y = cardHeight - 22;
-    container.addChild(effectText);
+    if (effectDesc) {
+      const fs = scaledFontSize(10, ctx);
+      const effectText = new PIXI.Text({
+        text: effectDesc,
+        style: {
+          fontFamily: 'system-ui',
+          fontSize: fs,
+          fill: 0xcccccc,
+          wordWrap: true,
+          wordWrapWidth: cardWidth - 16,
+          lineHeight: Math.round(fs * 1.2),
+        },
+      });
+      effectText.x = 8;
+      effectText.y = cardHeight - 40;
+      container.addChild(effectText);
+    }
 
     container.pivot.set(cardWidth / 2, cardHeight);
     container.x = cardX;
@@ -267,7 +297,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     container.rotation = rot;
     container.scale.set(1 + lerp * (hoverScale - 1));
     container.zIndex = applyHover ? 100 : i;
-    if (!playable) container.alpha = 0.6;
+    container.alpha = playable ? (applyHover ? 1 : 0.92) : 0.6;
 
     container.eventMode = 'static';
     container.cursor = playable ? 'pointer' : 'not-allowed';
@@ -353,29 +383,30 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       container.addChild(highlight);
     }
     const wasJustHit = ctx.floatingNumbers.some((f) => f.type === 'damage' && f.enemyIndex === i);
+    const vfxOn = ctx.vfxIntensity !== 'off';
     const baseEnemyX = ex + i * (enemyPlaceholderW + enemyGap) - enemyPlaceholderW / 2;
     const baseEnemyY = enemyStartY;
-    if (wasJustHit) {
+    if (wasJustHit && vfxOn) {
       const hitOverlay = new PIXI.Graphics();
       hitOverlay.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius).fill({ color: 0xff4444, alpha: 0.35 });
       container.addChild(hitOverlay);
     }
-    const hitPop = wasJustHit ? 1.06 : 1;
-    const scale = sizeScale(e.size) * (isHoveredEnemy ? 1.05 : 1) * hitPop;
+    const hitPop = wasJustHit && vfxOn ? 1.06 : 1;
+    const scale = sizeScale(e.size) * (isHoveredEnemy ? 1.06 : 1) * hitPop;
     container.pivot.set(enemyPlaceholderW / 2, enemyPlaceholderH / 2);
     container.x = baseEnemyX + enemyPlaceholderW / 2;
     container.y = baseEnemyY + enemyPlaceholderH / 2;
     container.scale.set(scale);
     const nameT = new PIXI.Text({
       text: e.name,
-      style: { fontFamily: 'system-ui', fontSize: 13, fill: 0xeeeeee },
+      style: { fontFamily: 'system-ui', fontSize: scaledFontSize(13, ctx), fill: 0xeeeeee },
     });
     nameT.x = 8;
     nameT.y = 8;
     container.addChild(nameT);
     const hpT = new PIXI.Text({
       text: `HP: ${e.hp}/${e.maxHp}  Block: ${e.block}`,
-      style: { fontFamily: 'system-ui', fontSize: 11, fill: 0xcccccc },
+      style: { fontFamily: 'system-ui', fontSize: scaledFontSize(11, ctx), fill: 0xcccccc },
     });
     hpT.x = 8;
     hpT.y = 26;
@@ -395,7 +426,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       container.addChild(vBg);
       const vText = new PIXI.Text({
         text: `Vuln ${vulnerableStacks}`,
-        style: { fontFamily: 'system-ui', fontSize: 9, fill: 0xffffff, fontWeight: 'bold' },
+        style: { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' },
       });
       vText.x = enemyPlaceholderW - vW - 2;
       vText.y = statusY + 1;
@@ -409,7 +440,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       container.addChild(wBg);
       const wText = new PIXI.Text({
         text: `Weak ${weakStacks}`,
-        style: { fontFamily: 'system-ui', fontSize: 9, fill: 0xffffff, fontWeight: 'bold' },
+        style: { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' },
       });
       wText.x = enemyPlaceholderW - wW - 2;
       wText.y = statusY + 1;
@@ -491,15 +522,20 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
   stage.addChild(arrow);
 }
 
-/** Draws floating damage (red) and block (green) numbers at their positions. */
+/** Draws floating damage (red) and block (green) numbers at their positions. Skipped when vfxIntensity is 'off'. */
 function drawFloatingNumbers(ctx: CombatViewContext): void {
+  if (ctx.vfxIntensity === 'off') return;
   const { stage } = ctx;
+  const scale = ctx.vfxIntensity === 'reduced' ? 0.85 : 1;
+  const baseDmg = scaledFontSize(22, ctx);
+  const baseBlock = scaledFontSize(18, ctx);
   for (const fn of ctx.floatingNumbers) {
+    const fontSize = (fn.type === 'damage' ? baseDmg : baseBlock) * scale;
     const text = new PIXI.Text({
       text: fn.type === 'damage' ? `-${fn.value}` : `+${fn.value}`,
       style: {
         fontFamily: 'system-ui',
-        fontSize: fn.type === 'damage' ? 22 : 18,
+        fontSize: Math.round(fontSize),
         fill: fn.type === 'damage' ? 0xff6666 : 0x66ff88,
         fontWeight: 'bold',
       },
@@ -520,7 +556,7 @@ function drawEnemyTurnBanner(ctx: CombatViewContext): void {
   stage.addChild(banner);
   const turnText = new PIXI.Text({
     text: 'Enemy turn',
-    style: { fontFamily: 'system-ui', fontSize: 36, fill: 0xffcc44, fontWeight: 'bold' },
+    style: { fontFamily: 'system-ui', fontSize: scaledFontSize(36, ctx), fill: 0xffcc44, fontWeight: 'bold' },
   });
   turnText.anchor.set(0.5, 0.5);
   turnText.x = w / 2;

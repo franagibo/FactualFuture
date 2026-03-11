@@ -4,6 +4,7 @@ import type { EnemyDef, EncounterDef, EventDef, PotionDef } from './loadData';
 import { generateMap, type ActConfig } from './map/mapGenerator';
 import { startCombatFromRunState } from './combat';
 import { drawCards, runEffects } from './effectRunner';
+import { rngPickRandom, rngRandomInt, rngShuffle } from './rng';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -22,21 +23,6 @@ export interface StartRunOptions {
   characterId?: string;
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-function pickRandom<T>(arr: T[], count: number): T[] {
-  const copy = [...arr];
-  shuffle(copy);
-  return copy.slice(0, Math.min(count, copy.length));
-}
-
 /**
  * Create initial run state: map generated, runPhase='map', deck shuffled, at map start.
  * @param options.starterDeck - Card IDs for initial deck (default: Gunboy-style starter).
@@ -49,7 +35,7 @@ export function startRun(
 ): GameState {
   const map = generateMap(seed, actConfig);
   const starterDeck = options?.starterDeck?.length ? options.starterDeck : DEFAULT_STARTER_DECK;
-  const deck = shuffle([...starterDeck]);
+  const deck = rngShuffle([...starterDeck]);
 
   return {
     playerHp: INITIAL_PLAYER_HP,
@@ -121,7 +107,7 @@ export interface ShopPoolConfig {
 }
 
 function randomInRange(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
+  return rngRandomInt(min, max);
 }
 
 /** Enter shop: set runPhase to 'shop'. If pool provided, fill shopState with random cards/relics and prices. */
@@ -133,8 +119,8 @@ export function enterShop(state: GameState, pool?: ShopPoolConfig): GameState {
     relicPrices: {},
   };
   if (pool) {
-    const cards = pickRandom(pool.cards, Math.min(pool.cardCount, pool.cards.length));
-    const relics = pickRandom(pool.relics, Math.min(pool.relicCount, pool.relics.length));
+    const cards = rngPickRandom(pool.cards, Math.min(pool.cardCount, pool.cards.length));
+    const relics = rngPickRandom(pool.relics, Math.min(pool.relicCount, pool.relics.length));
     for (const id of cards) {
       shopState.cardIds.push(id);
       shopState.cardPrices[id] = randomInRange(pool.cardPriceMin, pool.cardPriceMax);
@@ -214,7 +200,7 @@ const STUB_EVENT: EventDef = {
 /** Enter event: pick one event from pool (or stub), set runPhase and eventState. */
 export function enterEvent(state: GameState, eventPool: EventDef[]): GameState {
   const pool = eventPool.length > 0 ? eventPool : [STUB_EVENT];
-  const event = pickRandom(pool, 1)[0];
+  const event = rngPickRandom(pool, 1)[0];
   return {
     ...state,
     runPhase: 'event',
@@ -319,6 +305,8 @@ export function advanceToNextAct(
     shop: raw.shop,
     event: raw.event,
     boss: raw.boss,
+    floorCount: raw.floorCount,
+    typeWeights: raw.typeWeights,
   };
   const seed = (state.floor ?? 0) * 1000 + nextAct * 12345 + (state.turnNumber ?? 0);
   const map = generateMap(seed, actConfig);
@@ -383,8 +371,9 @@ export function chooseNode(
   }
 }
 
+/** Gold granted per normal/elite combat win. Tune with shop prices (mapConfig / shopPools) for Act 1 economy. */
 const GOLD_PER_COMBAT = 10;
-/** Number of card choices offered after combat; drawn from the character's full card pool. */
+/** Number of card choices offered after combat; drawn at random from the character's reward pool. */
 const REWARD_CARD_COUNT = 3;
 
 /** Rarity weights when offering a potion: common 65%, uncommon 25%, rare 10%. */
@@ -398,12 +387,12 @@ export function pickRandomPotionByRarity(potions: Map<string, PotionDef>): strin
   const list = Array.from(potions.values());
   if (list.length === 0) return null;
   const byRarity = { common: list.filter((p) => p.rarity === 'common'), uncommon: list.filter((p) => p.rarity === 'uncommon'), rare: list.filter((p) => p.rarity === 'rare') };
-  const r = Math.random() * 100;
+  const r = rngRandomInt(0, 99);
   let pool: PotionDef[] = byRarity.rare;
   if (r < POTION_RARITY_WEIGHTS.common) pool = byRarity.common;
   else if (r < POTION_RARITY_WEIGHTS.common + POTION_RARITY_WEIGHTS.uncommon) pool = byRarity.uncommon;
   if (pool.length === 0) pool = list;
-  return pool[Math.floor(Math.random() * pool.length)].id;
+  return pool[rngRandomInt(0, pool.length - 1)].id;
 }
 
 /** Remove all status cards (Burn, Dazed, etc.) from deck, hand, and discard. Status cards are combat-only. */
@@ -426,7 +415,7 @@ export function afterCombatWin(
   cardsMap: Map<string, CardDef>
 ): GameState {
   const stripped = stripStatusCards(state, cardsMap);
-  const choices = pickRandom(rewardCardPool, REWARD_CARD_COUNT);
+  const choices = rngPickRandom(rewardCardPool, REWARD_CARD_COUNT);
   return {
     ...stripped,
     runPhase: 'reward',
@@ -453,10 +442,11 @@ export function chooseCardReward(state: GameState, cardId: string): GameState {
   };
 }
 
+/** Rest site heal: fraction of max HP restored. Tune for Act 1 pacing. */
 const REST_HEAL_PERCENT = 0.3;
 
 /**
- * Rest site: heal 30% max HP, then return to map.
+ * Rest site: heal REST_HEAL_PERCENT of max HP, then return to map.
  */
 export function restHeal(state: GameState): GameState {
   if (state.runPhase !== 'rest') return state;
@@ -511,7 +501,7 @@ export function playTopCards(
   let deck = [...state.deck];
   let discard = [...state.discard];
   if (deck.length < count) {
-    const shuffled = shuffle([...deck, ...discard]);
+    const shuffled = rngShuffle([...deck, ...discard]);
     deck = shuffled;
     discard = [];
   }

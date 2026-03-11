@@ -2,6 +2,7 @@ import type { GameState, EnemyState, EnemyIntent } from './types';
 import type { CardDef } from './cardDef';
 import type { EnemyDef, EncounterDef, EnemyTrigger } from './loadData';
 import { runEffects, discardHandAndDraw } from './effectRunner';
+import { rngShuffle } from './rng';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -14,15 +15,6 @@ const DEFAULT_STARTER_DECK_IDS = [
   'defend', 'defend', 'defend', 'defend',
   'bash',
 ];
-
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
 
 function pickIntent(def: EnemyDef): EnemyIntent {
   const total = def.intents.reduce((s, i) => s + i.weight, 0);
@@ -139,7 +131,7 @@ export function createInitialState(
   }
 
   const deckIds = starterDeck?.length ? starterDeck : DEFAULT_STARTER_DECK_IDS;
-  const deck = shuffle([...deckIds]);
+  const deck = rngShuffle([...deckIds]);
   const hand: string[] = [];
   const restDeck = [...deck];
   for (let i = 0; i < HAND_SIZE_START && restDeck.length > 0; i++) {
@@ -193,7 +185,7 @@ export function startCombatFromRunState(
   const encounter = encountersMap.get(encounterId);
   if (!encounter) return state;
 
-  const fullDeck = shuffle([...state.deck, ...state.discard, ...state.hand]);
+  const fullDeck = rngShuffle([...state.deck, ...state.discard, ...state.hand]);
   const hand: string[] = [];
   const restDeck = [...fullDeck];
   for (let i = 0; i < HAND_SIZE_START && restDeck.length > 0; i++) {

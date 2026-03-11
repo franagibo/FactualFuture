@@ -13,12 +13,13 @@ import {
 import { Router } from '@angular/router';
 import { CombatAssetsService } from '../services/combat-assets.service';
 import { GameBridgeService } from '../services/game-bridge.service';
+import { GameSettingsService } from '../services/game-settings.service';
 import { MapAssetsService } from '../services/map-assets.service';
 import { SoundService } from '../services/sound.service';
 import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
-import { COMBAT_LAYOUT } from './constants/combat-layout.constants';
+import { COMBAT_LAYOUT, getEnemyCenter, getPlayerCenter } from './constants/combat-layout.constants';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
 import { drawCombatView, type CombatViewContext } from './renderers/combat-view.renderer';
@@ -69,6 +70,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   shopStateSignal = signal<GameState['shopState']>(undefined);
   eventStateSignal = signal<GameState['eventState']>(undefined);
   restRemovableCardsSignal = signal<string[]>([]);
+  /** Short-lived feedback message (e.g. "New card: Overdrive") shown in overlay. */
+  feedbackMessage = signal<string | null>(null);
+  /** When set, reward panel shows chosen state before transitioning; used for micro-animation. */
+  chosenRewardCardId: string | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private hoverLerpTicker: ((ticker: PIXI.Ticker) => void) | null = null;
   private shieldTicker: (() => void) | null = null;
@@ -99,6 +104,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     private bridge: GameBridgeService,
     private mapAssets: MapAssetsService,
     private combatAssets: CombatAssetsService,
+    public gameSettings: GameSettingsService,
     public sound: SoundService,
     private router: Router,
     private cdr: ChangeDetectorRef,
@@ -168,6 +174,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   closePauseSettings(): void {
     this.showPauseSettings = false;
+    this.redraw(); // apply any changed VFX/text/animation settings
     this.requestTemplateUpdate();
   }
 
@@ -243,6 +250,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.syncOverlaySignals(state);
     this.requestTemplateUpdate();
 
+    // Preload card art only for current character's pool to keep load time and memory reasonable.
+    const cardPoolIds = this.bridge.getCardPoolIdsForPreload();
+    if (cardPoolIds.length) {
+      this.combatAssets.preloadCardArt(cardPoolIds).catch(() => {});
+    }
+    this.combatAssets.loadGlobalCombatAssets().catch(() => {});
+
     const host = this.canvasHostRef.nativeElement;
     this.app = new PIXI.Application();
     await this.app.init({
@@ -297,12 +311,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.hoverLerpTicker = (_ticker: PIXI.Ticker) => this.zone.runOutsideAngular(runTickerOutsideZone);
     this.zone.runOutsideAngular(() => this.app!.ticker.add(this.hoverLerpTicker!));
     this.redraw();
-    // Defer a redraw until after layout: host/canvas may have 0 or wrong size on first paint.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (this.app) this.redraw();
-      });
-    });
+    this.scheduleCanvasLayoutFix({ scrollToBottom: this._runPhase === 'map' });
     if (this._runPhase === 'map') {
       this.mapAssets.loadMapAssets().then(() => {
         requestAnimationFrame(() => this.redraw());
@@ -310,7 +319,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Schedules a paint outside Angular (coalesced). Use requestTemplateUpdate() after when the overlay must update. */
+  /** Schedules a paint outside Angular (coalesced). Use requestTemplateUpdate() only when overlay state (runPhase, rewards, potions, gold) actually changed. */
   private redraw(): void {
     if (this.inRedraw) {
       this.redrawAgain = true;
@@ -322,6 +331,31 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         this.redrawAgain = false;
         requestAnimationFrame(() => this.redraw());
       }
+    });
+  }
+
+  /**
+   * Ensures map/canvas renders correctly after a phase or size change. Use when entering map (first time,
+   * from combat/reward/rest/shop/event) or after restart. Double rAF is needed: first frame lets Angular
+   * update layout (e.g. scroll area height); second lets Pixi resize and redraw with correct dimensions.
+   */
+  private scheduleCanvasLayoutFix(opts: { scrollToBottom?: boolean } = {}): void {
+    if (!this.app) return;
+    this.zone.run(() => this.cdr.detectChanges());
+    this.app.resize();
+    requestAnimationFrame(() => {
+      if (!this.app) return;
+      this.redraw();
+      requestAnimationFrame(() => {
+        if (!this.app) return;
+        this.zone.run(() => this.cdr.detectChanges());
+        this.app.resize();
+        this.redraw();
+        if (opts.scrollToBottom) {
+          const el = this.scrollAreaRef?.nativeElement;
+          if (el) el.scrollTop = el.scrollHeight;
+        }
+      });
     });
   }
 
@@ -413,32 +447,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       drawMapView(mapContext, state, stage, w, h, padding);
       this.requestTemplateUpdate();
       if (prevPhase !== 'map' && this._runPhase === 'map') {
-        requestAnimationFrame(() => {
-          const el = this.scrollAreaRef?.nativeElement;
-          if (el) el.scrollTop = el.scrollHeight;
-        });
-      }
-      // Apply same layout fix when exiting combat (to reward, map, etc.) so map/canvas render correctly.
-      if (prevPhase === 'combat' && this.app) {
-        this.zone.run(() => this.cdr.detectChanges());
-        this.app.resize();
-        requestAnimationFrame(() => {
-          if (this.app) this.redraw();
-          requestAnimationFrame(() => {
-            if (this.app) {
-              this.zone.run(() => this.cdr.detectChanges());
-              this.app.resize();
-              this.redraw();
-            }
-          });
-        });
+        this.scheduleCanvasLayoutFix({ scrollToBottom: true });
       }
       return;
     }
 
-    // Combat phase only: ensure combat assets loading, build context and delegate to combat renderer.
+    // Combat phase only: ensure combat assets loading (global + character + enemies), build context and delegate to combat renderer.
     if (this._runPhase !== 'combat') return;
-    this.combatAssets.loadCombatAssets();
+    const characterId = state.characterId ?? undefined;
+    const enemyIds = state.enemies.map((e) => e.id);
+    this.combatAssets.loadCombatAssets(characterId, enemyIds);
     const hand = state.hand;
     if (this.hoveredCardIndex != null && this.hoveredCardIndex >= hand.length) this.hoveredCardIndex = null;
 
@@ -475,7 +493,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
       getPlayerTexture: () => this.combatAssets.getPlayerTexture(),
       getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
+      getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
       hoverLerp: this.hoverLerp,
+      textScale: this.gameSettings.textScale(),
+      vfxIntensity: this.gameSettings.vfxIntensity(),
       shieldAnimationPlaying: this.shieldAnimationPlaying,
       getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
       shootingAnimationPlaying: this.shootingAnimationPlaying,
@@ -501,18 +522,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return def?.effects?.some((e) => e.type === 'block' && e.target === 'player') ?? false;
   }
 
-  /** If the card grants block, play shield animation on the player character. */
+  /** If the card grants block, play shield animation on the player character. Pixi-only; no overlay change. */
   private triggerShieldAnimationIfBlock(cardId: string): void {
     if (!this.cardHasBlockEffect(cardId)) return;
     this.shieldAnimationPlaying = true;
     this.ensurePlayerAnimationTicker();
     this.redraw();
-    this.requestTemplateUpdate();
     this.combatAssets.playShieldAnimation().then(() => {
       this.shieldAnimationPlaying = false;
       this.removePlayerAnimationTickerIfIdle();
       this.redraw();
-      this.requestTemplateUpdate();
     });
   }
 
@@ -521,18 +540,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return cardId === 'strike';
   }
 
-  /** If the card is Strike, play shooting animation on the player character. */
+  /** If the card is Strike, play shooting animation on the player character. Pixi-only; no overlay change. */
   private triggerShootingAnimationIfStrike(cardId: string): void {
     if (!this.cardIsStrike(cardId)) return;
     this.shootingAnimationPlaying = true;
     this.ensurePlayerAnimationTicker();
     this.redraw();
-    this.requestTemplateUpdate();
     this.combatAssets.playShootingAnimation().then(() => {
       this.shootingAnimationPlaying = false;
       this.removePlayerAnimationTickerIfIdle();
       this.redraw();
-      this.requestTemplateUpdate();
     });
   }
 
@@ -670,7 +687,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     flyCard.y = fromY;
     this.app.stage.addChild(flyCard);
 
-    const duration = 280; // ms
+    const speedMult = this.gameSettings.animationSpeedMultiplier();
+    const duration = Math.max(120, 280 / speedMult); // ms; clamp so it never gets too fast
     const startTime = performance.now();
     const tick = () => {
       const elapsed = performance.now() - startTime;
@@ -701,18 +719,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         }
         const blockGain = newState.playerBlock - oldState.playerBlock;
         if (blockGain > 0) {
-          const playerZoneX = w * L.playerZoneXRatio;
-          toAdd.push({ type: 'block', value: blockGain, x: playerZoneX, y: baselineBottom - L.playerPlaceholderH / 2, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
+          const playerCenter = getPlayerCenter(w, h);
+          toAdd.push({ type: 'block', value: blockGain, x: playerCenter.x, y: playerCenter.y, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
           this.sound.playBlock();
         }
         this.floatingNumbers = [...this.floatingNumbers, ...toAdd];
         this.redraw();
         this.requestTemplateUpdate();
         if (toAdd.length > 0) {
-          setTimeout(() => {
-            this.redraw();
-            this.requestTemplateUpdate();
-          }, 750);
+          setTimeout(() => this.redraw(), 750);
         }
       }
     };
@@ -744,11 +759,24 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   onRestart(): void {
     this.bridge.startRun();
     this.redraw();
+    this.requestTemplateUpdate();
+    this.scheduleCanvasLayoutFix({ scrollToBottom: true });
   }
 
   onChooseReward(cardId: string): void {
-    this.bridge.chooseReward(cardId);
-    this.redraw();
+    if (this.chosenRewardCardId != null) return; // already animating
+    this.chosenRewardCardId = cardId;
+    const cardName = this.getCardName(cardId);
+    this.feedbackMessage.set(`New card: ${cardName}`);
+    this.requestTemplateUpdate();
+    setTimeout(() => {
+      this.bridge.chooseReward(cardId);
+      this.chosenRewardCardId = null;
+      this.feedbackMessage.set(null);
+      this.redraw();
+      this.requestTemplateUpdate();
+      this.scheduleCanvasLayoutFix({ scrollToBottom: true });
+    }, 480);
   }
 
   onRestHeal(): void {

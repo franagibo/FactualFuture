@@ -19,7 +19,7 @@ import {
   advanceToNextAct as engineAdvanceToNextAct,
   usePotion as engineUsePotion,
   pickRandomPotionByRarity as enginePickRandomPotionByRarity,
-  type ShopPoolConfig,
+  type ShopPoolConfig
 } from '../../engine/run';
 import type { CharacterDef } from '../../engine/loadData';
 import { loadCharacters } from '../../engine/loadData';
@@ -85,6 +85,18 @@ export class GameBridgeService {
 
   getCardDef(cardId: string): CardDef | undefined {
     return this.cardsMap?.get(cardId);
+  }
+
+  /** All known card ids from loaded data (used for asset preloading). */
+  getAllCardIds(): string[] {
+    return this.cardsMap ? Array.from(this.cardsMap.keys()) : [];
+  }
+
+  /** Card ids to preload for current run (current character pool). Use for card art to avoid loading every card. */
+  getCardPoolIdsForPreload(): string[] {
+    if (!this.state) return this.getFullPlayableCardPool();
+    const actKey = `act${this.state.act ?? 1}`;
+    return this.getRewardCardPoolForAct(actKey);
   }
 
   getRelicName(relicId: string): string {
@@ -328,7 +340,12 @@ export class GameBridgeService {
     return engineGetAvailableNextNodes(this.state);
   }
 
-  /** Merge act shop pool with meta unlocks; exclude curse cards. When character has cardPoolIds, shop cards = character pool + unlocked. */
+  /**
+   * Shop pool for the given act. Data-driven: uses shopPools.json for the act (cards, relics, prices, counts).
+   * Merges with character cardPoolIds when present (e.g. Gunboy): shop cards = character pool + meta unlockedCards.
+   * When character has no cardPoolIds, uses act's base cards from shopPools. Relics = act base + meta unlockedRelics.
+   * To add a card to Gunboy's shop: add its id to characters.json cardPoolIds and optionally to shopPools.act1.cards for act-specific availability.
+   */
   private getMergedShopPool(actKey: string): ShopPoolConfig | undefined {
     const base = this.shopPoolsByAct[actKey];
     if (!base) return undefined;
@@ -358,7 +375,13 @@ export class GameBridgeService {
     );
   }
 
-  /** Reward card pool for current act. Uses character cardPoolIds when present; otherwise full playable pool. Never returns a tiny pool. */
+  /**
+   * Reward card pool for the current act. Fully data-driven.
+   * - When the run has a character with cardPoolIds (e.g. Gunboy): pool = character.cardPoolIds ∪ meta.unlockedCards.
+   * - Starter cards (Strike, Defend, Bash) are filtered out when the pool has >5 cards so rewards favor upgrades.
+   * - Curses and status cards are always excluded. If the filtered pool would be <5 cards, returns the full playable pool instead.
+   * To add a card to Gunboy's rewards: add its id to data/characters.json under gunboy.cardPoolIds and ensure the card exists in data/cards.json.
+   */
   private getRewardCardPoolForAct(actKey: string): string[] {
     const characterId = this.state?.characterId;
     const character = characterId ? this.charactersMap.get(characterId) : undefined;
@@ -368,7 +391,19 @@ export class GameBridgeService {
         ? character.cardPoolIds
         : fullPool;
     let merged = [...new Set([...base, ...(this.meta.unlockedCards ?? [])])];
-    if (this.cardsMap) merged = merged.filter((id) => this.cardsMap!.get(id) && !this.cardsMap!.get(id)?.isCurse && !this.cardsMap!.get(id)?.isStatus);
+    // Filter out curses/status and, when we have enough cards, basic starter cards (e.g. Strike/Defend/Bash)
+    // so rewards focus on more interesting upgrades.
+    const starterIds = character?.starterDeck ?? [];
+    if (this.cardsMap) {
+      merged = merged.filter((id) => {
+        const def = this.cardsMap!.get(id);
+        if (!def) return false;
+        if (def.isCurse || def.isStatus) return false;
+        // If the pool is large enough, avoid offering pure starter cards as rewards.
+        if (starterIds.includes(id) && merged.length > 5) return false;
+        return true;
+      });
+    }
     return merged.length >= 5 ? merged : fullPool;
   }
 

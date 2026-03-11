@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 
 const COMBAT_BG_PATH = '/assets/combat/combat-bg.jpg';
 const ENEMY_PATH_PREFIX = '/assets/combat/enemies/';
+const CARD_ART_PREFIX = '/assets/cards/';
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
@@ -29,44 +30,60 @@ export class CombatAssetsService {
   private combatBgTexture: PIXI.Texture | null = null;
   private playerTextures = new Map<string, PIXI.Texture>();
   private enemyTextures = new Map<string, PIXI.Texture>();
+  private cardArtTextures = new Map<string, PIXI.Texture | null>();
   private shieldFrameTextures: PIXI.Texture[] = [];
   private shieldStartTime: number | null = null;
   private shieldResolve: (() => void) | null = null;
   private shootingFrameTextures: PIXI.Texture[] = [];
   private shootingStartTime: number | null = null;
   private shootingResolve: (() => void) | null = null;
-  private loadPromise: Promise<void> | null = null;
+  private globalLoadPromise: Promise<void> | null = null;
 
-  /** Load combat background and shield sprite sheet (first frame = static pose). Safe to call multiple times. */
-  async loadCombatAssets(): Promise<void> {
-    if (this.loadPromise) return this.loadPromise;
-    this.loadPromise = this.doLoad();
-    return this.loadPromise;
+  /** Load only global combat assets (background). Call once at app/game start. Failures are cached (no retries). */
+  async loadGlobalCombatAssets(): Promise<void> {
+    if (this.globalLoadPromise) return this.globalLoadPromise;
+    this.globalLoadPromise = (async () => {
+      try {
+        this.combatBgTexture = (await PIXI.Assets.load(this.resolveUrl(COMBAT_BG_PATH))) as PIXI.Texture;
+      } catch {
+        this.combatBgTexture = null;
+      }
+    })();
+    return this.globalLoadPromise;
+  }
+
+  /** Load combat assets for the current fight: global (bg) + character sheets + enemy textures. Safe to call multiple times. */
+  async loadCombatAssets(characterId?: string, enemyIds?: string[]): Promise<void> {
+    await this.loadGlobalCombatAssets();
+    const cid = characterId ?? DEFAULT_PLAYER_CHARACTER_ID;
+    if (!this.playerTextures.has(cid)) {
+      try {
+        const sheetPath = this.resolveUrl(getShieldSheetPath(cid));
+        const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
+        const frames = this.buildSheetFrames(sheetTexture);
+        if (frames.length > 0) {
+          this.playerTextures.set(cid, frames[0]);
+          if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shieldFrameTextures = frames;
+        }
+      } catch {
+        if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shieldFrameTextures = [];
+      }
+      try {
+        const shootingPath = this.resolveUrl(getShootingSheetPath(cid));
+        const shootingTexture = (await PIXI.Assets.load(shootingPath)) as PIXI.Texture;
+        const frames = this.buildSheetFrames(shootingTexture);
+        if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = frames;
+      } catch {
+        if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = [];
+      }
+    }
+    for (const id of enemyIds ?? []) {
+      await this.loadEnemyTexture(id);
+    }
   }
 
   private async doLoad(): Promise<void> {
-    try {
-      this.combatBgTexture = (await PIXI.Assets.load(this.resolveUrl(COMBAT_BG_PATH))) as PIXI.Texture;
-    } catch {
-      this.combatBgTexture = null;
-    }
-    try {
-      const sheetPath = this.resolveUrl(getShieldSheetPath(DEFAULT_PLAYER_CHARACTER_ID));
-      const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
-      this.shieldFrameTextures = this.buildSheetFrames(sheetTexture);
-      if (this.shieldFrameTextures.length > 0) {
-        this.playerTextures.set(DEFAULT_PLAYER_CHARACTER_ID, this.shieldFrameTextures[0]);
-      }
-    } catch {
-      this.shieldFrameTextures = [];
-    }
-    try {
-      const shootingPath = this.resolveUrl(getShootingSheetPath(DEFAULT_PLAYER_CHARACTER_ID));
-      const shootingTexture = (await PIXI.Assets.load(shootingPath)) as PIXI.Texture;
-      this.shootingFrameTextures = this.buildSheetFrames(shootingTexture);
-    } catch {
-      this.shootingFrameTextures = [];
-    }
+    await this.loadCombatAssets(DEFAULT_PLAYER_CHARACTER_ID, []);
   }
 
   private buildSheetFrames(sheetTexture: PIXI.Texture): PIXI.Texture[] {
@@ -87,6 +104,34 @@ export class CombatAssetsService {
 
   getCombatBgTexture(): PIXI.Texture | null {
     return this.combatBgTexture;
+  }
+
+  /**
+   * Preload card art textures for the given card ids. Missing files are ignored and left as null.
+   * Safe to call multiple times; already loaded ids are skipped.
+   */
+  async preloadCardArt(cardIds: string[]): Promise<void> {
+    const promises: Promise<void>[] = [];
+    for (const id of cardIds) {
+      if (this.cardArtTextures.has(id)) continue;
+      const path = this.resolveUrl(`${CARD_ART_PREFIX}${id}.png`);
+      const p = PIXI.Assets.load(path)
+        .then((tex) => {
+          this.cardArtTextures.set(id, tex as PIXI.Texture);
+        })
+        .catch(() => {
+          this.cardArtTextures.set(id, null);
+        });
+      promises.push(p.then(() => {}));
+    }
+    if (promises.length) {
+      await Promise.all(promises);
+    }
+  }
+
+  /** Returns card art texture for a given card id, or null if not available. */
+  getCardArtTexture(cardId: string): PIXI.Texture | null {
+    return this.cardArtTextures.get(cardId) ?? null;
   }
 
   /** Returns the current player character texture (first frame of shield sheet). */

@@ -1,11 +1,12 @@
 {
   "act1": {
     "combat": 4,
-    "elite": 0,
+    "elite": 1,
     "rest": 2,
     "shop": 1,
     "event": 1,
     "boss": 1,
+    "floorCount": 10,
     "encounterPool": [
       "sts_cultist", "sts_jaw_worm", "sts_two_louses", "sts_slimes_ma_sa", "sts_slimes_ma_ss", "sts_slimes_ms_sa", "sts_slimes_ms_ss",
       "sts_gremlin_gang", "sts_large_slime_acid", "sts_large_slime_spike", "sts_lots_of_slimes", "sts_blue_slaver", "sts_red_slaver",

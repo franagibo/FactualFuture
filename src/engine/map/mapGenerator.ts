@@ -7,10 +7,22 @@ export interface ActConfig {
   shop: number;
   event: number;
   boss: number;
+  /** Number of floors before the final rest floor and boss. Default 8. More floors = more choices. */
+  floorCount?: number;
+  /** Weights for assigning node types on middle floors (combat, elite, rest, shop, event). Omitted keys use defaults. */
+  typeWeights?: Partial<Record<MapNodeType, number>>;
 }
 
-const FLOOR_COUNT = 8;
+const DEFAULT_FLOOR_COUNT = 10;
 const LANE_COUNT = 7;
+
+const DEFAULT_TYPE_WEIGHTS: [MapNodeType, number][] = [
+  ['combat', 45],
+  ['event', 22],
+  ['elite', 16],
+  ['rest', 12],
+  ['shop', 5],
+];
 
 /** Seeded random: returns 0..1. Mulberry32. */
 function seededRandom(seed: number): () => number {
@@ -37,13 +49,21 @@ function pickTwoDistinctLanes(random: () => number): [number, number] {
 /**
  * Generate a floor-based map: bottom-to-top, non-crossing paths, at least 2 starting nodes.
  * Assigns node types per plan (combat on floor 0, rest on top floor, boss after, middle by rules).
+ * Uses actConfig.floorCount and actConfig.typeWeights when provided.
  */
-export function generateMap(seed: number, _actConfig: ActConfig): MapState {
+export function generateMap(seed: number, actConfig: ActConfig): MapState {
   const random = seededRandom(seed);
+  const floorCount = Math.max(3, actConfig.floorCount ?? DEFAULT_FLOOR_COUNT);
   const nodes: MapNode[] = [];
   const edges: [string, string][] = [];
   let nodeIdCounter = 0;
   const id = () => `node_${nodeIdCounter++}`;
+
+  // Build type weights: config overrides defaults
+  const typeWeightsArray: [MapNodeType, number][] = DEFAULT_TYPE_WEIGHTS.map(([t, w]) => [
+    t,
+    actConfig.typeWeights?.[t] ?? w,
+  ]);
 
   // Grid: (floor, lane) -> nodeId. Only create nodes where we place them.
   const slotToId = new Map<string, string>();
@@ -67,9 +87,9 @@ export function generateMap(seed: number, _actConfig: ActConfig): MapState {
     active.push({ nodeId, lane });
   }
 
-  // Floors 1 .. FLOOR_COUNT-2: connect each active node to next floor without crossing.
-  // Some nodes will connect to 2 targets to create bigger splits.
-  for (let floor = 1; floor <= FLOOR_COUNT - 2; floor++) {
+  // Floors 1 .. floorCount-2: connect each active node to next floor without crossing.
+  // Some nodes will connect to 2 targets to create bigger splits (branching).
+  for (let floor = 1; floor <= floorCount - 2; floor++) {
     active.sort((a, b) => a.lane - b.lane);
     let prevTargetLane = -1;
     const nextActive: { nodeId: string; lane: number }[] = [];
@@ -105,8 +125,8 @@ export function generateMap(seed: number, _actConfig: ActConfig): MapState {
     active.push(...nextActive);
   }
 
-  // Top floor (FLOOR_COUNT-1): rest sites. Connect current active to rest nodes.
-  const topFloor = FLOOR_COUNT - 1;
+  // Top floor (floorCount-1): rest sites. Connect current active to rest nodes.
+  const topFloor = floorCount - 1;
   active.sort((a, b) => a.lane - b.lane);
   let prevRestLane = -1;
   const restNodes: string[] = [];
@@ -121,52 +141,40 @@ export function generateMap(seed: number, _actConfig: ActConfig): MapState {
     restNodes.push(restId);
   }
 
-  // Boss node: one node at "floor" FLOOR_COUNT, all rest nodes connect to it.
+  // Boss node: one node at "floor" floorCount, all rest nodes connect to it.
   const bossId = id();
-  nodes.push({ id: bossId, type: 'boss', floor: FLOOR_COUNT, lane: Math.floor(LANE_COUNT / 2) });
+  nodes.push({ id: bossId, type: 'boss', floor: floorCount, lane: Math.floor(LANE_COUNT / 2) });
   for (const restId of restNodes) {
     edges.push([restId, bossId]);
   }
 
-  // Assign types for middle floors (1 .. FLOOR_COUNT-2). Already set combat for floor 0, rest for top, boss above.
-  const typeWeights: [MapNodeType, number][] = [
-    ['combat', 45],
-    ['event', 22],
-    ['elite', 16],
-    ['rest', 12],
-    ['shop', 5],
-  ];
-  const minNonCombatFloor = 3; // approximate: no rest/shop/elite below this
+  // Assign types for middle floors (1 .. floorCount-2). Floor 0 = combat, top = rest, then boss.
+  const minNonCombatFloor = 3; // no rest/shop/elite on first few floors so early path is combat-heavy
 
   for (const n of nodes) {
     if (n.type !== 'combat') continue; // already set for rest, boss
     if (n.floor === 0) continue; // keep combat
     if (n.floor >= topFloor) continue;
 
-    const outgoing = edges.filter(([from]) => from === n.id).map(([, to]) => to);
-    const destTypes = new Set(outgoing.map((to) => nodes.find((x) => x.id === to)?.type).filter(Boolean));
-
+    const prevType = (() => {
+      const inEdge = edges.find(([, to]) => to === n.id);
+      if (!inEdge) return null;
+      return nodes.find((x) => x.id === inEdge[0])?.type ?? null;
+    })();
+    const safeTypes = typeWeightsArray.filter(([t]) => {
+      if (t === 'rest' || t === 'shop' || t === 'elite') {
+        if (prevType === 'rest' || prevType === 'shop' || prevType === 'elite') return false;
+      }
+      return true;
+    });
+    const total = safeTypes.reduce((s, [, w]) => s + w, 0);
+    let r = total > 0 ? random() * total : 0;
     let chosen: MapNodeType = 'combat';
-    if (n.floor >= minNonCombatFloor) {
-      const prevType = (() => {
-        const inEdge = edges.find(([, to]) => to === n.id);
-        if (!inEdge) return null;
-        return nodes.find((x) => x.id === inEdge[0])?.type ?? null;
-      })();
-      const safeTypes = typeWeights.filter(([t]) => {
-        if (t === 'rest' || t === 'shop' || t === 'elite') {
-          if (prevType === 'rest' || prevType === 'shop' || prevType === 'elite') return false;
-        }
-        return true;
-      });
-      const total = safeTypes.reduce((s, [, w]) => s + w, 0);
-      let r = random() * total;
-      for (const [t, w] of safeTypes) {
-        r -= w;
-        if (r <= 0) {
-          chosen = t;
-          break;
-        }
+    for (const [t, w] of safeTypes) {
+      r -= w;
+      if (r <= 0) {
+        chosen = t;
+        break;
       }
     }
     n.type = chosen;

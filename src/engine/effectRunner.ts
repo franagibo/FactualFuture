@@ -1,14 +1,6 @@
 import type { GameState, EnemyState } from './types';
 import type { CardDef } from './cardDef';
-
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
+import { rngRandomInt, rngShuffle } from './rng';
 
 function isAttackCard(cardId: string, cardsMap: Map<string, CardDef>): boolean {
   const def = cardsMap.get(cardId);
@@ -21,7 +13,7 @@ export function drawOne(state: GameState): GameState {
   let deck = [...state.deck];
   let discard = [...state.discard];
   if (deck.length === 0) {
-    deck = shuffle(discard);
+    deck = rngShuffle(discard);
     discard = [];
   }
   if (deck.length === 0) return { ...state, deck, discard };
@@ -162,7 +154,7 @@ export function runEffects(
         if (count <= 0) break;
         const indices = new Set<number>();
         while (indices.size < count) {
-          indices.add(Math.floor(Math.random() * next.hand.length));
+          indices.add(rngRandomInt(0, next.hand.length - 1));
         }
         const toExhaust = [...indices].map((i) => next.hand[i]);
         const newHand = next.hand.filter((_, i) => !indices.has(i));

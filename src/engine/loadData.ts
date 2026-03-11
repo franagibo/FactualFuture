@@ -48,6 +48,8 @@ export interface RelicDef {
   name: string;
   description: string;
   triggers: { when: string; effect: { type: string; value?: number } }[];
+  /** Optional act numbers where this relic can appear in shop; when absent, all acts. */
+  acts?: number[];
 }
 
 export type PotionRarity = 'common' | 'uncommon' | 'rare';

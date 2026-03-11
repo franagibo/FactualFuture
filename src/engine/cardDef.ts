@@ -34,6 +34,9 @@ export interface CardEffect {
   target?: 'player' | 'enemy';
 }
 
+/** Rarity for reward/shop weighting (e.g. common 70%, uncommon 25%, rare 5%). Optional; when absent, card is treated as common. */
+export type CardRarity = 'common' | 'uncommon' | 'rare';
+
 export interface CardDef {
   id: string;
   name: string;
@@ -45,4 +48,10 @@ export interface CardDef {
   exhaust?: boolean;
   /** When true, card is a status (added by monsters/effects); removed from deck at end of combat. */
   isStatus?: boolean;
+  /** Optional rarity for pool weighting. Future: bias reward/shop offers by rarity. */
+  rarity?: CardRarity;
+  /** Optional archetype tag (e.g. "attack", "block", "synergy") for filtering or themed pools. */
+  archetype?: string;
+  /** Optional act numbers (e.g. [1, 2]) where this card can appear in rewards/shop; when absent, all acts. */
+  acts?: number[];
 }
