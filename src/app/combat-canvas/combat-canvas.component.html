@@ -151,9 +151,9 @@
     <div class="steam-warning">{{ steamWarning() }}</div>
   }
   @if (showPauseMenu) {
-    <div class="quit-backdrop" (click)="closePauseMenu()"></div>
-    <div class="quit-modal pause-modal">
-      @if (!showPauseSettings) {
+    <div class="quit-backdrop" (click)="showPauseSettings ? closePauseSettings() : closePauseMenu()"></div>
+    @if (!showPauseSettings) {
+      <div class="quit-modal pause-modal">
         <div class="quit-title">Menu</div>
         <div class="pause-actions">
           <button type="button" class="btn-quit btn-pause" (click)="onPauseContinue()">Continue</button>
@@ -163,58 +163,9 @@
             <button type="button" class="btn-quit btn-pause btn-pause-exit" (click)="onExitGame()">Exit game</button>
           }
         </div>
-      } @else {
-        <div class="quit-title">Settings</div>
-        <div class="pause-settings-section">
-          <div class="pause-settings-label">Sound</div>
-          <div class="pause-settings-options">
-            <button type="button" class="btn-quit btn-pause" [class.active]="!sound.isMuted()" (click)="setPauseSound(false)">On</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="sound.isMuted()" (click)="setPauseSound(true)">Off</button>
-          </div>
-        </div>
-        <div class="pause-settings-section">
-          <div class="pause-settings-label">VFX intensity</div>
-          <div class="pause-settings-options">
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.vfxIntensity() === 'full'" (click)="gameSettings.setVfxIntensity('full')">Full</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.vfxIntensity() === 'reduced'" (click)="gameSettings.setVfxIntensity('reduced')">Reduced</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.vfxIntensity() === 'off'" (click)="gameSettings.setVfxIntensity('off')">Off</button>
-          </div>
-        </div>
-        <div class="pause-settings-section">
-          <div class="pause-settings-label">Animation speed</div>
-          <div class="pause-settings-options">
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.animationSpeed() === 'slow'" (click)="gameSettings.setAnimationSpeed('slow')">Slow</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.animationSpeed() === 'normal'" (click)="gameSettings.setAnimationSpeed('normal')">Normal</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.animationSpeed() === 'fast'" (click)="gameSettings.setAnimationSpeed('fast')">Fast</button>
-          </div>
-        </div>
-        <div class="pause-settings-section">
-          <div class="pause-settings-label">Text size</div>
-          <div class="pause-settings-options">
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.textSize() === 'small'" (click)="gameSettings.setTextSize('small')">Small</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.textSize() === 'normal'" (click)="gameSettings.setTextSize('normal')">Normal</button>
-            <button type="button" class="btn-quit btn-pause" [class.active]="gameSettings.textSize() === 'large'" (click)="gameSettings.setTextSize('large')">Large</button>
-          </div>
-        </div>
-        @if (isElectron()) {
-          <div class="pause-settings-section">
-            <div class="pause-settings-label">Display</div>
-            <div class="pause-settings-options">
-              <button type="button" class="btn-quit btn-pause" [class.active]="pauseFullscreen" (click)="setPauseFullScreen(true)">Fullscreen</button>
-              <button type="button" class="btn-quit btn-pause" [class.active]="!pauseFullscreen" (click)="setPauseFullScreen(false)">Windowed</button>
-            </div>
-          </div>
-          <div class="pause-settings-section">
-            <div class="pause-settings-label">Resolution</div>
-            <div class="pause-settings-options">
-              <button type="button" class="btn-quit btn-pause" (click)="setPauseResolution(1920, 1080)">1920 × 1080</button>
-              <button type="button" class="btn-quit btn-pause" (click)="setPauseResolution(1600, 900)">1600 × 900</button>
-              <button type="button" class="btn-quit btn-pause" (click)="setPauseResolution(1280, 720)">1280 × 720</button>
-            </div>
-          </div>
-        }
-        <button type="button" class="btn-quit btn-pause btn-pause-back" (click)="closePauseSettings()">Back</button>
-      }
-    </div>
+      </div>
+    } @else {
+      <app-settings-modal closeButtonLabel="Back" (close)="closePauseSettings()" />
+    }
   }
 </div>

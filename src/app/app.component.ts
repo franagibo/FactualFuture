@@ -13,11 +13,11 @@ export class AppComponent implements OnInit {
   constructor(private sound: SoundService) {}
 
   ngOnInit(): void {
-    this.sound.loadMutedPreference();
+    this.sound.loadSoundPreferences();
   }
 
   @HostListener('document:click')
   onAppClick(): void {
-    this.sound.playClick();
+    if (this.sound.isClickSoundEnabled()) this.sound.playClick();
   }
 }

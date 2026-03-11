@@ -2,10 +2,12 @@ import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@
 import { Router } from '@angular/router';
 import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
+import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
 
 @Component({
   selector: 'app-main-menu',
   standalone: true,
+  imports: [SettingsModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="menu-wrap">
@@ -48,32 +50,7 @@ import { GameBridgeService } from '../services/game-bridge.service';
         </div>
       </div>
       @if (showSettings) {
-        <div class="settings-backdrop" (click)="closeSettings()"></div>
-        <div class="settings-modal">
-          <div class="settings-title">Settings</div>
-          @if (isElectron()) {
-            <div class="settings-section">
-              <div class="settings-label">Display</div>
-              <div class="settings-options">
-                <button type="button" class="menu-btn" [class.active]="fullscreen" (click)="setFullScreen(true)">
-                  Fullscreen
-                </button>
-                <button type="button" class="menu-btn" [class.active]="!fullscreen" (click)="setFullScreen(false)">
-                  Windowed
-                </button>
-              </div>
-            </div>
-          }
-          <div class="settings-section">
-            <div class="settings-label">Resolution</div>
-            <div class="settings-options">
-              <button type="button" class="menu-btn" (click)="setResolution(1920, 1080)">1920 x 1080</button>
-              <button type="button" class="menu-btn" (click)="setResolution(1600, 900)">1600 x 900</button>
-              <button type="button" class="menu-btn" (click)="setResolution(1280, 720)">1280 x 720</button>
-            </div>
-          </div>
-          <button type="button" class="menu-btn settings-close" (click)="closeSettings()">Close</button>
-        </div>
+        <app-settings-modal closeButtonLabel="Close" (close)="closeSettings()" />
       }
     </div>
   `,
@@ -222,59 +199,6 @@ import { GameBridgeService } from '../services/game-bridge.service';
           0 0 28px rgba(150, 110, 255, 0.45),
           inset 0 1px 0 rgba(255, 255, 255, 0.25);
       }
-      .settings-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        z-index: 100;
-        animation: fade-in 0.2s ease;
-      }
-      @keyframes fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      .settings-modal {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(18, 18, 28, 0.98);
-        padding: 20px 24px;
-        border-radius: 12px;
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
-        color: #eee;
-        min-width: 220px;
-        z-index: 101;
-        animation: panel-in 0.25s ease-out;
-      }
-      .settings-title {
-        font-size: 1.25rem;
-        margin-bottom: 1rem;
-      }
-      .settings-section {
-        margin-bottom: 1rem;
-      }
-      .settings-label {
-        font-size: 0.75rem;
-        color: #aaa;
-        margin-bottom: 0.5rem;
-      }
-      .settings-options {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-      .settings-options .menu-btn {
-        min-width: 160px;
-      }
-      .settings-options .menu-btn.active {
-        background: linear-gradient(180deg, #5a4a9e 0%, #3d3270 100%);
-        box-shadow: 0 0 16px rgba(120, 80, 200, 0.4), inset 0 1px 0 rgba(255,255,255,0.2);
-      }
-      .settings-close {
-        margin-top: 0.5rem;
-        width: 100%;
-      }
       .unlocks-section {
         margin-bottom: 1rem;
         padding: 0.5rem 0;
@@ -307,7 +231,6 @@ import { GameBridgeService } from '../services/game-bridge.service';
 export class MainMenuComponent implements OnInit {
   public showSettings = false;
   showContinue = false;
-  fullscreen = true;
   meta: MetaState | null = null;
 
   constructor(
@@ -348,33 +271,14 @@ export class MainMenuComponent implements OnInit {
     else this.cdr.markForCheck();
   }
 
-  async onSettings(): Promise<void> {
+  onSettings(): void {
     this.showSettings = true;
-    if (this.isElectron()) {
-      const api = (window as unknown as { electronAPI?: { getSettings?: () => Promise<{ fullscreen?: boolean }> } }).electronAPI;
-      const settings = await api?.getSettings?.();
-      this.fullscreen = settings?.fullscreen !== false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  setFullScreen(fullscreen: boolean): void {
-    const api = (window as unknown as { electronAPI?: { setFullScreen?: (v: boolean) => void } }).electronAPI;
-    if (api?.setFullScreen) api.setFullScreen(fullscreen);
-    this.fullscreen = fullscreen;
     this.cdr.markForCheck();
   }
 
   closeSettings(): void {
     this.showSettings = false;
-  }
-
-  setResolution(width: number, height: number): void {
-    const w = width | 0;
-    const h = height | 0;
-    const api = (window as unknown as { electronAPI?: { setWindowSize?: (w: number, h: number) => void } }).electronAPI;
-    if (api?.setWindowSize) api.setWindowSize(w, h);
-    this.closeSettings();
+    this.cdr.markForCheck();
   }
 
   onQuit(): void {

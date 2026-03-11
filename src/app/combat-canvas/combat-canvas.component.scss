@@ -384,7 +384,9 @@
     0 0 32px rgba(80, 50, 140, 0.35),
     0 12px 40px rgba(0, 0, 0, 0.65);
   color: #eee;
-  min-width: 280px;
+  min-width: 300px;
+  max-height: 85vh;
+  overflow-y: auto;
   z-index: 1001;
 }
 .quit-title {
@@ -440,8 +442,89 @@
 .btn-pause:active {
   transform: translateY(1px) scale(0.99);
 }
+.pause-settings-audio {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(180, 140, 255, 0.2);
+}
+.pause-settings-heading {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #c4b8e8;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 .pause-settings-section {
   margin-bottom: 1rem;
+}
+.pause-settings-slider-row {
+  margin-bottom: 0.85rem;
+}
+.pause-settings-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0.35rem;
+}
+.pause-settings-range {
+  flex: 1;
+  min-width: 0;
+  max-width: 200px;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(40, 35, 65, 0.9);
+  border-radius: 4px;
+  outline: none;
+}
+.pause-settings-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #7a6aaa 0%, #5a4a9e 100%);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.pause-settings-range::-webkit-slider-thumb:hover {
+  background: linear-gradient(180deg, #8a7aba 0%, #6a5aae 100%);
+}
+.pause-settings-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #7a6aaa 0%, #5a4a9e 100%);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.pause-settings-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ddd;
+  min-width: 2.5em;
+  text-align: right;
+}
+.pause-settings-checkbox-row {
+  margin-bottom: 0.6rem;
+}
+.pause-settings-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: #ddd;
+  cursor: pointer;
+  user-select: none;
+}
+.pause-settings-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #5a4a9e;
+  cursor: pointer;
 }
 .pause-settings-label {
   font-size: 0.75rem;

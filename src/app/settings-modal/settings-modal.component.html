@@ -1,0 +1,222 @@
+<div class="settings-backdrop" (click)="onClose()"></div>
+<div class="settings-modal" (click)="$event.stopPropagation()">
+  <header class="settings-header">
+    <h2 class="settings-title">Settings</h2>
+    <button type="button" class="settings-close-btn" (click)="onClose()">{{ closeButtonLabel }}</button>
+  </header>
+  <div class="settings-body">
+    <nav class="settings-nav">
+      <button
+        type="button"
+        class="settings-nav-item"
+        [class.active]="activeCategory === 'audio'"
+        (click)="setCategory('audio')"
+      >
+        Audio
+      </button>
+      <button
+        type="button"
+        class="settings-nav-item"
+        [class.active]="activeCategory === 'graphics'"
+        (click)="setCategory('graphics')"
+      >
+        Graphics
+      </button>
+      @if (showDisplayCategory) {
+        <button
+          type="button"
+          class="settings-nav-item"
+          [class.active]="activeCategory === 'display'"
+          (click)="setCategory('display')"
+        >
+          Display
+        </button>
+      }
+    </nav>
+    <div class="settings-content">
+      @switch (activeCategory) {
+        @case ('audio') {
+          <section class="settings-panel">
+            <div class="settings-panel-title">Audio</div>
+            <div class="settings-row">
+              <label class="settings-label">Music</label>
+              <div class="settings-slider-wrap">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  [value]="sound.getMusicVolume() * 100"
+                  (input)="setMusicVolume($any($event.target).value)"
+                  class="settings-range"
+                />
+                <span class="settings-value">{{ musicVolumePercent }}%</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Effects</label>
+              <div class="settings-slider-wrap">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  [value]="sound.getEffectsVolume() * 100"
+                  (input)="setEffectsVolume($any($event.target).value)"
+                  class="settings-range"
+                />
+                <span class="settings-value">{{ effectsVolumePercent }}%</span>
+              </div>
+            </div>
+            <div class="settings-row settings-row-checkbox">
+              <label class="settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  [checked]="sound.isMuted()"
+                  (change)="setMuted($any($event.target).checked)"
+                  class="settings-checkbox"
+                />
+                Mute all
+              </label>
+            </div>
+            <div class="settings-row settings-row-checkbox">
+              <label class="settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  [checked]="sound.isClickSoundEnabled()"
+                  (change)="setClickSound($any($event.target).checked)"
+                  class="settings-checkbox"
+                />
+                Click sound
+              </label>
+            </div>
+          </section>
+        }
+        @case ('graphics') {
+          <section class="settings-panel">
+            <div class="settings-panel-title">Graphics</div>
+            <div class="settings-row">
+              <label class="settings-label">VFX intensity</label>
+              <div class="settings-options">
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.vfxIntensity() === 'full'"
+                  (click)="gameSettings.setVfxIntensity('full'); cdr.markForCheck()"
+                >
+                  Full
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.vfxIntensity() === 'reduced'"
+                  (click)="gameSettings.setVfxIntensity('reduced'); cdr.markForCheck()"
+                >
+                  Reduced
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.vfxIntensity() === 'off'"
+                  (click)="gameSettings.setVfxIntensity('off'); cdr.markForCheck()"
+                >
+                  Off
+                </button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Animation speed</label>
+              <div class="settings-options">
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.animationSpeed() === 'slow'"
+                  (click)="gameSettings.setAnimationSpeed('slow'); cdr.markForCheck()"
+                >
+                  Slow
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.animationSpeed() === 'normal'"
+                  (click)="gameSettings.setAnimationSpeed('normal'); cdr.markForCheck()"
+                >
+                  Normal
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.animationSpeed() === 'fast'"
+                  (click)="gameSettings.setAnimationSpeed('fast'); cdr.markForCheck()"
+                >
+                  Fast
+                </button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Text size</label>
+              <div class="settings-options">
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.textSize() === 'small'"
+                  (click)="gameSettings.setTextSize('small'); cdr.markForCheck()"
+                >
+                  Small
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.textSize() === 'normal'"
+                  (click)="gameSettings.setTextSize('normal'); cdr.markForCheck()"
+                >
+                  Normal
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.textSize() === 'large'"
+                  (click)="gameSettings.setTextSize('large'); cdr.markForCheck()"
+                >
+                  Large
+                </button>
+              </div>
+            </div>
+          </section>
+        }
+        @case ('display') {
+          <section class="settings-panel">
+            <div class="settings-panel-title">Display</div>
+            <div class="settings-row">
+              <label class="settings-label">Mode</label>
+              <div class="settings-options">
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="fullscreen"
+                  (click)="setFullScreen(true)"
+                >
+                  Fullscreen
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="!fullscreen"
+                  (click)="setFullScreen(false)"
+                >
+                  Windowed
+                </button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Resolution</label>
+              <div class="settings-options settings-options-wrap">
+                <button type="button" class="settings-opt-btn" (click)="setResolution(1920, 1080)">1920 × 1080</button>
+                <button type="button" class="settings-opt-btn" (click)="setResolution(1600, 900)">1600 × 900</button>
+                <button type="button" class="settings-opt-btn" (click)="setResolution(1280, 720)">1280 × 720</button>
+              </div>
+            </div>
+          </section>
+        }
+      }
+    </div>
+  </div>
+</div>

@@ -25,6 +25,7 @@ import { getHandLayout } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
 import { drawCombatView, type CombatViewContext } from './renderers/combat-view.renderer';
+import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
 
 /**
  * Main game canvas: owns PixiJS app lifecycle, game state sync, and user actions.
@@ -33,6 +34,7 @@ import { drawCombatView, type CombatViewContext } from './renderers/combat-view.
 @Component({
   selector: 'app-combat-canvas',
   standalone: true,
+  imports: [SettingsModalComponent],
   templateUrl: './combat-canvas.component.html',
   styleUrls: ['./combat-canvas.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -108,7 +110,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private resizeRedrawScheduled = false;
   showPauseMenu = false;
   showPauseSettings = false;
-  pauseFullscreen = true;
   /** When true, player shows shield animation (played when a block card is used). */
   shieldAnimationPlaying = false;
   /** When true, player shows shooting animation (played when strike card is used). */
@@ -182,37 +183,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   openPauseSettings(): void {
     this.showPauseSettings = true;
-    if (this.isElectron()) {
-      const api = (window as unknown as { electronAPI?: { getSettings?: () => Promise<{ fullscreen?: boolean }> } }).electronAPI;
-      api?.getSettings?.().then((s) => {
-        this.pauseFullscreen = s?.fullscreen !== false;
-        this.requestTemplateUpdate();
-      });
-    }
     this.requestTemplateUpdate();
   }
 
   closePauseSettings(): void {
     this.showPauseSettings = false;
     this.redraw(); // apply any changed VFX/text/animation settings
-    this.requestTemplateUpdate();
-  }
-
-  setPauseFullScreen(fullscreen: boolean): void {
-    const api = (window as unknown as { electronAPI?: { setFullScreen?: (v: boolean) => void } }).electronAPI;
-    if (api?.setFullScreen) api.setFullScreen(fullscreen);
-    this.pauseFullscreen = fullscreen;
-    this.requestTemplateUpdate();
-  }
-
-  setPauseResolution(width: number, height: number): void {
-    const api = (window as unknown as { electronAPI?: { setWindowSize?: (w: number, h: number) => void } }).electronAPI;
-    if (api?.setWindowSize) api.setWindowSize(width | 0, height | 0);
-    this.requestTemplateUpdate();
-  }
-
-  setPauseSound(muted: boolean): void {
-    this.sound.setMuted(muted);
     this.requestTemplateUpdate();
   }
 
@@ -237,7 +213,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   steamWarning = () => this._steamWarning;
 
   ngOnInit(): void {
-    this.sound.loadMutedPreference();
+    this.sound.loadSoundPreferences();
+    this.sound.startSoundtrack();
     this.cardVfx.loadConfig().catch(() => {});
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
       (window as unknown as { electronAPI: { onSteamWarning: (cb: (m: string) => void) => void } }).electronAPI.onSteamWarning((msg) => {
@@ -249,6 +226,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.sound.stopSoundtrack();
     if (this.hoverResolveBound) {
       this.hoverResolveBound();
       this.hoverResolveBound = null;
