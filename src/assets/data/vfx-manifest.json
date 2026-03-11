@@ -1,0 +1,30 @@
+{
+  "fx1_explosion_small_orange": {
+    "frameCount": 11,
+    "frameW": 32,
+    "frameH": 32,
+    "frameMs": 45,
+    "scale": 8
+  },
+  "fx1_splatter_small_red": {
+    "frameCount": 6,
+    "frameW": 32,
+    "frameH": 32,
+    "frameMs": 50,
+    "scale": 8
+  },
+  "fx2_impact_shock_large_brown": {
+    "frameCount": 7,
+    "frameW": 140,
+    "frameH": 50,
+    "frameMs": 60,
+    "scale": 8
+  },
+  "fx2_electric_burst_large_violet": {
+    "frameCount": 16,
+    "frameW": 72,
+    "frameH": 72,
+    "frameMs": 40,
+    "scale": 8
+  }
+}

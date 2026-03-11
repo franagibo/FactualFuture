@@ -16,18 +16,33 @@ export const COMBAT_LAYOUT = {
   enemyPlaceholderW: 240,
   enemyPlaceholderH: 310,
   enemyGap: 28,
-  cardWidth: 100,
-  cardHeight: 140,
-  overlapRatio: 0.45,
-  arcAmplitude: 30,
-  cardRotationRad: 0.03,
-  hoverLift: 20,
+  cardWidth: 200,
+  cardHeight: 280,
+  overlapRatio: 0.62,
+  arcAmplitude: 90,
+  cardRotationRad: 0.02,
+  hoverLift: 60,
   hoverScale: 1.08,
+  /** Arc-based hand: max fan angle in degrees (narrowed for large hands). */
+  baseFanAngleDeg: 35,
+  /** Horizontal spread of the fan (px). */
+  fanRadius: 750,
+  /** Vertical extent of the arc (px). Small value keeps the hand at the bottom. */
+  fanArcVerticalExtent: 80,
+  rotationMultiplier: 1.2,
+  /** Magnetic hover: radius to consider card hovered (ratio of card width). */
+  hoverRadiusRatio: 0.6,
+  /** Magnetic hover: radius to release hover lock (ratio of card width). */
+  hoverReleaseRadiusRatio: 0.8,
+  /** Pixels of movement before entering Dragging from Pressed. */
+  dragThreshold: 12,
+  /** Hand vertical offset from (playerY - cardHeight). Positive = hand lower on screen. */
+  handYOffset: 180,
   /** Horizontal padding on both sides of the scene. */
   padding: 20,
-  costRadius: 12,
-  shadowOffset: 4,
-  cardCornerRadius: 10,
+  costRadius: 36,
+  shadowOffset: 12,
+  cardCornerRadius: 30,
   enemyCornerRadius: 10,
 } as const;
 
@@ -91,6 +106,29 @@ export function getEnemyCenter(index: number, enemyCount: number, w: number, h: 
     x: ex + index * (enemyPlaceholderW + enemyGap),
     y: enemyStartY + enemyPlaceholderH / 2,
   };
+}
+
+/** Index of the enemy under stage point (x,y), or null. Uses same layout as renderer for hit-test during drag. */
+export function getEnemyIndexAtPoint(stageX: number, stageY: number, enemyCount: number, w: number, h: number): number | null {
+  if (enemyCount <= 0) return null;
+  const L = COMBAT_LAYOUT;
+  const baselineBottom = h * L.baselineBottomRatio;
+  const enemyZoneStart = w * L.enemyZoneStartRatio;
+  const enemyPlaceholderW = L.enemyPlaceholderW;
+  const enemyPlaceholderH = L.enemyPlaceholderH;
+  const enemyGap = L.enemyGap;
+  const padding = L.padding;
+  const enemyStartY = baselineBottom - enemyPlaceholderH;
+  const totalEnemyWidth = enemyCount * enemyPlaceholderW + (enemyCount - 1) * enemyGap;
+  const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
+  for (let i = 0; i < enemyCount; i++) {
+    const left = ex + i * (enemyPlaceholderW + enemyGap) - enemyPlaceholderW / 2;
+    const top = enemyStartY;
+    if (stageX >= left && stageX <= left + enemyPlaceholderW && stageY >= top && stageY <= top + enemyPlaceholderH) {
+      return i;
+    }
+  }
+  return null;
 }
 
 /**

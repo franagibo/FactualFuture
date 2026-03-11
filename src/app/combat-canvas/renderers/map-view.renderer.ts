@@ -109,7 +109,10 @@ export function drawMapView(
   const nodes = map.nodes;
   const edges = map.edges;
   const availableNext = context.getAvailableNextNodes();
-  const NODE_RADIUS = 20;
+  const NODE_RADIUS = 28;
+  const NODE_ICON_SIZE = 80;
+  const BOSS_ICON_SIZE = 92;
+  const pathInset = Math.max(NODE_RADIUS + 6, BOSS_ICON_SIZE / 2 + 8);
   const FLOOR_SPACING = 240;
   const laneCount = 7;
 
@@ -231,7 +234,6 @@ export function drawMapView(
     stage.addChild(containerShape);
   }
 
-  const inset = NODE_RADIUS + 6;
   const strokeColor = 0x8899aa;
   const pathBorderColor = 0x0c0c18;
   const pathBorderWidth = 6;
@@ -247,13 +249,13 @@ export function drawMapView(
       const dx = toPos.x - fromPos.x;
       const dy = toPos.y - fromPos.y;
       const len = Math.hypot(dx, dy);
-      if (len < inset * 2) continue;
+      if (len < pathInset * 2) continue;
       const ux = dx / len;
       const uy = dy / len;
-      const startX = fromPos.x + ux * inset;
-      const startY = fromPos.y + uy * inset;
-      const endX = toPos.x - ux * inset;
-      const endY = toPos.y - uy * inset;
+      const startX = fromPos.x + ux * pathInset;
+      const startY = fromPos.y + uy * pathInset;
+      const endX = toPos.x - ux * pathInset;
+      const endY = toPos.y - uy * pathInset;
       const segLen = Math.hypot(endX - startX, endY - startY);
       let dist = 0;
       while (dist < segLen - 16) {
@@ -305,9 +307,6 @@ export function drawMapView(
     }
   };
 
-  const NODE_ICON_SIZE = 44;
-  const BOSS_ICON_SIZE = 52;
-
   for (const n of nodes) {
     const pos = posById.get(n.id);
     if (!pos) continue;
@@ -323,6 +322,9 @@ export function drawMapView(
     container.zIndex = 3;
 
     if (nodeTex) {
+      const whiteBg = new PIXI.Graphics();
+      whiteBg.circle(0, 0, size / 2 + 4).fill(0xffffff);
+      container.addChild(whiteBg);
       const sprite = new PIXI.Sprite(nodeTex);
       sprite.anchor.set(0.5, 0.5);
       sprite.width = size;

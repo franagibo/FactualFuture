@@ -9,7 +9,6 @@ The authoritative layout lives in:
 - `src/app/combat-canvas/constants/combat-layout.constants.ts`
   - `COMBAT_LAYOUT` – base ratios/sizes for player, enemies, hand/cards.
   - `getCombatSlotBounds(slotId, w, h)` – named slots for background, player, and HP text.
-  - `getCardArtRect(cardWidth, cardHeight)` – shared rect for card art on every card.
 
 The combat renderer (`combat-view.renderer.ts`) uses these helpers so that **all placement comes from one place**.
 
@@ -21,20 +20,27 @@ All asset paths are relative to `src/assets`.
 
 | Asset type        | Path pattern                                           | Notes |
 | ----------------- | ------------------------------------------------------ | ----- |
-| Combat background | `/assets/combat/combat-bg.jpg`                         | One per environment/act (currently a single texture). |
-| Player character  | `/assets/characters/{characterId}/{characterId}_idle.png` | Idle / default pose; same baseline as shield/shooting sheets. |
-| Player animations | `/assets/characters/{characterId}/{characterId}_shield.png`, `_shooting.png` | 6×6 sprite sheets; frame 0 is used as static pose. |
+| Combat background | `/assets/fight-location/{filename}`                     | Full-screen; recommend **1920×1080 px** (16∶9). Default: `background_fight2.png`. Per-enemy: add `"enemyId": "filename.png"` to `src/assets/data/fight-location.json`. |
+| Player character (static) | `/assets/characters/{characterId}/{characterId}_static.png` | Default idle pose; used when not playing shield/shooting. If missing, first frame of shield sheet is used. |
+| Player animations | `/assets/characters/{characterId}/{characterId}_shield.png`, `_shooting.png` | 6×6 sprite sheets for block and strike animations. |
 | Enemies           | `/assets/combat/enemies/{enemyId}.png`                 | One PNG per enemy id; all are drawn into the same slot rect. |
-| **Card art**      | `/assets/cards/{cardId}.png`                           | One image per card id; drawn into the shared card art rect. |
+| **Card image**    | `/assets/cards/{cardId}.png`                           | **Full card** (300×420 px display size). Name, cost, and effect text are overlaid. **Fallback:** `empty_card_template.png`. |
+| **Card impact VFX** | `/assets/vfx/{vfxId}/spritesheet.png`                 | Optional. Horizontal strip spritesheet; one VFX per card when played (e.g. strike → explosion on enemy). See **Card VFX** below. |
 | Map nodes         | `/assets/map/nodes/{type}.svg`                         | Used by the map view (combat, elite, rest, shop, event, boss). |
 | Map background    | `/assets/map/map-bg.svg`                               | Used behind the map nodes/paths. |
 
 The combat assets service (`CombatAssetsService`) is responsible for loading:
 
-- `combat-bg.jpg`
+- **Fight backgrounds:** Config in `src/assets/data/fight-location.json` — `"default": "background_fight2.png"` and optional `"enemyId": "background_xyz.png"`. First enemy in the encounter is used as key; assets live under `/assets/fight-location/`. Cached per key.
 - Character sheets (shield/shooting)
 - Enemy textures
 - Card art textures (`/assets/cards/{cardId}.png`)
+
+**Card VFX** (impact effects when a card is played, e.g. on the enemy) are handled by `CardVfxService` and are fully data-driven:
+
+- **Mapping:** `src/assets/data/card-vfx.json` — `{ "cardId": "vfxId" }`. Add an entry to give a card an impact VFX when played.
+- **Manifest:** `src/assets/data/vfx-manifest.json` — for each `vfxId`: `frameCount`, `frameW`, `frameH`, `frameMs`, optional `scale`. Asset path is `/assets/vfx/{vfxId}/spritesheet.png` (horizontal strip).
+- To add a new card VFX: (1) add the spritesheet under `src/assets/vfx/{vfxId}/spritesheet.png`, (2) add the entry to `vfx-manifest.json`, (3) add `"cardId": "vfxId"` to `card-vfx.json`. No code changes required.
 
 ---
 
@@ -53,10 +59,7 @@ Per-enemy and per-card positions (enemy rectangles, hand arc, card positions) ar
 - All enemies share the same width/height and spacing.
 - The hand is always centered and laid out as an arc.
 
-For card art there is a single shared rect:
-
-- `getCardArtRect(cardWidth, cardHeight)` returns `{ x, y, width, height }` for the art area.
-- The renderer draws a solid background for this rect and then (if available) a sprite from `getCardArtTexture(cardId)`.
+The card image is the full card; the renderer draws it at card size and overlays cost, name, and effect text via `getCardArtTexture(cardId)` (or the empty_card_template fallback).
 
 ---
 
@@ -68,10 +71,10 @@ These sizes are *guidelines*; textures will be scaled to fit slots, but sticking
   - Recommended: **240×310 px** (matches `playerPlaceholderW/H` and `enemyPlaceholderW/H`).
   - Anchor point: **bottom-center** for characters (the renderer positions sprites so the “feet” sit on the same baseline).
 
-- **Card art**
-  - Rect is roughly: `x = 8`, `y = 48`, `width = cardWidth - 16`, `height ≈ 50` (see `getCardArtRect`).
-  - Recommended source size: **84×50 px** (or any 5:3-ish ratio). The renderer scales to the slot.
-  - Keep important details inside a **safe zone** with some padding so rounded corners don’t clip them.
+- **Card image**
+  - The card image is the **full card** (display size: **300×420 px**). Name, cost, and effect text are drawn on top.
+  - Recommended source size: **300×420 px** (or same aspect ratio). Leave space for cost (top-left), name, and effect text, or use full-bleed with good text contrast.
+  - Reserve space in your template for overlaid text (cost, name, effect).
 
 ---
 
@@ -86,10 +89,7 @@ These sizes are *guidelines*; textures will be scaled to fit slots, but sticking
 ### New card (with art)
 
 1. Add the card definition to `data/cards.json` with id `my_new_card`.
-2. Create `src/assets/cards/my_new_card.png` (≈84×50 or similar ratio).
-3. The combat view will:
-   - Draw the usual card background, cost, and name.
-   - Draw the shared art rect and then your `my_new_card.png` inside it if present.
+2. Create `src/assets/cards/my_new_card.png` (recommended 300×420 px). The image is the full card; cost, name, and effect text are drawn on top.
 
 ### New character
 
@@ -97,7 +97,7 @@ These sizes are *guidelines*; textures will be scaled to fit slots, but sticking
 2. Add:
    - `/assets/characters/{id}/{id}_shield.png`
    - `/assets/characters/{id}/{id}_shooting.png`
-3. The first frame from the shield sheet is used as the idle pose; future work can add explicit `{id}_idle.png`.
+3. Use `{id}_static.png` for the default idle pose (recommended); otherwise the first frame of the shield sheet is used.
 
 ---
 

@@ -1,13 +1,25 @@
 import { Injectable } from '@angular/core';
 import * as PIXI from 'pixi.js';
 
-const COMBAT_BG_PATH = '/assets/combat/combat-bg.jpg';
+const FIGHT_LOCATION_PREFIX = '/assets/fight-location/';
+const FIGHT_LOCATION_CONFIG_URL = '/assets/data/fight-location.json';
 const ENEMY_PATH_PREFIX = '/assets/combat/enemies/';
 const CARD_ART_PREFIX = '/assets/cards/';
+/** Fallback when a card has no dedicated art image ({cardId}.png). Used for all cards until you add per-card art. */
+const EMPTY_CARD_TEMPLATE_PATH = `${CARD_ART_PREFIX}empty_card_template.png`;
+
+const EFFECTS_PREFIX = '/assets/effects/';
+const HP_ICON_PATH = `${EFFECTS_PREFIX}hp.svg`;
+const BLOCK_ICON_PATH = `${EFFECTS_PREFIX}block.svg`;
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
-/** Shield animation sprite sheet (6x6 grid). Path: /assets/characters/{id}/{id}_shield.png. First frame is used as static pose. */
+/** Default static / idle image. Path: /assets/characters/{id}/{id}_static.png. Used when not playing shield/shooting animation. */
+function getStaticImagePath(characterId: string): string {
+  return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_static.png`;
+}
+
+/** Shield animation sprite sheet (6x6 grid). Path: /assets/characters/{id}/{id}_shield.png. Fallback for static pose if no _static.png. */
 function getShieldSheetPath(characterId: string): string {
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shield.png`;
 }
@@ -27,9 +39,17 @@ const DEFAULT_PLAYER_CHARACTER_ID = 'gunboy';
 
 @Injectable({ providedIn: 'root' })
 export class CombatAssetsService {
-  private combatBgTexture: PIXI.Texture | null = null;
+  /** Enemy id (or 'default') -> background filename. Loaded from fight-location.json. */
+  private combatBgByEnemy: Record<string, string> = {};
+  /** Cache of loaded combat bg textures by key (enemy id or 'default'). */
+  private combatBgTextureCache = new Map<string, PIXI.Texture>();
+  /** Key for current fight so getCombatBgTexture() returns the right one. */
+  private currentCombatBgKey = 'default';
+  /** Fallback card art when {cardId}.png is missing. Loaded with global combat assets. */
+  private emptyCardTemplateTexture: PIXI.Texture | null = null;
   private playerTextures = new Map<string, PIXI.Texture>();
   private enemyTextures = new Map<string, PIXI.Texture>();
+  /** Card id -> texture (or null if load failed; then UI uses empty_card_template). */
   private cardArtTextures = new Map<string, PIXI.Texture | null>();
   private shieldFrameTextures: PIXI.Texture[] = [];
   private shieldStartTime: number | null = null;
@@ -37,16 +57,43 @@ export class CombatAssetsService {
   private shootingFrameTextures: PIXI.Texture[] = [];
   private shootingStartTime: number | null = null;
   private shootingResolve: (() => void) | null = null;
+  private hpIconTexture: PIXI.Texture | null = null;
+  private blockIconTexture: PIXI.Texture | null = null;
   private globalLoadPromise: Promise<void> | null = null;
 
-  /** Load only global combat assets (background). Call once at app/game start. Failures are cached (no retries). */
+  /** Load only global combat assets (fight-location config + default bg + empty card template). Call once at app/game start. Failures are cached (no retries). */
   async loadGlobalCombatAssets(): Promise<void> {
     if (this.globalLoadPromise) return this.globalLoadPromise;
     this.globalLoadPromise = (async () => {
       try {
-        this.combatBgTexture = (await PIXI.Assets.load(this.resolveUrl(COMBAT_BG_PATH))) as PIXI.Texture;
+        const res = await fetch(this.resolveUrl(FIGHT_LOCATION_CONFIG_URL));
+        const data = (await res.json()) as Record<string, string>;
+        this.combatBgByEnemy = data ?? {};
       } catch {
-        this.combatBgTexture = null;
+        this.combatBgByEnemy = { default: 'background_fight2.png' };
+      }
+      const defaultFilename = this.combatBgByEnemy['default'] ?? 'background_fight2.png';
+      try {
+        const tex = (await PIXI.Assets.load(this.resolveUrl(FIGHT_LOCATION_PREFIX + defaultFilename))) as PIXI.Texture;
+        this.combatBgTextureCache.set('default', tex);
+        this.currentCombatBgKey = 'default';
+      } catch {
+        // Default bg failed; getCombatBgTexture() will return null and renderer will use fallback
+      }
+      try {
+        this.emptyCardTemplateTexture = (await PIXI.Assets.load(this.resolveUrl(EMPTY_CARD_TEMPLATE_PATH))) as PIXI.Texture;
+      } catch {
+        this.emptyCardTemplateTexture = null;
+      }
+      try {
+        this.hpIconTexture = (await PIXI.Assets.load(this.resolveUrl(HP_ICON_PATH))) as PIXI.Texture;
+      } catch {
+        this.hpIconTexture = null;
+      }
+      try {
+        this.blockIconTexture = (await PIXI.Assets.load(this.resolveUrl(BLOCK_ICON_PATH))) as PIXI.Texture;
+      } catch {
+        this.blockIconTexture = null;
       }
     })();
     return this.globalLoadPromise;
@@ -55,14 +102,35 @@ export class CombatAssetsService {
   /** Load combat assets for the current fight: global (bg) + character sheets + enemy textures. Safe to call multiple times. */
   async loadCombatAssets(characterId?: string, enemyIds?: string[]): Promise<void> {
     await this.loadGlobalCombatAssets();
+    const bgKey = enemyIds?.[0] ?? 'default';
+    const hasMapping = bgKey !== 'default' && this.combatBgByEnemy[bgKey] != null;
+    const effectiveKey = hasMapping ? bgKey : 'default';
+    const filename = this.combatBgByEnemy[effectiveKey] ?? 'background_fight2.png';
+    if (!this.combatBgTextureCache.has(effectiveKey)) {
+      try {
+        const tex = (await PIXI.Assets.load(this.resolveUrl(FIGHT_LOCATION_PREFIX + filename))) as PIXI.Texture;
+        this.combatBgTextureCache.set(effectiveKey, tex);
+      } catch {
+        // Per-enemy bg failed; getCombatBgTexture will fall back to default
+      }
+    }
+    this.currentCombatBgKey = effectiveKey;
     const cid = characterId ?? DEFAULT_PLAYER_CHARACTER_ID;
     if (!this.playerTextures.has(cid)) {
+      // Prefer dedicated static image ({id}_static.png) for default pose; fall back to first frame of shield sheet.
+      try {
+        const staticPath = this.resolveUrl(getStaticImagePath(cid));
+        const staticTexture = (await PIXI.Assets.load(staticPath)) as PIXI.Texture;
+        this.playerTextures.set(cid, staticTexture);
+      } catch {
+        // No static image; use first frame of shield sheet as fallback
+      }
       try {
         const sheetPath = this.resolveUrl(getShieldSheetPath(cid));
         const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
         const frames = this.buildSheetFrames(sheetTexture);
         if (frames.length > 0) {
-          this.playerTextures.set(cid, frames[0]);
+          if (!this.playerTextures.has(cid)) this.playerTextures.set(cid, frames[0]);
           if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shieldFrameTextures = frames;
         }
       } catch {
@@ -102,8 +170,17 @@ export class CombatAssetsService {
     return out;
   }
 
+  /** Current fight's background texture (resolved by first enemy id or default). Fallback to default then null. */
   getCombatBgTexture(): PIXI.Texture | null {
-    return this.combatBgTexture;
+    return this.combatBgTextureCache.get(this.currentCombatBgKey) ?? this.combatBgTextureCache.get('default') ?? null;
+  }
+
+  getHpIconTexture(): PIXI.Texture | null {
+    return this.hpIconTexture;
+  }
+
+  getBlockIconTexture(): PIXI.Texture | null {
+    return this.blockIconTexture;
   }
 
   /**
@@ -129,12 +206,17 @@ export class CombatAssetsService {
     }
   }
 
-  /** Returns card art texture for a given card id, or null if not available. */
+  /**
+   * Returns card art texture for a card. Association: /assets/cards/{cardId}.png.
+   * If that image is missing or not yet loaded, returns the fallback empty_card_template.png.
+   */
   getCardArtTexture(cardId: string): PIXI.Texture | null {
-    return this.cardArtTextures.get(cardId) ?? null;
+    const tex = this.cardArtTextures.get(cardId);
+    if (tex) return tex;
+    return this.emptyCardTemplateTexture;
   }
 
-  /** Returns the current player character texture (first frame of shield sheet). */
+  /** Returns the current player character texture (static image or first frame of shield sheet). */
   getPlayerTexture(): PIXI.Texture | null {
     return this.playerTextures.get(DEFAULT_PLAYER_CHARACTER_ID) ?? null;
   }

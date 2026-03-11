@@ -11,6 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
+import { CardVfxService } from '../services/card-vfx.service';
 import { CombatAssetsService } from '../services/combat-assets.service';
 import { GameBridgeService } from '../services/game-bridge.service';
 import { GameSettingsService } from '../services/game-settings.service';
@@ -19,7 +20,8 @@ import { SoundService } from '../services/sound.service';
 import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
-import { COMBAT_LAYOUT, getEnemyCenter, getPlayerCenter } from './constants/combat-layout.constants';
+import { COMBAT_LAYOUT, getEnemyCenter, getEnemyIndexAtPoint, getPlayerCenter } from './constants/combat-layout.constants';
+import { getHandLayout } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
 import { drawCombatView, type CombatViewContext } from './renderers/combat-view.renderer';
@@ -42,14 +44,29 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private app: PIXI.Application | null = null;
   private cardSprites: Map<string, PIXI.Container> = new Map();
   private cardsMap: Map<string, CardDef> | null = null;
+  /** Card interaction state machine. */
+  cardInteractionState: 'idle' | 'hover' | 'pressed' | 'dragging' | 'playing' | 'returning' = 'idle';
+  /** Hand index of the card in a non-idle state (pressed/dragging/returning). */
+  cardInteractionCardIndex: number | null = null;
+  cardInteractionCardId: string | null = null;
   /** Index of card in hand currently hovered; used for lift/scale/z-order. */
   hoveredCardIndex: number | null = null;
-  /** When set, we are in targeting mode; player must click an enemy to play this card. */
-  selectedCardId: string | null = null;
-  /** Hand index of the selected card (for highlight and playing the correct instance). */
-  selectedCardIndex: number | null = null;
   /** In targeting mode, index of enemy currently hovered (for arrow and highlight). */
   hoveredEnemyIndex: number | null = null;
+  /** Press start position for drag threshold. */
+  private pressStartX = 0;
+  private pressStartY = 0;
+  dragScreenX = 0;
+  dragScreenY = 0;
+  /** Returning animation: start position and time. */
+  returnStartX = 0;
+  returnStartY = 0;
+  returnStartTime = 0;
+  readonly returnDurationMs = 200;
+  /** 0..1 when returning; set by ticker, used by renderer. */
+  returnProgress = 0;
+  private dragListenersBound: (() => void) | null = null;
+  private hoverResolveBound: (() => void) | null = null;
   /** B9/B20: Floating numbers to show (damage/block) with screen position; addedAt for expiry. */
   private floatingNumbers: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt?: number }[] = [];
   /** B11: When true, show "Enemy turn" banner before resolving enemy phase. */
@@ -89,9 +106,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private inRedraw = false;
   /** ResizeObserver: throttle to one redraw per frame. */
   private resizeRedrawScheduled = false;
-  /** Throttle hover-led redraws to ~30 FPS so we don't redraw every frame during card hover. */
-  private lastHoverRedrawTime = 0;
-  private static readonly HOVER_REDRAW_INTERVAL_MS = 33;
   showPauseMenu = false;
   showPauseSettings = false;
   pauseFullscreen = true;
@@ -99,11 +113,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   shieldAnimationPlaying = false;
   /** When true, player shows shooting animation (played when strike card is used). */
   shootingAnimationPlaying = false;
+  /** Active card impact VFX (drawn each frame, removed when animation done). */
+  private activeCardVfx: { vfxId: string; x: number; y: number; startTime: number }[] = [];
 
   constructor(
     private bridge: GameBridgeService,
     private mapAssets: MapAssetsService,
     private combatAssets: CombatAssetsService,
+    private cardVfx: CardVfxService,
     public gameSettings: GameSettingsService,
     public sound: SoundService,
     private router: Router,
@@ -138,9 +155,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    if (this.selectedCardId != null) {
-      this.selectedCardId = null;
+    if (this.cardInteractionState !== 'idle' && this.cardInteractionState !== 'hover') {
+      this.cardInteractionState = 'idle';
+      this.cardInteractionCardIndex = null;
+      this.cardInteractionCardId = null;
       this.hoveredEnemyIndex = null;
+      this.clearDragListeners();
       this.redraw();
       this.requestTemplateUpdate();
       return;
@@ -218,6 +238,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.sound.loadMutedPreference();
+    this.cardVfx.loadConfig().catch(() => {});
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
       (window as unknown as { electronAPI: { onSteamWarning: (cb: (m: string) => void) => void } }).electronAPI.onSteamWarning((msg) => {
         this._steamWarning = msg;
@@ -228,6 +249,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.hoverResolveBound) {
+      this.hoverResolveBound();
+      this.hoverResolveBound = null;
+    }
     if (this.hoverLerpTicker && this.app) this.app.ticker.remove(this.hoverLerpTicker);
     this.hoverLerpTicker = null;
     if (this.shieldTicker && this.app) this.app.ticker.remove(this.shieldTicker);
@@ -275,7 +300,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       });
     });
     this.resizeObserver.observe(host);
-    const runTickerOutsideZone = (): void => {
+    const runTickerOutsideZone = (ticker: PIXI.Ticker): void => {
       if (!this.app) return;
       const w = this.app.screen.width;
       const h = this.app.screen.height;
@@ -291,25 +316,65 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         return;
       }
       if (this._runPhase !== 'combat') return;
+      const state = this.bridge.getState();
+      if (!state) return;
+      const hand = state.hand;
+      if (hand.length !== this.hoverLerp.length) {
+      this.targetLerp = hand.map((cardId, i) =>
+        (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+        (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+          ? 1
+          : 0
+      );
+      this.hoverLerp = [...this.targetLerp];
+        this.redraw();
+        return;
+      }
+      this.targetLerp = hand.map((cardId, i) =>
+        (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+        (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+          ? 1
+          : 0
+      );
+      const dt = (ticker.deltaTime ?? 1) / 60;
+      const factor = 1 - Math.exp(-8 * dt);
       let changed = false;
+      if (this.activeCardVfx.length > 0) changed = true;
+      if (this.cardInteractionState === 'returning') {
+        const elapsed = performance.now() - this.returnStartTime;
+        const raw = Math.min(1, elapsed / this.returnDurationMs);
+        this.returnProgress = 1 - (1 - raw) * (1 - raw);
+        if (raw >= 1) {
+          this.cardInteractionState = 'idle';
+          this.cardInteractionCardIndex = null;
+          this.cardInteractionCardId = null;
+        }
+        changed = true;
+      }
       if (this.hoverLerp.length === this.targetLerp.length) {
-        const factor = 0.35;
         for (let i = 0; i < this.hoverLerp.length; i++) {
           const prev = this.hoverLerp[i];
           this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
-          if (Math.abs(this.hoverLerp[i] - prev) > 0.02) changed = true;
+          if (Math.abs(this.hoverLerp[i] - prev) > 0.002) changed = true;
         }
       }
       if (changed) {
-        const now = performance.now();
-        if (now - this.lastHoverRedrawTime >= CombatCanvasComponent.HOVER_REDRAW_INTERVAL_MS) {
-          this.lastHoverRedrawTime = now;
+        if (
+          this.activeCardVfx.length > 0 ||
+          this.cardSprites.size !== hand.length ||
+          this.cardInteractionState === 'returning'
+        ) {
           this.redraw();
+        } else {
+          this.updateHandHoverOnly();
         }
       }
     };
-    this.hoverLerpTicker = (_ticker: PIXI.Ticker) => this.zone.runOutsideAngular(runTickerOutsideZone);
+    this.hoverLerpTicker = (ticker: PIXI.Ticker) => this.zone.runOutsideAngular(() => runTickerOutsideZone(ticker));
     this.zone.runOutsideAngular(() => this.app!.ticker.add(this.hoverLerpTicker!));
+    const onPointerMove = (e: PointerEvent): void => this.resolveHover(e.clientX, e.clientY);
+    document.addEventListener('pointermove', onPointerMove);
+    this.hoverResolveBound = (): void => document.removeEventListener('pointermove', onPointerMove);
     this.redraw();
     this.scheduleCanvasLayoutFix({ scrollToBottom: this._runPhase === 'map' });
     if (this._runPhase === 'map') {
@@ -384,6 +449,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const prevPhase = this._runPhase;
     this._combatResult = state.combatResult;
     this._runPhase = this.bridge.getRunPhase();
+    if (this._runPhase !== 'combat') {
+      this.cardInteractionState = 'idle';
+      this.cardInteractionCardIndex = null;
+      this.cardInteractionCardId = null;
+      this.clearDragListeners();
+    }
     this.syncOverlaySignals(state);
     if (state.combatResult === 'win' && prevResult !== 'win') this.sound.playVictory();
     if (state.combatResult === 'lose' && prevResult !== 'lose') this.sound.playDefeat();
@@ -457,11 +528,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const characterId = state.characterId ?? undefined;
     const enemyIds = state.enemies.map((e) => e.id);
     this.combatAssets.loadCombatAssets(characterId, enemyIds);
+    this.cardVfx.loadConfig().then(() => {
+      const cardIds = [...state.hand, ...(state.deck ?? [])];
+      if (cardIds.length) this.cardVfx.preloadVfxForCards(cardIds);
+    });
     const hand = state.hand;
     if (this.hoveredCardIndex != null && this.hoveredCardIndex >= hand.length) this.hoveredCardIndex = null;
 
     this.targetLerp = hand.map((cardId, i) =>
-      (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) || this.selectedCardIndex === i ? 1 : 0
+      (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+      (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+        ? 1
+        : 0
     );
     if (this.hoverLerp.length !== this.targetLerp.length) {
       this.hoverLerp = [...this.targetLerp];
@@ -474,9 +552,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       h,
       padding,
       hoveredCardIndex: this.hoveredCardIndex,
-      selectedCardId: this.selectedCardId,
-      selectedCardIndex: this.selectedCardIndex,
+      cardInteractionState: this.cardInteractionState,
+      cardInteractionCardIndex: this.cardInteractionCardIndex,
+      cardInteractionCardId: this.cardInteractionCardId,
       hoveredEnemyIndex: this.hoveredEnemyIndex,
+      isDraggingCard: this.cardInteractionState === 'dragging',
+      dragCardId: this.cardInteractionState === 'dragging' ? this.cardInteractionCardId : null,
+      dragHandIndex: this.cardInteractionState === 'dragging' ? this.cardInteractionCardIndex : null,
+      dragScreenX: this.dragScreenX,
+      dragScreenY: this.dragScreenY,
+      dragIsTargetingEnemy: this.cardInteractionCardId ? this.cardNeedsEnemyTarget(this.cardInteractionCardId) : false,
+      returnProgress: this.cardInteractionState === 'returning' ? this.returnProgress : null,
+      returnStartX: this.returnStartX,
+      returnStartY: this.returnStartY,
+      getHandLayout: (count: number, hoveredIdx: number | null) =>
+        getHandLayout(count, w, h, hoveredIdx),
       floatingNumbers: this.floatingNumbers,
       showingEnemyTurn: this.showingEnemyTurn,
       getCardCost: (id) => this.getCardCost(id),
@@ -484,13 +574,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getCardEffectDescription: (id) => getCardEffectDescription(id, (cid) => this.bridge.getCardDef(cid)),
       onCardClick: (cardId, handIndex) => this.onCardClick(cardId, handIndex),
       onEnemyTargetClick: (enemyIndex) => this.onEnemyTargetClick(enemyIndex),
-      onCardPointerOver: (handIndex) => { this.hoveredCardIndex = handIndex; this.redraw(); },
-      onCardPointerOut: () => { this.hoveredCardIndex = null; this.redraw(); },
+      onCardPointerOver: () => {},
+      onCardPointerOut: () => {},
+      onCardPointerDown: (cardId, handIndex, stageX, stageY) => this.onCardPointerDown(cardId, handIndex, stageX, stageY),
       onEnemyPointerOver: (enemyIndex) => { this.hoveredEnemyIndex = enemyIndex; this.redraw(); },
       onEnemyPointerOut: () => { this.hoveredEnemyIndex = null; this.redraw(); },
       cardSprites: this.cardSprites,
       markForCheck: () => this.requestTemplateUpdate(),
       getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
+      getHpIconTexture: () => this.combatAssets.getHpIconTexture(),
+      getBlockIconTexture: () => this.combatAssets.getBlockIconTexture(),
       getPlayerTexture: () => this.combatAssets.getPlayerTexture(),
       getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
       getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
@@ -503,6 +596,86 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getShootingTexture: () => this.combatAssets.getShootingTexture(),
     };
     drawCombatView(combatContext);
+    this.drawCardImpactVfx(stage, now);
+  }
+
+  /** Draw active card impact VFX and remove expired ones. Uses CardVfxService for data-driven VFX. */
+  private drawCardImpactVfx(stage: PIXI.Container, now: number): void {
+    if (this.gameSettings.vfxIntensity() === 'off') {
+      this.activeCardVfx.length = 0;
+      return;
+    }
+    for (let i = this.activeCardVfx.length - 1; i >= 0; i--) {
+      const e = this.activeCardVfx[i];
+      const meta = this.cardVfx.getVfxMeta(e.vfxId);
+      const frames = this.cardVfx.getVfxFrames(e.vfxId);
+      if (!meta || frames.length === 0) {
+        this.activeCardVfx.splice(i, 1);
+        continue;
+      }
+      const elapsed = now - e.startTime;
+      const frameIndex = Math.floor(elapsed / meta.frameMs);
+      if (frameIndex >= meta.frameCount) {
+        this.activeCardVfx.splice(i, 1);
+        continue;
+      }
+      const tex = frames[Math.min(frameIndex, frames.length - 1)];
+      const sprite = new PIXI.Sprite(tex);
+      sprite.anchor.set(0.5, 0.5);
+      sprite.x = e.x;
+      sprite.y = e.y;
+      sprite.scale.set(meta.scale ?? 1);
+      sprite.zIndex = 500;
+      stage.addChild(sprite);
+    }
+  }
+
+  /**
+   * Updates only card transforms (x, y, rotation, scale, zIndex, alpha, shadow) from current hover lerp.
+   * Uses arc layout from getHandLayout for consistency with drawHand.
+   */
+  private updateHandHoverOnly(): void {
+    const state = this.bridge.getState();
+    if (!state || !this.app || state.hand.length !== this.cardSprites.size) return;
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const L = COMBAT_LAYOUT;
+    const hand = state.hand;
+    const hoverLift = L.hoverLift;
+    const hoverScale = L.hoverScale;
+    const useHoverLerp = this.hoverLerp.length === hand.length;
+    const layout = getHandLayout(hand.length, w, h, this.hoveredCardIndex);
+    const isPressedOrDragging = (idx: number) =>
+      this.cardInteractionCardIndex === idx &&
+      (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging');
+
+    for (let i = 0; i < hand.length; i++) {
+      const container = this.cardSprites.get(`${hand[i]}-${i}`);
+      if (!container) continue;
+      const cost = this.getCardCost(hand[i]);
+      const playable = state.energy >= cost;
+      const isHovered = this.hoveredCardIndex === i;
+      const isSelected = isPressedOrDragging(i);
+      const lerp = useHoverLerp ? (this.hoverLerp[i] ?? 0) : (isHovered || isSelected ? 1 : 0);
+      const isActive = isHovered || isSelected || lerp > 0.02;
+      const applyHover = (isHovered || isSelected) && lerp > 0.5;
+
+      const pos = layout.positions[i];
+      const cardX = pos.x + (pos.spreadOffsetX ?? 0);
+      const cardY = pos.y - (isActive ? lerp * hoverLift : 0);
+      const scale = 1 + (isActive ? lerp : 0) * (hoverScale - 1);
+      const zIndex = applyHover || (isActive && lerp > 0.5) ? 100 : i;
+      const alpha = playable ? (applyHover ? 1 : 0.92) : 0.6;
+
+      container.x = cardX;
+      container.y = cardY;
+      container.rotation = pos.rotation;
+      container.scale.set(scale);
+      container.zIndex = zIndex;
+      container.alpha = alpha;
+      const shadow = container.children[0];
+      if (shadow) shadow.alpha = applyHover ? 1 : 0.18 / 0.35;
+    }
   }
 
   /** Energy cost of the card from definition. */
@@ -580,77 +753,218 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return this.bridge.getCardDef(cardId)?.name ?? cardId;
   }
 
-  /** Handle card click: enter targeting if needed, else play card or cancel selection. */
-  onCardClick(cardId: string, handIndex: number): void {
+  /** Convert client coordinates to stage (canvas) coordinates for drag. */
+  private clientToStage(clientX: number, clientY: number): { x: number; y: number } {
+    if (!this.app?.canvas) return { x: 0, y: 0 };
+    const rect = this.app.canvas.getBoundingClientRect();
+    const scaleX = this.app.screen.width / rect.width;
+    const scaleY = this.app.screen.height / rect.height;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  }
+
+  private clearDragListeners(): void {
+    if (!this.dragListenersBound) return;
+    this.dragListenersBound();
+    this.dragListenersBound = null;
+  }
+
+  /** Magnetic hover: resolve which card is hovered from mouse position; hover lock with release radius. */
+  private resolveHover(clientX: number, clientY: number): void {
+    if (this._runPhase !== 'combat' || !this.app) return;
+    const state = this.bridge.getState();
+    if (!state) return;
+    const hand = state.hand;
+    if (hand.length === 0) return;
+    const { x: mouseX, y: mouseY } = this.clientToStage(clientX, clientY);
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const layout = getHandLayout(hand.length, w, h, null);
+    const cardWidth = COMBAT_LAYOUT.cardWidth;
+    const hoverRadius = cardWidth * ((COMBAT_LAYOUT as { hoverRadiusRatio?: number }).hoverRadiusRatio ?? 0.6);
+    const hoverReleaseRadius = cardWidth * ((COMBAT_LAYOUT as { hoverReleaseRadiusRatio?: number }).hoverReleaseRadiusRatio ?? 0.8);
+
+    if (this.cardInteractionState === 'dragging' && this.cardInteractionCardIndex !== null) return;
+
+    if (this.hoveredCardIndex != null && this.hoveredCardIndex < layout.positions.length) {
+      const pos = layout.positions[this.hoveredCardIndex];
+      const cx = pos.x + (pos.spreadOffsetX ?? 0);
+      const dist = Math.hypot(mouseX - cx, mouseY - pos.y);
+      if (dist < hoverReleaseRadius) return;
+    }
+
+    let best: { index: number; dist: number } | null = null;
+    for (let i = 0; i < layout.positions.length; i++) {
+      const pos = layout.positions[i];
+      const cx = pos.x + (pos.spreadOffsetX ?? 0);
+      const dist = Math.hypot(mouseX - cx, mouseY - pos.y);
+      if (dist < hoverRadius && (best == null || dist < best.dist)) best = { index: i, dist };
+    }
+    const newHover = best?.index ?? null;
+    if (newHover !== this.hoveredCardIndex) {
+      this.hoveredCardIndex = newHover;
+      this.requestTemplateUpdate();
+      this.redraw();
+    }
+  }
+
+  /** Card pointer down: enter Pressed; Dragging after threshold; play or Returning on release. */
+  onCardPointerDown(cardId: string, handIndex: number, stageX: number, stageY: number): void {
     const state = this.bridge.getState();
     if (!state || state.phase !== 'player' || state.combatResult || this._runPhase !== 'combat') return;
-
     const cost = this.getCardCost(cardId);
     if (state.energy < cost) return;
 
-    if (this.selectedCardId != null && this.selectedCardIndex !== null) {
-      if (this.selectedCardIndex === handIndex) {
-        this.selectedCardId = null;
-        this.selectedCardIndex = null;
+    const needsEnemy = this.cardNeedsEnemyTarget(cardId);
+    if (needsEnemy) {
+      const aliveCount = state.enemies.filter((e) => e.hp > 0).length;
+      if (aliveCount === 0) return;
+    }
+
+    this.cardInteractionState = 'pressed';
+    this.cardInteractionCardIndex = handIndex;
+    this.cardInteractionCardId = cardId;
+    this.pressStartX = stageX;
+    this.pressStartY = stageY;
+    this.redraw();
+    this.requestTemplateUpdate();
+
+    const onMove = (e: PointerEvent): void => {
+      const { x, y } = this.clientToStage(e.clientX, e.clientY);
+      if (this.cardInteractionState === 'pressed') {
+        const dx = x - this.pressStartX;
+        const dy = y - this.pressStartY;
+        const threshold = (COMBAT_LAYOUT as { dragThreshold?: number }).dragThreshold ?? 12;
+        if (Math.hypot(dx, dy) > threshold) {
+          this.cardInteractionState = 'dragging';
+        }
+      }
+      if (this.cardInteractionState === 'dragging') {
+        this.dragScreenX = x;
+        this.dragScreenY = y;
+        if (this.app) {
+          const stateNow = this.bridge.getState();
+          if (stateNow?.enemies?.length) {
+            const idx = getEnemyIndexAtPoint(x, y, stateNow.enemies.length, this.app.screen.width, this.app.screen.height);
+            const newHover = idx != null && stateNow.enemies[idx].hp > 0 ? idx : null;
+            if (this.hoveredEnemyIndex !== newHover) {
+              this.hoveredEnemyIndex = newHover;
+            }
+          } else {
+            this.hoveredEnemyIndex = null;
+          }
+        }
+        this.redraw();
+      }
+    };
+
+    const onUp = (e: PointerEvent): void => {
+      const { x, y } = this.clientToStage(e.clientX, e.clientY);
+      const currentCardId = this.cardInteractionCardId ?? cardId;
+      const currentHandIndex = this.cardInteractionCardIndex ?? handIndex;
+      const needsEnemyLocal = this.cardNeedsEnemyTarget(currentCardId);
+
+      if (this.cardInteractionState === 'pressed') {
+        this.cardInteractionState = 'idle';
+        this.cardInteractionCardIndex = null;
+        this.cardInteractionCardId = null;
+        this.redraw();
+        this.requestTemplateUpdate();
+      } else if (this.cardInteractionState === 'dragging') {
+        const stateNow = this.bridge.getState();
+        let played = false;
+        if (needsEnemyLocal) {
+          const enemyIdx = this.hoveredEnemyIndex;
+          if (stateNow && enemyIdx != null && enemyIdx < stateNow.enemies.length && stateNow.enemies[enemyIdx].hp > 0) {
+            this.runCardFlyThenPlay(currentCardId, enemyIdx, stateNow);
+            played = true;
+          }
+        } else if (stateNow && this.app) {
+          const playLineY = this.app.screen.height * 0.75;
+          if (y < playLineY) {
+            this.bridge.playCard(currentCardId, undefined, currentHandIndex);
+            this.triggerShieldAnimationIfBlock(currentCardId);
+            this.triggerShootingAnimationIfStrike(currentCardId);
+            played = true;
+          }
+        }
+
+        if (played) {
+          this.cardInteractionState = 'idle';
+          this.cardInteractionCardIndex = null;
+          this.cardInteractionCardId = null;
+        } else {
+          this.cardInteractionState = 'returning';
+          if (this.app && currentHandIndex >= 0 && stateNow) {
+            const layout = getHandLayout(stateNow.hand.length, this.app.screen.width, this.app.screen.height, currentHandIndex);
+            const pos = layout.positions[currentHandIndex];
+            if (pos) {
+              this.returnStartX = pos.x + (pos.spreadOffsetX ?? 0);
+              this.returnStartY = pos.y;
+            } else {
+              this.returnStartX = this.dragScreenX ?? 0;
+              this.returnStartY = this.dragScreenY ?? 0;
+            }
+          } else {
+            this.returnStartX = this.dragScreenX ?? 0;
+            this.returnStartY = this.dragScreenY ?? 0;
+          }
+          this.returnStartTime = performance.now();
+          this.returnProgress = 0;
+        }
         this.redraw();
         this.requestTemplateUpdate();
       }
-      return;
-    }
+      this.clearDragListeners();
+    };
 
-    if (this.cardNeedsEnemyTarget(cardId)) {
-      const aliveCount = state.enemies.filter((e) => e.hp > 0).length;
-      if (aliveCount === 0) return; // B19: no valid target, do not enter targeting
-      this.selectedCardId = cardId;
-      this.selectedCardIndex = handIndex;
-      this.redraw();
-      this.requestTemplateUpdate();
-      return;
-    }
-
-    this.bridge.playCard(cardId, state.enemies.length > 0 ? 0 : undefined, handIndex);
-    this.selectedCardIndex = null;
-    this.triggerShieldAnimationIfBlock(cardId);
-    this.triggerShootingAnimationIfStrike(cardId);
-    this.redraw();
+    this.dragListenersBound = (): void => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
   }
 
-  /** In targeting mode, play selected card against the clicked enemy (with fly animation). */
-  onEnemyTargetClick(enemyIndex: number): void {
-    if (this.selectedCardId == null) return;
-    const state = this.bridge.getState();
-    if (!state || state.phase !== 'player' || state.combatResult || this._runPhase !== 'combat') return;
-    const enemy = state.enemies[enemyIndex];
-    if (!enemy || enemy.hp <= 0) return;
-    this.runCardFlyThenPlay(this.selectedCardId, enemyIndex, state);
+  /** Legacy: card click (all interaction is via pointer down -> pressed -> drag in combat). */
+  onCardClick(_cardId: string, _handIndex: number): void {
+    if (this._runPhase === 'combat') return;
+    // Non-combat or fallback: no-op; combat uses onCardPointerDown only.
   }
 
-  /** Clear selected card and hovered enemy; exit targeting mode. */
+  /** Enemy click is not used to play cards; targetable cards only trigger on drop (release) over an enemy. Hover only highlights. */
+  onEnemyTargetClick(_enemyIndex: number): void {
+    // Card plays only when pointer is released (drop) over an enemy in onUp, not on click. No lock-on.
+  }
+
+  /** Clear card interaction and hovered enemy; exit targeting mode. */
   cancelTargeting(): void {
-    this.selectedCardId = null;
+    this.cardInteractionState = 'idle';
+    this.cardInteractionCardIndex = null;
+    this.cardInteractionCardId = null;
     this.hoveredEnemyIndex = null;
+    this.clearDragListeners();
     this.redraw();
     this.requestTemplateUpdate();
   }
 
   /**
-   * B8: Animate card flying from hand to enemy, then play card, compute floating numbers, and redraw.
+   * B8: Animate card flying from hand (or drag position) to enemy, then play card, compute floating numbers, and redraw.
    * Ease-out so card decelerates at target; 280ms duration.
+   * @param dragStart When playing from drag, use this as fly start so the card flies from the cursor.
    */
-  private runCardFlyThenPlay(cardId: string, enemyIndex: number, state: GameState): void {
+  private runCardFlyThenPlay(cardId: string, enemyIndex: number, state: GameState, dragStart?: { x: number; y: number }): void {
     if (!this.app) return;
     const L = COMBAT_LAYOUT;
     const w = this.app.screen.width;
     const h = this.app.screen.height;
     const padding = L.padding;
-    const playerY = h - L.playerYOffsetFromBottom;
     const cardWidth = L.cardWidth;
     const cardHeight = L.cardHeight;
-    const cardSpacing = cardWidth * L.overlapRatio;
-    const totalHandWidth = (state.hand.length - 1) * cardSpacing + cardWidth;
-    const startX = (w - totalHandWidth) / 2 + cardWidth / 2;
-    const handY = playerY - cardHeight - 20;
-    const center = (state.hand.length - 1) / 2;
     const enemyPlaceholderW = L.enemyPlaceholderW;
     const enemyPlaceholderH = L.enemyPlaceholderH;
     const enemyGap = L.enemyGap;
@@ -660,28 +974,47 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const totalEnemyWidth = state.enemies.length * enemyPlaceholderW + (state.enemies.length - 1) * enemyGap;
     const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
 
-    const selIdx = this.selectedCardIndex != null && this.selectedCardIndex < state.hand.length ? this.selectedCardIndex : state.hand.indexOf(cardId);
-    if (selIdx < 0) {
-      this.bridge.playCard(cardId, enemyIndex, this.selectedCardIndex ?? undefined);
+    let fromX: number;
+    let fromY: number;
+    const selIdx = this.cardInteractionCardIndex != null && this.cardInteractionCardIndex < state.hand.length
+      ? this.cardInteractionCardIndex
+      : state.hand.indexOf(cardId);
+    const handIndexForPlay = this.cardInteractionCardIndex ?? selIdx;
+    if (dragStart) {
+      fromX = dragStart.x;
+      fromY = dragStart.y;
+    } else if (selIdx >= 0) {
+      const layout = getHandLayout(state.hand.length, w, h, null);
+      const pos = layout.positions[selIdx];
+      fromX = pos.x + (pos.spreadOffsetX ?? 0);
+      fromY = pos.y - L.hoverLift;
+    } else {
+      this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
       this.triggerShieldAnimationIfBlock(cardId);
       this.triggerShootingAnimationIfStrike(cardId);
-      this.selectedCardId = null;
-      this.selectedCardIndex = null;
+      this.cardInteractionState = 'idle';
+      this.cardInteractionCardIndex = null;
+      this.cardInteractionCardId = null;
       this.hoveredEnemyIndex = null;
       this.redraw();
       this.requestTemplateUpdate();
       return;
     }
-    const arcN = state.hand.length > 1 ? (selIdx - center) / (state.hand.length - 1) : 0;
-    const fromX = startX + selIdx * cardSpacing;
-    const fromY = handY + L.arcAmplitude * (4 * arcN * arcN) - L.hoverLift;
     const toX = ex + enemyIndex * (enemyPlaceholderW + enemyGap);
     const toY = enemyStartY + enemyPlaceholderH / 2;
 
     const flyCard = new PIXI.Container();
-    const bg = new PIXI.Graphics();
-    bg.roundRect(0, 0, cardWidth, cardHeight, L.cardCornerRadius).fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0xe8c060 });
-    flyCard.addChild(bg);
+    const cardTex = this.combatAssets.getCardArtTexture(cardId);
+    if (cardTex) {
+      const cardSprite = new PIXI.Sprite(cardTex);
+      cardSprite.width = cardWidth;
+      cardSprite.height = cardHeight;
+      flyCard.addChild(cardSprite);
+    } else {
+      const bg = new PIXI.Graphics();
+      bg.roundRect(0, 0, cardWidth, cardHeight, L.cardCornerRadius).fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0xe8c060 });
+      flyCard.addChild(bg);
+    }
     flyCard.pivot.set(cardWidth / 2, cardHeight);
     flyCard.x = fromX;
     flyCard.y = fromY;
@@ -700,13 +1033,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         this.app!.ticker.remove(tick);
         flyCard.destroy({ children: true });
         const oldState = state;
-        this.bridge.playCard(cardId, enemyIndex, this.selectedCardIndex ?? undefined);
+        this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
         this.triggerShieldAnimationIfBlock(cardId);
         this.triggerShootingAnimationIfStrike(cardId);
         this.sound.playCardPlay();
+        const vfxId = this.cardVfx.getVfxIdForCard(cardId);
+        if (vfxId && this.gameSettings.vfxIntensity() !== 'off' && this.cardVfx.getVfxFrames(vfxId).length > 0) {
+          this.activeCardVfx.push({ vfxId, x: toX, y: toY, startTime: performance.now() });
+        }
         const newState = this.bridge.getState()!;
-        this.selectedCardId = null;
-        this.selectedCardIndex = null;
+        this.cardInteractionState = 'idle';
+        this.cardInteractionCardIndex = null;
+        this.cardInteractionCardId = null;
         this.hoveredEnemyIndex = null;
         const now = performance.now();
         const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt: number }[] = [];

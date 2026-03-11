@@ -36,8 +36,8 @@ Optionally, for **act-specific shop** availability, add the id to `src/engine/da
 
 ### 3. Card art (optional)
 
-- Add an image at `src/assets/cards/{cardId}.png` (recommended ~84×50 px or similar ratio).
-- The combat view uses this for the card art slot; if missing, a placeholder is shown.
+- **Association:** one image per card at `src/assets/cards/{cardId}.png`. The image is the **full card** (recommended **300×420 px** to match display size); name, cost, and effect text are drawn on top.
+- If the file is missing, **`empty_card_template.png`** is used as fallback so you can style cards one by one over time.
 
 ### 4. Effect logic
 
