@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 
 const AUDIO_BASE = '/assets/audio/';
+const VFX_BASE = '/assets/vfx/';
 const PATHS = {
   cardPlay: `${AUDIO_BASE}card-play.mp3`,
   hit: `${AUDIO_BASE}hit.mp3`,
@@ -10,6 +11,7 @@ const PATHS = {
   victory: `${AUDIO_BASE}victory.mp3`,
   defeat: `${AUDIO_BASE}defeat.mp3`,
   combatStart: `${AUDIO_BASE}combat-start.mp3`,
+  click: `${VFX_BASE}click_sound.ogg`,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -77,5 +79,10 @@ export class SoundService {
 
   playCombatStart(): void {
     this.play(PATHS.combatStart);
+  }
+
+  /** UI click feedback (e.g. buttons, links). */
+  playClick(): void {
+    this.play(PATHS.click);
   }
 }
