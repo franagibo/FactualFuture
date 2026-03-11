@@ -199,6 +199,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.requestTemplateUpdate();
   }
 
+  /** Open pause overlay and show settings (e.g. from header gear). */
+  onHeaderSettings(): void {
+    this.showPauseMenu = true;
+    this.showPauseSettings = true;
+    this.requestTemplateUpdate();
+  }
+
   closePauseSettings(): void {
     this.showPauseSettings = false;
     this.redraw(); // apply any changed VFX/text/animation settings
@@ -806,6 +813,25 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return this.bridge.getCardDef(cardId)?.name ?? cardId;
   }
 
+  /** Character display name for combat header. */
+  getCharacterName(): string {
+    const state = this.bridge.getState();
+    const id = state?.characterId;
+    if (!id) return 'Pilot';
+    const char = this.bridge.getCharacter(id);
+    return char?.name ?? id;
+  }
+
+  /** Floor/level for combat header (e.g. act or sector). */
+  getHeaderFloor(): number {
+    return this.bridge.getState()?.floor ?? 1;
+  }
+
+  /** Current game state (for template bindings e.g. header HP). */
+  getState(): GameState | null {
+    return this.bridge.getState();
+  }
+
   /** Convert client coordinates to stage (canvas) coordinates for drag. */
   private clientToStage(clientX: number, clientY: number): { x: number; y: number } {
     if (!this.app?.canvas) return { x: 0, y: 0 };
@@ -974,7 +1000,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
             played = true;
           }
         } else if (stateNow && this.app) {
-          const playLineY = this.app.screen.height * 0.75;
+          const ratio = (COMBAT_LAYOUT as { nonTargetPlayLineRatio?: number }).nonTargetPlayLineRatio ?? 0.55;
+          const playLineY = this.app.screen.height * ratio;
           if (y < playLineY) {
             this.bridge.playCard(currentCardId, undefined, currentHandIndex);
             this.triggerShieldAnimationIfBlock(currentCardId);

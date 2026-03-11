@@ -314,7 +314,8 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     }
     const dragY = ctx.dragScreenY;
     if (dragY == null) return false;
-    const playLineY = h * 0.75;
+    const ratio = (L as { nonTargetPlayLineRatio?: number }).nonTargetPlayLineRatio ?? 0.55;
+    const playLineY = h * ratio;
     return dragY < playLineY;
   };
 

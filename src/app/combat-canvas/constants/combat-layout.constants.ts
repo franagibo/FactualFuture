@@ -52,6 +52,8 @@ export const COMBAT_LAYOUT = {
   neonBorderSelectedColor: 0xffdd44,
   neonBorderSelectedWidths: [14, 7, 3],
   neonBorderSelectedAlphas: [0.35, 0.6, 1],
+  /** Y ratio (0–1) for non-target card play line: drop above this line to play (e.g. 0.55 = higher from hand). */
+  nonTargetPlayLineRatio: 0.55,
 } as const;
 
 /** Named slots used by the combat renderer for placement and z-order. */
