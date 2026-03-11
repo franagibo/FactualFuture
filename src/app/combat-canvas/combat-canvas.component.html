@@ -9,12 +9,18 @@
       [class.map-reveal]="runPhaseSignal() === 'map' && mapReady()"
       [style.height]="(runPhaseSignal() === 'map' && mapContentHeight) ? (mapContentHeight + 'px') : '100%'"
     >
-      <div #canvasHost class="pixi-host"></div>
+      <div #canvasHost class="pixi-host" role="img" [attr.aria-label]="runPhaseSignal() === 'combat' ? 'Combat view' : runPhaseSignal() === 'map' ? 'Map view' : 'Game view'"></div>
     </div>
-    @if (runPhaseSignal() === 'map' && !mapReady()) {
+    @if (runPhaseSignal() === 'map' && !mapReady() && !mapLoadError()) {
       <div class="map-loading-overlay" aria-busy="true">
         <span class="map-loading-spinner"></span>
         <span class="map-loading-label">Loading map…</span>
+      </div>
+    }
+    @if (runPhaseSignal() === 'map' && mapLoadError()) {
+      <div class="map-loading-overlay map-error-overlay">
+        <span class="map-loading-label">Map failed to load</span>
+        <button type="button" class="map-retry-btn" (click)="retryMapLoad()">Retry</button>
       </div>
     }
   </div>
@@ -24,28 +30,29 @@
   @if (runPhaseSignal()) {
     <header class="combat-header">
       <div class="combat-header-left">
-        <span class="combat-header-character">{{ getCharacterName() }}</span>
+        <span class="combat-header-character">{{ headerCharacterNameSignal() }}</span>
         <span class="combat-header-hp">
           <img class="combat-header-icon" src="/assets/effects/hp.svg" alt="" width="20" height="20" />
-          {{ getState()?.playerHp ?? 0 }}/{{ getState()?.playerMaxHp ?? 0 }}
+          {{ playerHpSignal() }}/{{ playerMaxHpSignal() }}
         </span>
         <span class="combat-header-gold">
           <img class="combat-header-icon" src="/assets/map/nodes/shop.svg" alt="" width="18" height="18" />
           {{ goldSignal() }}
         </span>
         <div class="combat-header-potions">
-          @for (potionId of potionsSignal(); track potionId + $index) {
+          @for (potionId of potionsSignal(); track potionId + $index; let pi = $index) {
             <button
               type="button"
               class="combat-header-potion"
               [attr.title]="getPotionTooltip(potionId)"
+              [attr.aria-label]="'Use potion ' + (pi + 1) + ' of ' + potionsSignal().length"
               (click)="onUsePotion(potionId)"
             >
               <img class="combat-header-potion-icon" src="/assets/map/nodes/rest.svg" alt="" width="24" height="24" />
             </button>
           }
         </div>
-        <span class="combat-header-level">Lv.{{ getHeaderFloor() }}</span>
+        <span class="combat-header-level">Lv.{{ headerFloorSignal() }}</span>
       </div>
       <button type="button" class="combat-header-settings" (click)="onHeaderSettings()" title="Settings" aria-label="Settings">
         <svg class="combat-header-gear" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
@@ -59,14 +66,14 @@
       @if (cardInteractionState === 'dragging') {
         <button type="button" class="btn-cancel-target" (click)="cancelTargeting()">Cancel target</button>
       }
-      <button type="button" class="btn-end" (click)="onEndTurn()" [disabled]="!canEndTurn()">
+      <button type="button" class="btn-end" (click)="onEndTurn()" [disabled]="!canEndTurn()" aria-label="End turn">
         End turn
       </button>
       @if (combatResultSignal()) {
-        <div class="result" [class.win]="combatResultSignal() === 'win'" [class.lose]="combatResultSignal() === 'lose'">
+        <div class="result" [class.win]="combatResultSignal() === 'win'" [class.lose]="combatResultSignal() === 'lose'" aria-live="polite" aria-atomic="true" role="status">
           {{ combatResultSignal() === 'win' ? 'Victory!' : 'Systems down' }}
         </div>
-        <button type="button" class="btn-restart" (click)="onRestart()">Restart</button>
+        <button type="button" class="btn-restart" (click)="onRestart()" aria-label="Restart">Restart</button>
       }
     }
   </div>
@@ -74,13 +81,14 @@
     <div class="reward-panel">
       <div class="reward-title">Choose salvage</div>
       <div class="reward-cards">
-        @for (cardId of rewardChoicesSignal(); track cardId) {
+        @for (cardId of rewardChoicesSignal(); track cardId; let i = $index) {
           <button
             type="button"
             class="reward-card"
             [class.chosen]="chosenRewardCardId === cardId"
             [class.fade-out]="chosenRewardCardId != null && chosenRewardCardId !== cardId"
             [attr.title]="getCardTooltip(cardId)"
+            [attr.aria-label]="'Choose card: ' + getCardName(cardId) + ', option ' + (i + 1) + ' of ' + rewardChoicesSignal().length"
             (click)="onChooseReward(cardId)"
           >
             {{ getCardName(cardId) }}

@@ -5,6 +5,7 @@
 import * as PIXI from 'pixi.js';
 import type { GameState } from '../../../engine/types';
 import type { MapNodeType } from '../../../engine/types';
+import { MAP_LAYOUT, getPathInset } from '../constants/map-layout.constants';
 
 export interface MapViewContext {
   getAvailableNextNodes(): string[];
@@ -109,12 +110,13 @@ export function drawMapView(
   const nodes = map.nodes;
   const edges = map.edges;
   const availableNext = context.getAvailableNextNodes();
-  const NODE_RADIUS = 28;
-  const NODE_ICON_SIZE = 80;
-  const BOSS_ICON_SIZE = 92;
-  const pathInset = Math.max(NODE_RADIUS + 6, BOSS_ICON_SIZE / 2 + 8);
-  const FLOOR_SPACING = 240;
-  const laneCount = 7;
+  const ML = MAP_LAYOUT;
+  const NODE_RADIUS = ML.nodeRadius;
+  const NODE_ICON_SIZE = ML.nodeIconSize;
+  const BOSS_ICON_SIZE = ML.bossIconSize;
+  const pathInset = getPathInset();
+  const FLOOR_SPACING = ML.floorSpacing;
+  const laneCount = ML.laneCount;
 
   const floorById = new Map<string, number>();
   const hasFloor = nodes.length > 0 && typeof (nodes[0] as { floor?: number }).floor === 'number';
@@ -136,7 +138,7 @@ export function drawMapView(
   }
 
   const maxFloor = Math.max(0, ...Array.from(floorById.values()));
-  const BOTTOM_MARGIN = 130;
+  const BOTTOM_MARGIN = ML.bottomMargin;
   const mapContentHeight = (maxFloor + 1) * FLOOR_SPACING + padding * 2 + BOTTOM_MARGIN;
   context.onMapContentHeight(mapContentHeight);
 
@@ -148,7 +150,7 @@ export function drawMapView(
   });
 
   const totalMapHeight = (maxFloor + 2) * FLOOR_SPACING;
-  const contentBottomPadding = 60;
+  const contentBottomPadding = ML.contentBottomPadding;
   /** Deterministic jitter from node id + floor so layout is stable but not rigid. Returns -1..1. */
   const jitterFrom = (nodeId: string, floor: number, seed: number) => {
     let h0 = seed;
@@ -156,14 +158,14 @@ export function drawMapView(
     h0 = (h0 + floor * 17) | 0;
     return ((h0 >>> 0) % 2000) / 1000 - 1;
   };
-  const JITTER_X = 28;
-  const JITTER_Y = 16;
+  const JITTER_X = ML.jitterX;
+  const JITTER_Y = ML.jitterY;
   const posById = new Map<string, { x: number; y: number }>();
   for (let f = 0; f <= maxFloor; f++) {
     const ids = floors[f] ?? [];
     if (!ids.length) continue;
     const baseY = contentBottomPadding + totalMapHeight - (f + 1) * FLOOR_SPACING;
-    const gapX = Math.min(140, (w - padding * 2) / Math.max(1, ids.length));
+    const gapX = Math.min(ML.maxGapX, (w - padding * 2) / Math.max(1, ids.length));
     const rowWidth = (ids.length - 1) * gapX;
     const centerX = w / 2;
     for (let i = 0; i < ids.length; i++) {
@@ -200,8 +202,8 @@ export function drawMapView(
     stage.addChild(bg);
   }
 
-  const PAD_H = 88;
-  const PAD_V = 42;
+  const PAD_H = ML.rowPadH;
+  const PAD_V = ML.rowPadV;
   const rowData: { left: number; right: number; y: number }[] = [];
   for (let f = 0; f <= maxFloor; f++) {
     const ids = floors[f] ?? [];
@@ -236,10 +238,6 @@ export function drawMapView(
 
   const strokeColor = 0x8899aa;
   const pathBorderColor = 0x0c0c18;
-  const pathBorderWidth = 6;
-  const pathStrokeWidth = 2.5;
-  const dashLen = 10;
-  const gapLen = 6;
 
   const drawEdgePath = (g: PIXI.Graphics, lineWidth: number, color: number) => {
     for (const [from, to] of edges) {
@@ -258,18 +256,18 @@ export function drawMapView(
       const endY = toPos.y - uy * pathInset;
       const segLen = Math.hypot(endX - startX, endY - startY);
       let dist = 0;
-      while (dist < segLen - 16) {
+      while (dist < segLen - ML.arrowBaseOffset) {
         const a = dist;
-        const b = Math.min(dist + dashLen, segLen - 16);
+        const b = Math.min(dist + ML.dashLen, segLen - ML.arrowBaseOffset);
         g.moveTo(startX + ux * a, startY + uy * a);
         g.lineTo(startX + ux * b, startY + uy * b);
         g.stroke({ width: lineWidth, color });
-        dist += dashLen + gapLen;
+        dist += ML.dashLen + ML.gapLen;
       }
-      const arrowBase = segLen - 16;
+      const arrowBase = segLen - ML.arrowBaseOffset;
       const baseX = startX + ux * arrowBase;
       const baseY = startY + uy * arrowBase;
-      const arrowLen = 12;
+      const arrowLen = ML.arrowLen;
       g.moveTo(baseX - uy * arrowLen * 0.5, baseY + ux * arrowLen * 0.5);
       g.lineTo(endX, endY);
       g.lineTo(baseX + uy * arrowLen * 0.5, baseY - ux * arrowLen * 0.5);
@@ -278,8 +276,8 @@ export function drawMapView(
   };
 
   const edgeGraphics = new PIXI.Graphics();
-  drawEdgePath(edgeGraphics, pathBorderWidth, pathBorderColor);
-  drawEdgePath(edgeGraphics, pathStrokeWidth, strokeColor);
+  drawEdgePath(edgeGraphics, ML.pathBorderWidth, pathBorderColor);
+  drawEdgePath(edgeGraphics, ML.pathStrokeWidth, strokeColor);
   edgeGraphics.zIndex = 2;
   stage.addChild(edgeGraphics);
 

@@ -28,6 +28,18 @@ import type { CardDef } from '../../engine/cardDef';
 import type { EnemyDef, EncounterDef, EventDef, PotionDef, RelicDef } from '../../engine/loadData';
 import { loadEvents, loadPotions, loadRelics } from '../../engine/loadData';
 import { runRelics } from '../../engine/relicRunner';
+import type { ActConfig } from '../../engine/map/mapGenerator';
+import { GAME_BALANCE } from '../constants/game-balance.constants';
+import { logger } from '../util/app-logger';
+
+/** Act config as stored in mapConfig.json: ActConfig plus encounter pools for the bridge. */
+export interface MapConfigAct extends ActConfig {
+  encounterPool?: string[];
+  eliteEncounterPool?: string[];
+  bossEncounter?: string;
+  encounterWeights?: Record<string, number>;
+  eliteEncounterWeights?: Record<string, number>;
+}
 
 // Re-export loadData types
 type CardsMap = Map<string, CardDef>;
@@ -60,8 +72,10 @@ export class GameBridgeService {
   private cardsMap: CardsMap | null = null;
   private enemyDefs: EnemyDefsMap | null = null;
   private encountersMap: EncountersMap | null = null;
-  private mapConfig: any | null = null;
+  private mapConfig: Record<string, MapConfigAct> | null = null;
   private rewardCardPool: string[] | null = null;
+  private dataLoadFailed = false;
+  private dataLoadErrorMessage: string | null = null;
   private eventPool: EventDef[] | null = null;
   private relicDefs: RelicDefsMap | null = null;
   private shopPoolsByAct: Record<string, ShopPoolConfig> = {};
@@ -128,6 +142,22 @@ export class GameBridgeService {
     return r.json() as Promise<T>;
   }
 
+  /** True if the last ensureDataLoaded() failed. Check before starting a run. */
+  isDataLoadFailed(): boolean {
+    return this.dataLoadFailed;
+  }
+
+  /** User-facing message when data load failed, or null. */
+  getDataLoadErrorMessage(): string | null {
+    return this.dataLoadErrorMessage;
+  }
+
+  /** Clear data load error state (e.g. after user clicks Retry). */
+  clearDataLoadError(): void {
+    this.dataLoadFailed = false;
+    this.dataLoadErrorMessage = null;
+  }
+
   async ensureDataLoaded(): Promise<void> {
     if (
       this.cardsMap &&
@@ -140,6 +170,19 @@ export class GameBridgeService {
     ) {
       return;
     }
+    this.dataLoadFailed = false;
+    this.dataLoadErrorMessage = null;
+    try {
+      await this.doEnsureDataLoaded();
+    } catch (err) {
+      this.dataLoadFailed = true;
+      this.dataLoadErrorMessage = err instanceof Error ? err.message : 'Data failed to load';
+      logger.warn('ensureDataLoaded failed', err);
+      throw err;
+    }
+  }
+
+  private async doEnsureDataLoaded(): Promise<void> {
     const DATA_PATHS = {
       cards: `${DATA_BASE}/cards.json`,
       enemies: `${DATA_BASE}/enemies.json`,
@@ -166,16 +209,16 @@ export class GameBridgeService {
       this.fetchJson<EnemyDef[]>(DATA_PATHS.enemies),
       this.fetchJson<EncounterDef[]>(DATA_PATHS.encounters),
       this.fetchJson<Record<string, unknown>>(DATA_PATHS.mapConfig),
-      this.fetchJson<EventDef[]>(DATA_PATHS.events).catch(() => []),
-      this.fetchJson<RelicDef[]>(DATA_PATHS.relics).catch(() => []),
-      this.fetchJson<Record<string, ShopPoolConfig>>(DATA_PATHS.shopPools).catch(() => ({})),
-      this.fetchJson<PotionDef[]>(DATA_PATHS.potions).catch(() => []),
-      this.fetchJson<CharacterDef[]>(DATA_PATHS.characters).catch(() => []),
+      this.fetchJson<EventDef[]>(DATA_PATHS.events).catch((err) => { logger.warn('Events load failed', DATA_PATHS.events, err); return []; }),
+      this.fetchJson<RelicDef[]>(DATA_PATHS.relics).catch((err) => { logger.warn('Relics load failed', DATA_PATHS.relics, err); return []; }),
+      this.fetchJson<Record<string, ShopPoolConfig>>(DATA_PATHS.shopPools).catch((err) => { logger.warn('Shop pools load failed', DATA_PATHS.shopPools, err); return {}; }),
+      this.fetchJson<PotionDef[]>(DATA_PATHS.potions).catch((err) => { logger.warn('Potions load failed', DATA_PATHS.potions, err); return []; }),
+      this.fetchJson<CharacterDef[]>(DATA_PATHS.characters).catch((err) => { logger.warn('Characters load failed', DATA_PATHS.characters, err); return []; }),
     ]);
     this.cardsMap = loadCards(cards);
     this.enemyDefs = loadEnemies(enemies);
     this.encountersMap = loadEncounters(encounters);
-    this.mapConfig = mapConfig;
+    this.mapConfig = mapConfig as Record<string, MapConfigAct>;
     this.rewardCardPool = cards.map((c) => c.id);
     this.eventPool = loadEvents(eventsData);
     this.relicDefs = loadRelics(relicsData);
@@ -185,15 +228,25 @@ export class GameBridgeService {
     await this.loadMeta();
   }
 
-  /** Start a new run. Uses characterId's starter deck and stores characterId in state. Default character: gunboy. */
+  /** Start a new run. No-op if data load previously failed (call ensureDataLoaded + check isDataLoadFailed first). Uses characterId's starter deck and stores characterId in state. Default character: gunboy. */
   startRun(characterId: string = 'gunboy'): void {
-    if (!this.mapConfig) return;
+    if (this.dataLoadFailed || !this.mapConfig) return;
     const act1 = this.mapConfig['act1'];
     if (!act1) return;
+    const actConfig: ActConfig = {
+      combat: act1.combat,
+      elite: act1.elite,
+      rest: act1.rest,
+      shop: act1.shop,
+      event: act1.event,
+      boss: act1.boss,
+      floorCount: act1.floorCount,
+      typeWeights: act1.typeWeights,
+    };
     const character = this.charactersMap.get(characterId);
     const starterDeck = character?.starterDeck;
     const seed = Date.now() & 0xffffffff;
-    this.setState(engineStartRun(seed, act1, {
+    this.setState(engineStartRun(seed, actConfig, {
       starterDeck: starterDeck?.length ? starterDeck : undefined,
       characterId: character ? characterId : undefined,
     }));
@@ -426,13 +479,7 @@ export class GameBridgeService {
   chooseNode(nodeId: string): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs || !this.encountersMap || !this.mapConfig) return;
     const actKey = `act${this.state.act ?? 1}`;
-    const actConfig = this.mapConfig[actKey] as {
-      encounterPool?: string[];
-      eliteEncounterPool?: string[];
-      bossEncounter?: string;
-      encounterWeights?: Record<string, number>;
-      eliteEncounterWeights?: Record<string, number>;
-    } | undefined;
+    const actConfig = this.mapConfig[actKey];
     let encounterId: string | null = null;
     if (this.state.map) {
       const node = engineGetNodeById(this.state.map, nodeId);
@@ -516,7 +563,7 @@ export class GameBridgeService {
   advanceToNextAct(): void {
     if (!this.state || !this.mapConfig) return;
     const previousAct = this.state.act ?? 1;
-    this.setState(engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, import('../../engine/map/mapGenerator').ActConfig & Record<string, unknown>>));
+    this.setState(engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, ActConfig & Record<string, unknown>>));
     const newAct = this.state.act ?? 1;
     if (newAct === 2 && previousAct === 1 && this.meta.highestActReached < 2) {
       for (const id of UNLOCK_ON_ACT2_CARDS) {
@@ -576,8 +623,7 @@ export class GameBridgeService {
       const actKey = `act${this.state.act ?? 1}`;
       const rewardPool = this.getRewardCardPoolForAct(actKey);
       this.setState(engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!));
-      const maxPotions = 3;
-      if (this.state.potions && this.state.potions.length < maxPotions && Math.random() < 0.4) {
+      if (this.state.potions && this.state.potions.length < GAME_BALANCE.maxPotions && Math.random() < GAME_BALANCE.potionDropChance) {
         const potionId = enginePickRandomPotionByRarity(this.potionDefs);
         if (potionId) this.setState({ ...this.state, potions: [...this.state.potions, potionId] });
       }

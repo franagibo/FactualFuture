@@ -21,10 +21,13 @@ import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
 import { COMBAT_LAYOUT, getEnemyCenter, getEnemyIndexAtPoint, getPlayerCenter } from './constants/combat-layout.constants';
+import { COMBAT_TIMING } from './constants/combat-timing.constants';
 import { getHandLayout } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
 import { drawCombatView, type CombatViewContext } from './renderers/combat-view.renderer';
+import type { FloatingNumber } from './constants/combat-types';
+import { logger } from '../util/app-logger';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
 
 /**
@@ -64,13 +67,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   returnStartX = 0;
   returnStartY = 0;
   returnStartTime = 0;
-  readonly returnDurationMs = 200;
+  readonly returnDurationMs = COMBAT_TIMING.returnDurationMs;
   /** 0..1 when returning; set by ticker, used by renderer. */
   returnProgress = 0;
   private dragListenersBound: (() => void) | null = null;
   private hoverResolveBound: (() => void) | null = null;
   /** B9/B20: Floating numbers to show (damage/block) with screen position; addedAt for expiry. */
-  private floatingNumbers: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt?: number }[] = [];
+  private floatingNumbers: FloatingNumber[] = [];
   /** B11: When true, show "Enemy turn" banner before resolving enemy phase. */
   private showingEnemyTurn = false;
   /** B15: Per-card hover influence 0..1 for smooth animation; length = hand length. */
@@ -88,6 +91,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   rewardChoicesSignal = signal<string[]>([]);
   potionsSignal = signal<string[]>([]);
   goldSignal = signal(0);
+  playerHpSignal = signal(0);
+  playerMaxHpSignal = signal(0);
+  headerFloorSignal = signal(1);
+  headerCharacterNameSignal = signal('');
   shopStateSignal = signal<GameState['shopState']>(undefined);
   eventStateSignal = signal<GameState['eventState']>(undefined);
   restRemovableCardsSignal = signal<string[]>([]);
@@ -102,6 +109,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   mapContentHeight = 0;
   /** True when map assets are loaded and map has been drawn (enables reveal animation). */
   mapReady = signal(false);
+  mapLoadError = signal(false);
   private mapLoadScheduled = false;
   /** Map node id currently hovered (for tooltip). */
   private hoveredNodeId: string | null = null;
@@ -154,6 +162,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.rewardChoicesSignal.set(this.bridge.getRewardChoices());
     this.potionsSignal.set(this.bridge.getPotions());
     this.goldSignal.set(state.gold ?? 0);
+    this.playerHpSignal.set(state.playerHp ?? 0);
+    this.playerMaxHpSignal.set(state.playerMaxHp ?? 0);
+    this.headerFloorSignal.set(state.floor ?? 1);
+    const char = state.characterId ? this.bridge.getCharacter(state.characterId) : undefined;
+    this.headerCharacterNameSignal.set(char?.name ?? state.characterId ?? '');
     this.shopStateSignal.set(state.shopState);
     this.eventStateSignal.set(state.eventState);
     this.restRemovableCardsSignal.set(this._runPhase === 'rest' ? Array.from(new Set(state.deck ?? [])) : []);
@@ -234,7 +247,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.sound.loadSoundPreferences();
-    this.cardVfx.loadConfig().catch(() => {});
+    this.cardVfx.loadConfig().catch((err) => { logger.warn('Card VFX config load failed', err); });
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
       (window as unknown as { electronAPI: { onSteamWarning: (cb: (m: string) => void) => void } }).electronAPI.onSteamWarning((msg) => {
         this._steamWarning = msg;
@@ -274,9 +287,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     // Preload card art only for current character's pool to keep load time and memory reasonable.
     const cardPoolIds = this.bridge.getCardPoolIdsForPreload();
     if (cardPoolIds.length) {
-      this.combatAssets.preloadCardArt(cardPoolIds).catch(() => {});
+      this.combatAssets.preloadCardArt(cardPoolIds).catch((err) => { logger.warn('Preload card art failed', err); });
     }
-    this.combatAssets.loadGlobalCombatAssets().catch(() => {});
+    this.combatAssets.loadGlobalCombatAssets().catch((err) => { logger.warn('Global combat assets load failed', err); });
 
     const host = this.canvasHostRef.nativeElement;
     this.app = new PIXI.Application();
@@ -315,6 +328,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const state = this.bridge.getState();
       if (!state) return;
       const hand = state.hand;
+      if (this.cardInteractionCardIndex != null && this.cardInteractionCardIndex >= hand.length) {
+        this.cardInteractionState = 'idle';
+        this.cardInteractionCardIndex = null;
+        this.cardInteractionCardId = null;
+        this.clearDragListeners();
+      }
       if (hand.length !== this.hoverLerp.length) {
         this.targetLerp = hand.map((cardId, i) =>
           (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
@@ -417,16 +436,42 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Starts map asset load if not yet started; on completion sets mapReady and runs layout fix. */
+  /** Starts map asset load if not yet started; on completion sets mapReady and runs layout fix. Timeout and rejection set mapLoadError. */
   private ensureMapLoadThenReveal(): void {
     if (this.mapLoadScheduled) return;
     this.mapLoadScheduled = true;
-    this.mapAssets.loadMapAssets().then(() => {
-      this.mapLoadScheduled = false;
-      this.mapReady.set(true);
-      this.zone.run(() => this.cdr.detectChanges());
-      this.scheduleCanvasLayoutFix({ scrollToBottom: true });
-    });
+    this.mapLoadError.set(false);
+    const timeoutId = window.setTimeout(() => {
+      if (!this.mapAssets.isMapLoaded()) {
+        this.mapLoadScheduled = false;
+        this.mapLoadError.set(true);
+        this.zone.run(() => this.cdr.detectChanges());
+      }
+    }, COMBAT_TIMING.mapLoadTimeoutMs);
+    this.mapAssets.loadMapAssets()
+      .then(() => {
+        window.clearTimeout(timeoutId);
+        this.mapLoadScheduled = false;
+        this.mapLoadError.set(false);
+        this.mapReady.set(true);
+        this.zone.run(() => this.cdr.detectChanges());
+        this.scheduleCanvasLayoutFix({ scrollToBottom: true });
+      })
+      .catch((err) => {
+        window.clearTimeout(timeoutId);
+        this.mapLoadScheduled = false;
+        this.mapLoadError.set(true);
+        logger.warn('Map assets load failed', err);
+        this.zone.run(() => this.cdr.detectChanges());
+      });
+  }
+
+  /** Retry map load and clear error (e.g. user clicked Retry). */
+  retryMapLoad(): void {
+    this.mapLoadError.set(false);
+    this.mapReady.set(false);
+    this.mapLoadScheduled = false;
+    this.ensureMapLoadThenReveal();
   }
 
   /** Draws a loading state on the stage while map assets are loading. */
@@ -495,7 +540,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       return;
     }
     const now = performance.now();
-    this.floatingNumbers = this.floatingNumbers.filter((fn) => (fn.addedAt == null) || now - fn.addedAt <= 700);
+    this.floatingNumbers = this.floatingNumbers.filter((fn) => (fn.addedAt == null) || now - fn.addedAt <= COMBAT_TIMING.floatingNumberTtlMs);
     const prevResult = this._combatResult;
     const prevPhase = this._runPhase;
     this._combatResult = state.combatResult;
@@ -508,6 +553,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
     if (prevPhase === 'map' && this._runPhase !== 'map') {
       this.mapReady.set(false);
+      this.mapLoadError.set(false);
       this.mapLoadScheduled = false;
     }
     this.syncOverlaySignals(state);
@@ -579,6 +625,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     // Combat phase only: ensure combat assets loading (global + character + enemies), build context and delegate to combat renderer.
     if (this._runPhase !== 'combat') return;
+    if (this.cardInteractionCardIndex != null && this.cardInteractionCardIndex >= state.hand.length) {
+      this.cardInteractionState = 'idle';
+      this.cardInteractionCardIndex = null;
+      this.cardInteractionCardId = null;
+      this.clearDragListeners();
+    }
     if (state.hand.length > 0 && this.spreadLerp.length !== state.hand.length) {
       const layoutInit = getHandLayout(state.hand.length, w, h, this.hoveredCardIndex);
       this.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
@@ -603,7 +655,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.hoverLerp = [...this.targetLerp];
     }
 
-    const combatContext: CombatViewContext = {
+    const combatContext = this.buildCombatContext(stage, state, w, h, padding);
+    drawCombatView(combatContext);
+    this.drawCardImpactVfx(stage, now);
+  }
+
+  /** Build the combat view context for the renderer. Keeps doRedrawBody shorter and context shape consistent. */
+  private buildCombatContext(
+    stage: PIXI.Container,
+    state: GameState,
+    w: number,
+    h: number,
+    padding: number
+  ): CombatViewContext {
+    return {
       stage,
       state,
       w,
@@ -630,7 +695,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getCardCost: (id) => this.getCardCost(id),
       getCardName: (id) => this.getCardName(id),
       getCardEffectDescription: (id) => getCardEffectDescription(id, (cid) => this.bridge.getCardDef(cid)),
+      /** No-op: card play is on pointer-up/release, not click. Kept for renderer event binding. */
       onCardClick: (cardId, handIndex) => this.onCardClick(cardId, handIndex),
+      /** No-op: targetable cards trigger on release over enemy. Kept for renderer event binding. */
       onEnemyTargetClick: (enemyIndex) => this.onEnemyTargetClick(enemyIndex),
       onCardPointerOver: () => {},
       onCardPointerOut: () => {},
@@ -654,8 +721,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       shootingAnimationPlaying: this.shootingAnimationPlaying,
       getShootingTexture: () => this.combatAssets.getShootingTexture(),
     };
-    drawCombatView(combatContext);
-    this.drawCardImpactVfx(stage, now);
   }
 
   /** Draw active card impact VFX and remove expired ones. Uses CardVfxService for data-driven VFX. */
@@ -954,7 +1019,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (this.cardInteractionState === 'pressed') {
         const dx = x - this.pressStartX;
         const dy = y - this.pressStartY;
-        const threshold = (COMBAT_LAYOUT as { dragThreshold?: number }).dragThreshold ?? 12;
+        const threshold = COMBAT_LAYOUT.dragThreshold;
         if (Math.hypot(dx, dy) > threshold) {
           this.cardInteractionState = 'dragging';
         }
@@ -1000,7 +1065,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
             played = true;
           }
         } else if (stateNow && this.app) {
-          const ratio = (COMBAT_LAYOUT as { nonTargetPlayLineRatio?: number }).nonTargetPlayLineRatio ?? 0.55;
+          const ratio = COMBAT_LAYOUT.nonTargetPlayLineRatio;
           const playLineY = this.app.screen.height * ratio;
           if (y < playLineY) {
             this.bridge.playCard(currentCardId, undefined, currentHandIndex);
@@ -1081,17 +1146,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const L = COMBAT_LAYOUT;
     const w = this.app.screen.width;
     const h = this.app.screen.height;
-    const padding = L.padding;
     const cardWidth = L.cardWidth;
     const cardHeight = L.cardHeight;
-    const enemyPlaceholderW = L.enemyPlaceholderW;
-    const enemyPlaceholderH = L.enemyPlaceholderH;
-    const enemyGap = L.enemyGap;
-    const enemyZoneStart = w * L.enemyZoneStartRatio;
-    const baselineBottom = h * L.baselineBottomRatio;
-    const enemyStartY = baselineBottom - enemyPlaceholderH;
-    const totalEnemyWidth = state.enemies.length * enemyPlaceholderW + (state.enemies.length - 1) * enemyGap;
-    const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
+
+    const toCenter = getEnemyCenter(enemyIndex, state.enemies.length, w, h);
 
     let fromX: number;
     let fromY: number;
@@ -1119,8 +1177,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.requestTemplateUpdate();
       return;
     }
-    const toX = ex + enemyIndex * (enemyPlaceholderW + enemyGap);
-    const toY = enemyStartY + enemyPlaceholderH / 2;
+    const toX = toCenter.x;
+    const toY = toCenter.y;
 
     const flyCard = new PIXI.Container();
     const cardTex = this.combatAssets.getCardArtTexture(cardId);
@@ -1184,7 +1242,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         this.redraw();
         this.requestTemplateUpdate();
         if (toAdd.length > 0) {
-          setTimeout(() => this.redraw(), 750);
+          setTimeout(() => this.redraw(), COMBAT_TIMING.redrawAfterFloatMs);
         }
       }
     };
@@ -1197,7 +1255,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return !!state && state.phase === 'player' && !state.combatResult && this._runPhase === 'combat';
   }
 
-  /** Show "Enemy turn" banner, then after 1200ms call bridge.endTurn() and redraw. */
+  /** Show "Enemy turn" banner, then after delay call bridge.endTurn() and redraw. */
   onEndTurn(): void {
     if (!this.canEndTurn()) return;
     this.sound.playTurnEnd();
@@ -1210,7 +1268,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.showingEnemyTurn = false;
       this.redraw();
       this.requestTemplateUpdate();
-    }, 1200);
+    }, COMBAT_TIMING.enemyTurnBannerDelayMs);
   }
 
   onRestart(): void {
@@ -1233,7 +1291,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.redraw();
       this.requestTemplateUpdate();
       this.scheduleCanvasLayoutFix({ scrollToBottom: true });
-    }, 480);
+    }, COMBAT_TIMING.rewardFeedbackDelayMs);
   }
 
   onRestHeal(): void {

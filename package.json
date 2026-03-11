@@ -10,7 +10,8 @@
     "build:ng": "ng build",
     "start:electron": "npm run build:engine && electron .",
     "build:electron": "npm run build:ng && npm run build:engine && electron-builder",
-    "electron:dev": "concurrently \"ng build --watch\" \"wait-on dist/game-ui/index.html && electron .\""
+    "electron:dev": "concurrently \"ng build --watch\" \"wait-on dist/game-ui/index.html && electron .\"",
+    "lint": "ng build --configuration=development"
   },
   "author": "",
   "license": "MIT",

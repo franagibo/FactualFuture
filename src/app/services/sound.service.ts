@@ -103,11 +103,6 @@ export class SoundService {
     } catch {}
   }
 
-  /** @deprecated Use loadSoundPreferences. Kept for compatibility. */
-  loadMutedPreference(): void {
-    this.loadSoundPreferences();
-  }
-
   private savePreferences(): void {
     if (typeof localStorage === 'undefined') return;
     try {
@@ -142,7 +137,7 @@ export class SoundService {
         this.soundtrackEl.src = url;
       }
       this.applySoundtrackVolume();
-      this.soundtrackEl.play().catch(() => {});
+      this.soundtrackEl.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[App] Soundtrack play failed', err); });
     } catch {}
   }
 
@@ -161,7 +156,7 @@ export class SoundService {
       const url = path.startsWith('/') ? window.location.origin + path : path;
       const audio = new Audio(url);
       audio.volume = this.effectsVolume;
-      audio.play().catch(() => {});
+      audio.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[App] Effect play failed', path, err); });
     } catch {}
   }
 

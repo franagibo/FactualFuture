@@ -71,19 +71,7 @@ export function runEffects(
         const dmg = effect.value + (next.strengthStacks ?? 0);
         for (const enemy of enemies) {
           if (enemy.hp <= 0) continue;
-          let total = dmg;
-          if ((enemy.vulnerableStacks ?? 0) > 0) total = Math.ceil(total * 1.5);
-          const weak = (enemy.weakStacks ?? 0) > 0 ? 1 + 0.25 * (enemy.weakStacks ?? 0) : 1;
-          total = Math.ceil(total * weak);
-          total = Math.min(total, enemy.block + enemy.hp);
-          let remain = total;
-          if (enemy.block > 0) {
-            const blockReduce = Math.min(enemy.block, remain);
-            enemy.block -= blockReduce;
-            remain -= blockReduce;
-          }
-          if (remain > 0) enemy.hp = Math.max(0, enemy.hp - remain);
-          if ((enemy.vulnerableStacks ?? 0) > 0) enemy.vulnerableStacks = Math.max(0, (enemy.vulnerableStacks ?? 0) - 1);
+          applyDamageToEnemy(enemy, dmg, true);
         }
         break;
       }

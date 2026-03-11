@@ -36,6 +36,12 @@ import { SettingsModalComponent } from '../settings-modal/settings-modal.compone
             }
           </div>
         }
+        @if (showDataLoadError) {
+          <div class="menu-data-error">
+            <p>Data failed to load. Check the console for details.</p>
+            <button type="button" class="menu-btn" (click)="onRetryDataLoad()">Retry</button>
+          </div>
+        }
         <div class="menu-actions">
           @if (showContinue) {
             <button type="button" class="menu-btn menu-btn-primary" (click)="onContinue()">
@@ -145,6 +151,15 @@ import { SettingsModalComponent } from '../settings-modal/settings-modal.compone
         0%, 100% { text-shadow: 0 0 20px rgba(200, 160, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.8); }
         50% { text-shadow: 0 0 28px rgba(220, 180, 255, 0.7), 0 2px 4px rgba(0, 0, 0, 0.8); }
       }
+      .menu-data-error {
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        background: rgba(180, 80, 80, 0.2);
+        border: 1px solid rgba(220, 100, 100, 0.5);
+        border-radius: 8px;
+        color: #f0c0c0;
+      }
+      .menu-data-error p { margin: 0 0 0.5rem 0; }
       .menu-actions {
         display: flex;
         flex-direction: column;
@@ -276,12 +291,35 @@ export class MainMenuComponent implements OnInit {
     private cdr: ChangeDetectorRef
   ) {}
 
+  showDataLoadError = false;
+
   async ngOnInit(): Promise<void> {
     this.loadBackgroundImage();
-    await this.bridge.ensureDataLoaded();
+    try {
+      await this.bridge.ensureDataLoaded();
+    } catch {
+      this.showDataLoadError = true;
+      this.cdr.markForCheck();
+      return;
+    }
     this.meta = this.bridge.getMeta();
     const has = await this.bridge.hasSavedRun();
     this.showContinue = has;
+    this.cdr.markForCheck();
+  }
+
+  async onRetryDataLoad(): Promise<void> {
+    this.bridge.clearDataLoadError();
+    this.showDataLoadError = false;
+    this.cdr.markForCheck();
+    try {
+      await this.bridge.ensureDataLoaded();
+      this.meta = this.bridge.getMeta();
+      const has = await this.bridge.hasSavedRun();
+      this.showContinue = has;
+    } catch {
+      this.showDataLoadError = true;
+    }
     this.cdr.markForCheck();
   }
 

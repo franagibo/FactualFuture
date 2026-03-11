@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import * as PIXI from 'pixi.js';
+import { logger } from '../util/app-logger';
 
 const FIGHT_LOCATION_PREFIX = '/assets/fight-location/';
 const FIGHT_LOCATION_CONFIG_URL = '/assets/data/fight-location.json';
@@ -196,8 +197,9 @@ export class CombatAssetsService {
         .then((tex) => {
           this.cardArtTextures.set(id, tex as PIXI.Texture);
         })
-        .catch(() => {
+        .catch((err) => {
           this.cardArtTextures.set(id, null);
+          logger.warn('Card art load failed', path, err);
         });
       promises.push(p.then(() => {}));
     }

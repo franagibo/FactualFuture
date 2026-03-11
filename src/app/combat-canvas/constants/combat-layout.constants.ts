@@ -54,6 +54,22 @@ export const COMBAT_LAYOUT = {
   neonBorderSelectedAlphas: [0.35, 0.6, 1],
   /** Y ratio (0–1) for non-target card play line: drop above this line to play (e.g. 0.55 = higher from hand). */
   nonTargetPlayLineRatio: 0.55,
+  /** Intent icon size (px) next to enemy placeholder. */
+  intentIconSize: 16,
+  /** HP/Block/Energy icon size (px) under player. */
+  hpBlockEnergyIconSize: 48,
+  /** Gap between HP/Block/Energy icons (px). */
+  hpBlockEnergyGap: 56,
+  /** Offset from cost circle center for cost text (costCenter = costRadius + costCenterOffset). */
+  costCenterOffset: 18,
+  /** Intent icon X position relative to enemy placeholder. */
+  intentPosX: 8,
+  /** Intent icon Y position relative to enemy placeholder. */
+  intentPosY: 46,
+  /** Intent value label offset from icon (px). */
+  intentLabelOffset: 4,
+  /** Card name/description horizontal padding for word wrap width. */
+  cardTextPadding: 48,
 } as const;
 
 /** Named slots used by the combat renderer for placement and z-order. */
@@ -100,8 +116,20 @@ export function getPlayerCenter(w: number, h: number): { x: number; y: number } 
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
 }
 
-/** Center point for an enemy at the given index (0-based) given the number of enemies. */
-export function getEnemyCenter(index: number, enemyCount: number, w: number, h: number): { x: number; y: number } {
+/** Result of getEnemyLayout: single source for enemy positions used by renderer and component. */
+export interface EnemyLayout {
+  startY: number;
+  placeholderW: number;
+  placeholderH: number;
+  /** Center X of first enemy (same spacing for rest). */
+  firstCenterX: number;
+  gap: number;
+  getCenter(index: number): { x: number; y: number };
+  getLeft(index: number): number;
+}
+
+/** Single helper for enemy layout. Use in renderer and runCardFlyThenPlay to avoid duplicated formulas. */
+export function getEnemyLayout(w: number, h: number, enemyCount: number): EnemyLayout {
   const L = COMBAT_LAYOUT;
   const baselineBottom = h * L.baselineBottomRatio;
   const enemyZoneStart = w * L.enemyZoneStartRatio;
@@ -109,32 +137,40 @@ export function getEnemyCenter(index: number, enemyCount: number, w: number, h: 
   const enemyPlaceholderH = L.enemyPlaceholderH;
   const enemyGap = L.enemyGap;
   const padding = L.padding;
-  const enemyStartY = baselineBottom - enemyPlaceholderH;
+  const startY = baselineBottom - enemyPlaceholderH;
   const totalEnemyWidth = enemyCount * enemyPlaceholderW + (enemyCount - 1) * enemyGap;
-  const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
+  const firstCenterX = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
   return {
-    x: ex + index * (enemyPlaceholderW + enemyGap),
-    y: enemyStartY + enemyPlaceholderH / 2,
+    startY,
+    placeholderW: enemyPlaceholderW,
+    placeholderH: enemyPlaceholderH,
+    firstCenterX,
+    gap: enemyGap,
+    getCenter(index: number) {
+      return {
+        x: firstCenterX + index * (enemyPlaceholderW + enemyGap),
+        y: startY + enemyPlaceholderH / 2,
+      };
+    },
+    getLeft(index: number) {
+      return firstCenterX + index * (enemyPlaceholderW + enemyGap) - enemyPlaceholderW / 2;
+    },
   };
+}
+
+/** Center point for an enemy at the given index (0-based) given the number of enemies. */
+export function getEnemyCenter(index: number, enemyCount: number, w: number, h: number): { x: number; y: number } {
+  return getEnemyLayout(w, h, enemyCount).getCenter(index);
 }
 
 /** Index of the enemy under stage point (x,y), or null. Uses same layout as renderer for hit-test during drag. */
 export function getEnemyIndexAtPoint(stageX: number, stageY: number, enemyCount: number, w: number, h: number): number | null {
   if (enemyCount <= 0) return null;
-  const L = COMBAT_LAYOUT;
-  const baselineBottom = h * L.baselineBottomRatio;
-  const enemyZoneStart = w * L.enemyZoneStartRatio;
-  const enemyPlaceholderW = L.enemyPlaceholderW;
-  const enemyPlaceholderH = L.enemyPlaceholderH;
-  const enemyGap = L.enemyGap;
-  const padding = L.padding;
-  const enemyStartY = baselineBottom - enemyPlaceholderH;
-  const totalEnemyWidth = enemyCount * enemyPlaceholderW + (enemyCount - 1) * enemyGap;
-  const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
+  const layout = getEnemyLayout(w, h, enemyCount);
   for (let i = 0; i < enemyCount; i++) {
-    const left = ex + i * (enemyPlaceholderW + enemyGap) - enemyPlaceholderW / 2;
-    const top = enemyStartY;
-    if (stageX >= left && stageX <= left + enemyPlaceholderW && stageY >= top && stageY <= top + enemyPlaceholderH) {
+    const left = layout.getLeft(i);
+    const top = layout.startY;
+    if (stageX >= left && stageX <= left + layout.placeholderW && stageY >= top && stageY <= top + layout.placeholderH) {
       return i;
     }
   }

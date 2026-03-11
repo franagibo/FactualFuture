@@ -73,6 +73,22 @@
   font-size: 1rem;
   color: #cccccc;
 }
+.map-error-overlay .map-loading-label {
+  color: #f0c0c0;
+}
+.map-retry-btn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  background: rgba(180, 140, 255, 0.25);
+  border: 1px solid rgba(180, 140, 255, 0.6);
+  border-radius: 6px;
+  color: #e8e0ff;
+  cursor: pointer;
+}
+.map-retry-btn:hover {
+  background: rgba(180, 140, 255, 0.4);
+}
 @keyframes mapLoadingSpin {
   to {
     transform: rotate(360deg);

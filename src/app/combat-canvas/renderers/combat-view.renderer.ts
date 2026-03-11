@@ -4,10 +4,12 @@
  */
 import * as PIXI from 'pixi.js';
 import type { GameState, EnemyIntent } from '../../../engine/types';
-import { COMBAT_LAYOUT, getCombatSlotBounds } from '../constants/combat-layout.constants';
+import { COMBAT_LAYOUT, getCombatSlotBounds, getEnemyLayout } from '../constants/combat-layout.constants';
+import type { FloatingNumber } from '../constants/combat-types';
 import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 
-const INTENT_ICON_SIZE = 16;
+/** Re-export for consumers that import from the renderer. */
+export type { FloatingNumber };
 
 /** B12: Draw a simple intent icon (attack=triangle, block=shield, debuff=diamond, none=?) into container at x,y. */
 function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], value: number, x: number, y: number): void {
@@ -43,19 +45,9 @@ function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], va
     text: label,
     style: { fontFamily: 'system-ui', fontSize: 10, fill: 0xffdd88, fontWeight: 'bold' },
   });
-  valueText.x = INTENT_ICON_SIZE + 4;
+  valueText.x = INTENT_ICON_SIZE + L.intentLabelOffset;
   valueText.y = 2;
   container.addChild(valueText);
-}
-
-export interface FloatingNumber {
-  type: 'damage' | 'block';
-  value: number;
-  x: number;
-  y: number;
-  enemyIndex?: number;
-  /** B20: Timestamp when added for expiry (ms). */
-  addedAt?: number;
 }
 
 export interface CombatViewContext {
@@ -121,6 +113,9 @@ export interface CombatViewContext {
 }
 
 const L = COMBAT_LAYOUT;
+const INTENT_ICON_SIZE = L.intentIconSize;
+const HP_BLOCK_ENERGY_ICON_SIZE = L.hpBlockEnergyIconSize;
+const HP_BLOCK_ENERGY_GAP = L.hpBlockEnergyGap;
 
 function scaledFontSize(base: number, ctx: CombatViewContext): number {
   const scale = ctx.textScale ?? 1;
@@ -135,17 +130,9 @@ function drawNeonBorder(
   cornerRadius: number,
   isSelected: boolean
 ): void {
-  const layout = L as typeof L & {
-    neonBorderHoverColor?: number;
-    neonBorderHoverWidths?: number[];
-    neonBorderHoverAlphas?: number[];
-    neonBorderSelectedColor?: number;
-    neonBorderSelectedWidths?: number[];
-    neonBorderSelectedAlphas?: number[];
-  };
-  const color = isSelected ? (layout.neonBorderSelectedColor ?? 0xffdd44) : (layout.neonBorderHoverColor ?? 0xa0ddff);
-  const widths = isSelected ? (layout.neonBorderSelectedWidths ?? [14, 7, 3]) : (layout.neonBorderHoverWidths ?? [10, 5, 2]);
-  const alphas = isSelected ? (layout.neonBorderSelectedAlphas ?? [0.35, 0.6, 1]) : (layout.neonBorderHoverAlphas ?? [0.2, 0.5, 0.95]);
+  const color = isSelected ? L.neonBorderSelectedColor : L.neonBorderHoverColor;
+  const widths = isSelected ? L.neonBorderSelectedWidths : L.neonBorderHoverWidths;
+  const alphas = isSelected ? L.neonBorderSelectedAlphas : L.neonBorderHoverAlphas;
   g.clear();
   for (let i = 0; i < widths.length; i++) {
     const w = widths[i];
@@ -214,9 +201,6 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   }
   stage.addChild(playerContainer);
 }
-
-const HP_BLOCK_ENERGY_ICON_SIZE = 48;
-const HP_BLOCK_ENERGY_GAP = 56;
 
 /** Draws HP, block, and energy as icons with numbers centered (Slay the Spire style). */
 function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
@@ -314,7 +298,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     }
     const dragY = ctx.dragScreenY;
     if (dragY == null) return false;
-    const ratio = (L as { nonTargetPlayLineRatio?: number }).nonTargetPlayLineRatio ?? 0.55;
+    const ratio = L.nonTargetPlayLineRatio;
     const playLineY = h * ratio;
     return dragY < playLineY;
   };
@@ -374,7 +358,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const costRadius = L.costRadius;
     const costBg = new PIXI.Graphics();
     const costColor = playable ? 0x88ff88 : 0xff8888;
-    const costCenter = costRadius + 18;
+    const costCenter = costRadius + L.costCenterOffset;
     costBg.circle(costCenter, costCenter, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
     container.addChild(costBg);
     const costFontSize = scaledFontSize(32, ctx);
@@ -407,7 +391,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
           fontSize: fs,
           fill: 0xcccccc,
           wordWrap: true,
-          wordWrapWidth: cardWidth - 48,
+          wordWrapWidth: cardWidth - L.cardTextPadding,
           lineHeight: Math.round(fs * 1.25),
         },
       });
@@ -447,8 +431,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
 
 /** Draws enemy placeholders (right side), highlights for targeting/hover, hit flash, and hand on top; returns layout for arrow. */
 function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
-  enemyStartY: number;
-  ex: number;
+  enemyLayout: ReturnType<typeof getEnemyLayout>;
   handLength: number;
   center: number;
   startX: number;
@@ -457,14 +440,11 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   arcAmplitude: number;
   hoverLift: number;
 } {
-  const { state, stage, w, padding } = ctx;
-  const playerZoneX = w * L.playerZoneXRatio;
-  const enemyZoneStart = w * L.enemyZoneStartRatio;
-  const baselineBottom = ctx.h * L.baselineBottomRatio;
+  const { state, stage, w } = ctx;
   const playerY = ctx.h - L.playerYOffsetFromBottom;
-  const enemyPlaceholderW = L.enemyPlaceholderW;
-  const enemyPlaceholderH = L.enemyPlaceholderH;
-  const enemyGap = L.enemyGap;
+  const enemyLayout = getEnemyLayout(w, ctx.h, state.enemies.length);
+  const enemyPlaceholderW = enemyLayout.placeholderW;
+  const enemyPlaceholderH = enemyLayout.placeholderH;
   const hand = state.hand;
   const cardWidth = L.cardWidth;
   const cardHeight = L.cardHeight;
@@ -476,10 +456,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
 
   const targetingMode =
     ctx.isDraggingCard && (ctx.dragIsTargetingEnemy ?? true);
-  const enemyStartY = baselineBottom - enemyPlaceholderH;
   const enemies = state.enemies;
-  const totalEnemyWidth = enemies.length * enemyPlaceholderW + (enemies.length - 1) * enemyGap;
-  const ex = enemyZoneStart + (w - enemyZoneStart - padding - totalEnemyWidth) / 2 + enemyPlaceholderW / 2;
 
   const sizeScale = (size: 'small' | 'medium' | 'large' | undefined): number =>
     size === 'small' ? 0.8 : size === 'large' ? 1.2 : 1;
@@ -517,8 +494,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     }
     const wasJustHit = ctx.floatingNumbers.some((f) => f.type === 'damage' && f.enemyIndex === i);
     const vfxOn = ctx.vfxIntensity !== 'off';
-    const baseEnemyX = ex + i * (enemyPlaceholderW + enemyGap) - enemyPlaceholderW / 2;
-    const baseEnemyY = enemyStartY;
+    const centerPos = enemyLayout.getCenter(i);
     if (wasJustHit && vfxOn) {
       const hitOverlay = new PIXI.Graphics();
       hitOverlay.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius).fill({ color: 0xff4444, alpha: 0.35 });
@@ -527,8 +503,8 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     const hitPop = wasJustHit && vfxOn ? 1.06 : 1;
     const scale = sizeScale(e.size) * (isHoveredEnemy ? 1.06 : 1) * hitPop;
     container.pivot.set(enemyPlaceholderW / 2, enemyPlaceholderH / 2);
-    container.x = baseEnemyX + enemyPlaceholderW / 2;
-    container.y = baseEnemyY + enemyPlaceholderH / 2;
+    container.x = centerPos.x;
+    container.y = centerPos.y;
     container.scale.set(scale);
     const nameT = new PIXI.Text({
       text: e.name,
@@ -545,9 +521,9 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     hpT.y = 26;
     container.addChild(hpT);
     if (e.intent) {
-      drawIntentIcon(container, e.intent.type, e.intent.value, 8, 46);
+      drawIntentIcon(container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY);
     } else {
-      drawIntentIcon(container, 'none', 0, 8, 46);
+      drawIntentIcon(container, 'none', 0, L.intentPosX, L.intentPosY);
     }
     const vulnerableStacks = (e as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
     const weakStacks = (e as { weakStacks?: number }).weakStacks ?? 0;
@@ -593,8 +569,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
 
   stage.addChild(handContainer);
   return {
-    enemyStartY,
-    ex,
+    enemyLayout,
     handLength: hand.length,
     center,
     startX,
@@ -621,9 +596,6 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
   if (!isDraggingCard || !dragCardId || ctx.dragIsTargetingEnemy === false) return;
 
   const L2 = COMBAT_LAYOUT;
-  const enemyPlaceholderW = L2.enemyPlaceholderW;
-  const enemyPlaceholderH = L2.enemyPlaceholderH;
-  const enemyGap = L2.enemyGap;
   const hand = state.hand;
   const idx = cardInteractionCardIndex ?? hand.indexOf(dragCardId);
 
@@ -647,13 +619,15 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
   let toX: number;
   let toY: number;
   const enemies = state.enemies;
+  const L2enemyLayout = layout.enemyLayout;
   if (
     hoveredEnemyIndex != null &&
     hoveredEnemyIndex < enemies.length &&
     enemies[hoveredEnemyIndex].hp > 0
   ) {
-    toX = layout.ex + hoveredEnemyIndex * (enemyPlaceholderW + enemyGap);
-    toY = layout.enemyStartY + enemyPlaceholderH / 2;
+    const c = L2enemyLayout.getCenter(hoveredEnemyIndex);
+    toX = c.x;
+    toY = c.y;
   } else {
     toX = typeof dragScreenX === 'number' ? dragScreenX : fromX;
     toY = typeof dragScreenY === 'number' ? dragScreenY : fromY - 80;
@@ -797,7 +771,7 @@ function drawReturningCard(ctx: CombatViewContext): void {
   const costRadius = L.costRadius;
   const costBg = new PIXI.Graphics();
   const costColor = 0x88ff88;
-  const costCenter = costRadius + 18;
+  const costCenter = costRadius + L.costCenterOffset;
   costBg.circle(costCenter, costCenter, costRadius)
     .fill({ color: 0x1a1a2a })
     .stroke({ width: 2, color: costColor });
@@ -834,7 +808,7 @@ function drawReturningCard(ctx: CombatViewContext): void {
         fontSize: fs,
         fill: 0xcccccc,
         wordWrap: true,
-        wordWrapWidth: cardWidth - 48,
+        wordWrapWidth: cardWidth - L.cardTextPadding,
         lineHeight: Math.round(fs * 1.25),
       },
     });
