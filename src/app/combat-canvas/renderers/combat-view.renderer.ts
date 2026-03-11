@@ -127,6 +127,34 @@ function scaledFontSize(base: number, ctx: CombatViewContext): number {
   return Math.round(base * scale);
 }
 
+/** Draws a neon/glow border (Slay the Spire style) on a Graphics. Multiple stroked layers for glow. */
+function drawNeonBorder(
+  g: PIXI.Graphics,
+  cardWidth: number,
+  cardHeight: number,
+  cornerRadius: number,
+  isSelected: boolean
+): void {
+  const layout = L as typeof L & {
+    neonBorderHoverColor?: number;
+    neonBorderHoverWidths?: number[];
+    neonBorderHoverAlphas?: number[];
+    neonBorderSelectedColor?: number;
+    neonBorderSelectedWidths?: number[];
+    neonBorderSelectedAlphas?: number[];
+  };
+  const color = isSelected ? (layout.neonBorderSelectedColor ?? 0xffdd44) : (layout.neonBorderHoverColor ?? 0xa0ddff);
+  const widths = isSelected ? (layout.neonBorderSelectedWidths ?? [14, 7, 3]) : (layout.neonBorderHoverWidths ?? [10, 5, 2]);
+  const alphas = isSelected ? (layout.neonBorderSelectedAlphas ?? [0.35, 0.6, 1]) : (layout.neonBorderHoverAlphas ?? [0.2, 0.5, 0.95]);
+  g.clear();
+  for (let i = 0; i < widths.length; i++) {
+    const w = widths[i];
+    const alpha = alphas[i] ?? 1;
+    g.roundRect(0, 0, cardWidth, cardHeight, cornerRadius)
+      .stroke({ width: w, color, alpha });
+  }
+}
+
 /** B13: Draw combat background (sprite or dark rect) at zIndex 0. */
 function drawCombatBackground(ctx: CombatViewContext): void {
   const { stage, w, h } = ctx;
@@ -269,6 +297,27 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     ctx.cardInteractionCardIndex === idx &&
     (ctx.cardInteractionState === 'pressed' || ctx.cardInteractionState === 'dragging');
 
+  // Yellow neon border (\"selected\") should only show when the card will actually trigger if the mouse is released.
+  // For enemy-targeting cards: dragging + hovering a live enemy. For non-target cards: dragging above the play line.
+  const isReadyToTrigger = (idx: number, cardId: string): boolean => {
+    if (
+      ctx.cardInteractionCardIndex !== idx ||
+      ctx.cardInteractionCardId == null ||
+      ctx.cardInteractionCardId !== cardId
+    ) {
+      return false;
+    }
+    if (ctx.cardInteractionState !== 'dragging') return false;
+    const requiresEnemy = !!ctx.dragIsTargetingEnemy;
+    if (requiresEnemy) {
+      return ctx.hoveredEnemyIndex != null;
+    }
+    const dragY = ctx.dragScreenY;
+    if (dragY == null) return false;
+    const playLineY = h * 0.75;
+    return dragY < playLineY;
+  };
+
   /** Center-strip hit area; use full card for magnetic hover (resolver runs on document). */
   const hitStripRatio = 1;
   const hitStripX = 0;
@@ -282,7 +331,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const cost = ctx.getCardCost(cardId);
     const playable = state.energy >= cost;
     const isHovered = ctx.hoveredCardIndex === i;
-    const isSelected = isPressedOrDragging(i);
+    const isSelected = isReadyToTrigger(i, cardId);
     const lerp = useHoverLerp ? (ctx.hoverLerp![i] ?? 0) : (isHovered || isSelected ? 1 : 0);
     const isActive = isHovered || isSelected || lerp > 0.02;
     const applyHover = (isHovered || isSelected) && lerp > 0.5;
@@ -313,6 +362,13 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
       cardSprite.roundPixels = true;
       container.addChild(cardSprite);
     }
+
+    const neonBorder = new PIXI.Graphics();
+    neonBorder.visible = isHovered || isSelected;
+    if (neonBorder.visible) {
+      drawNeonBorder(neonBorder, cardWidth, cardHeight, L.cardCornerRadius, isSelected);
+    }
+    container.addChild(neonBorder);
 
     const costRadius = L.costRadius;
     const costBg = new PIXI.Graphics();

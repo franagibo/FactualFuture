@@ -44,6 +44,14 @@ export const COMBAT_LAYOUT = {
   shadowOffset: 12,
   cardCornerRadius: 30,
   enemyCornerRadius: 10,
+  /** Neon border when card is hovered (Slay the Spire style). */
+  neonBorderHoverColor: 0xa0ddff,
+  neonBorderHoverWidths: [10, 5, 2],
+  neonBorderHoverAlphas: [0.2, 0.5, 0.95],
+  /** Larger, different color when card is selected (ready to play/drop). */
+  neonBorderSelectedColor: 0xffdd44,
+  neonBorderSelectedWidths: [14, 7, 3],
+  neonBorderSelectedAlphas: [0.35, 0.6, 1],
 } as const;
 
 /** Named slots used by the combat renderer for placement and z-order. */
