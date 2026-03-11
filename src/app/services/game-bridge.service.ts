@@ -228,9 +228,8 @@ export class GameBridgeService {
     await this.loadMeta();
   }
 
-  /** Start a new run. No-op if data load previously failed (call ensureDataLoaded + check isDataLoadFailed first). Uses characterId's starter deck and stores characterId in state. Default character: gunboy. */
-  /** Default 'chibi' for testing chibi idle animation; use 'gunboy' for normal play. */
-  startRun(characterId: string = 'chibi'): void {
+  /** Start a new run. No-op if data load previously failed (call ensureDataLoaded + check isDataLoadFailed first). Uses characterId's starter deck and stores characterId in state. Default character: gungirl. */
+  startRun(characterId: string = 'gungirl'): void {
     if (this.dataLoadFailed || !this.mapConfig) return;
     const act1 = this.mapConfig['act1'];
     if (!act1) return;
@@ -398,7 +397,7 @@ export class GameBridgeService {
    * Shop pool for the given act. Data-driven: uses shopPools.json for the act (cards, relics, prices, counts).
    * Merges with character cardPoolIds when present (e.g. Gunboy): shop cards = character pool + meta unlockedCards.
    * When character has no cardPoolIds, uses act's base cards from shopPools. Relics = act base + meta unlockedRelics.
-   * To add a card to Gunboy's shop: add its id to characters.json cardPoolIds and optionally to shopPools.act1.cards for act-specific availability.
+   * To add a card to a character's shop: add its id to characters.json cardPoolIds and optionally to shopPools.act1.cards for act-specific availability.
    */
   private getMergedShopPool(actKey: string): ShopPoolConfig | undefined {
     const base = this.shopPoolsByAct[actKey];
@@ -434,7 +433,7 @@ export class GameBridgeService {
    * - When the run has a character with cardPoolIds (e.g. Gunboy): pool = character.cardPoolIds ∪ meta.unlockedCards.
    * - Starter cards (Strike, Defend, Bash) are filtered out when the pool has >5 cards so rewards favor upgrades.
    * - Curses and status cards are always excluded. If the filtered pool would be <5 cards, returns the full playable pool instead.
-   * To add a card to Gunboy's rewards: add its id to data/characters.json under gunboy.cardPoolIds and ensure the card exists in data/cards.json.
+   * To add a card to a character's rewards: add its id to data/characters.json under that character's cardPoolIds and ensure the card exists in data/cards.json.
    */
   private getRewardCardPoolForAct(actKey: string): string[] {
     const characterId = this.state?.characterId;

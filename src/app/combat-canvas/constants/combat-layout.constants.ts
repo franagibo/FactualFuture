@@ -12,8 +12,8 @@ export const COMBAT_LAYOUT = {
   /** Baseline for player/enemy slots (0–1). Higher = lower on screen. Raised ~20% to lower characters. */
   baselineBottomRatio: 0.72,
   playerYOffsetFromBottom: 28,
-  playerPlaceholderW: 240,
-  playerPlaceholderH: 310,
+  playerPlaceholderW: 320,
+  playerPlaceholderH: 410,
   enemyPlaceholderW: 240,
   enemyPlaceholderH: 310,
   enemyGap: 28,

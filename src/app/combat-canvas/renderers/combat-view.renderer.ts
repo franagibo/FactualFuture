@@ -156,7 +156,7 @@ function drawNeonBorder(
   }
 }
 
-/** B13: Draw combat background (sprite or dark rect) at zIndex 0. */
+/** B13: Draw combat background (sprite or dark rect) at zIndex 0. Adds a dark overlay to improve character visibility. */
 function drawCombatBackground(ctx: CombatViewContext): void {
   const { stage, w, h } = ctx;
   const bgBounds = getCombatSlotBounds('combatBg', w, h);
@@ -169,6 +169,10 @@ function drawCombatBackground(ctx: CombatViewContext): void {
     bg.height = bgBounds.height;
     bg.zIndex = 0;
     stage.addChild(bg);
+    const overlay = new PIXI.Graphics();
+    overlay.rect(bgBounds.x, bgBounds.y, bgBounds.width, bgBounds.height).fill({ color: 0x000000, alpha: 0.35 });
+    overlay.zIndex = 1;
+    stage.addChild(overlay);
   } else {
     const bg = new PIXI.Graphics();
     bg.rect(bgBounds.x, bgBounds.y, bgBounds.width, bgBounds.height).fill(0x1a1a2e);
@@ -188,11 +192,18 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const playerContainer = new PIXI.Container();
   playerContainer.x = playerBounds.x;
   playerContainer.y = playerBounds.y;
+  playerContainer.zIndex = 10;
   const slashingTex = ctx.slashingAnimationPlaying && ctx.getSlashingTexture?.() ? ctx.getSlashingTexture() : null;
   const shootingTex = ctx.shootingAnimationPlaying && ctx.getShootingTexture?.() ? ctx.getShootingTexture() : null;
   const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
   const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
+    const shadow = new PIXI.Graphics();
+    const shadowW = playerPlaceholderW * 0.85;
+    const shadowH = playerPlaceholderH * 0.2;
+    const shadowY = playerPlaceholderH - 8;
+    shadow.ellipse(playerPlaceholderW / 2, shadowY, shadowW / 2, shadowH).fill({ color: 0x000000, alpha: 0.5 });
+    playerContainer.addChild(shadow);
     const sprite = new PIXI.Sprite(playerTex);
     sprite.anchor.set(0.5, 1);
     sprite.x = playerPlaceholderW / 2;
@@ -229,6 +240,7 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
 
   const drawIconWithNumber = (x: number, texture: PIXI.Texture | null, label: string, fill = 0xffffff): void => {
     const container = new PIXI.Container();
+    container.zIndex = 20;
     container.x = x;
     container.y = baseY;
     if (texture) {
@@ -258,6 +270,7 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   drawIconWithNumber(centerX - gap, hpTex, `${state.playerHp}/${state.playerMaxHp}`);
   drawIconWithNumber(centerX, blockTex, String(state.playerBlock));
   const energyContainer = new PIXI.Container();
+  energyContainer.zIndex = 20;
   energyContainer.x = centerX + gap;
   energyContainer.y = baseY;
   const energyBg = new PIXI.Graphics();
@@ -289,6 +302,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
 
   const handContainer = new PIXI.Container();
   handContainer.sortableChildren = true;
+  handContainer.zIndex = 20;
   ctx.cardSprites.clear();
 
   const useHoverLerp = ctx.hoverLerp && ctx.hoverLerp.length === hand.length;
@@ -483,6 +497,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     const isValidTarget = targetingMode && isAlive;
     const isHoveredEnemy = targetingMode && ctx.hoveredEnemyIndex === i && isAlive;
     const container = new PIXI.Container();
+    container.zIndex = 20;
     let enemyTex: PIXI.Texture | null = null;
     const variant = ctx.enemyVariants?.[i];
     const getAnimTex = ctx.getEnemyAnimationTexture;

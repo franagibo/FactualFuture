@@ -432,13 +432,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.redrawAgain = true;
       return;
     }
-    this.zone.runOutsideAngular(() => {
-      this.doRedraw();
-      if (this.redrawAgain) {
-        this.redrawAgain = false;
-        requestAnimationFrame(() => this.redraw());
-      }
-    });
+    this.zone.runOutsideAngular(() => this.doRedraw());
   }
 
   /** True for map and any overlay that shows the map as background (reward, rest, shop, event, victory). */
@@ -539,15 +533,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Clears stage and draws either map or combat view; syncs combat result and run phase from bridge. */
   private doRedraw(): void {
-    this.inRedraw = true;
-    try {
-      this.doRedrawBody();
-    } finally {
-      this.inRedraw = false;
+    if (this.inRedraw) {
+      this.redrawAgain = true;
+      return;
     }
+    this.inRedraw = true;
+    void this.doRedrawBody().finally(() => {
+      this.inRedraw = false;
+      if (this.redrawAgain) {
+        this.redrawAgain = false;
+        requestAnimationFrame(() => this.redraw());
+      }
+    });
   }
 
-  private doRedrawBody(): void {
+  private async doRedrawBody(): Promise<void> {
     const state = this.bridge.getState();
     if (!state || !this.app) return;
     const w = this.app.screen.width;
@@ -580,6 +580,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (this._runPhase === 'combat' && prevPhase !== 'combat' && this.app) {
       this.cdr.detectChanges();
       this.app.resize();
+    }
+
+    if (this._runPhase === 'combat') {
+      const characterId = state.characterId ?? undefined;
+      const enemyIds = state.enemies.map((e) => e.id);
+      await this.combatAssets.loadCombatAssets(characterId, enemyIds);
     }
 
     const stage = this.app.stage;
@@ -654,7 +660,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
     const characterId = state.characterId ?? undefined;
     const enemyIds = state.enemies.map((e) => e.id);
-    this.combatAssets.loadCombatAssets(characterId, enemyIds);
     this.cardVfx.loadConfig().then(() => {
       const cardIds = [...state.hand, ...(state.deck ?? [])];
       if (cardIds.length) this.cardVfx.preloadVfxForCards(cardIds);

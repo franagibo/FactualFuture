@@ -16,17 +16,20 @@ const BLOCK_ICON_PATH = `${EFFECTS_PREFIX}block.svg`;
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
-/** Default static / idle image. Path: /assets/characters/{id}/{id}_static.png. Used when not playing shield/shooting animation. */
+/** Default static / idle image. Path: /assets/characters/{id}/{id}_static.png. Gungirl uses _idle.png temporarily until idle animation exists. */
 function getStaticImagePath(characterId: string): string {
+  if (characterId === 'gungirl') {
+    return `${PLAYER_CHARACTERS_PREFIX}gungirl/gungirl_idle.png`;
+  }
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_static.png`;
 }
 
-/** Shield animation sprite sheet (6x6 grid). Path: /assets/characters/{id}/{id}_shield.png. Fallback for static pose if no _static.png. */
+/** Shield animation sprite sheet. Path: /assets/characters/{id}/{id}_shield.png. Gungirl uses 5x5 grid; others 6x6. */
 function getShieldSheetPath(characterId: string): string {
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shield.png`;
 }
 
-/** Shooting animation sprite sheet (6x6 grid). Path: /assets/characters/{id}/{id}_shooting.png. Used for strike/attack. */
+/** Shooting animation sprite sheet. Path: /assets/characters/{id}/{id}_shooting.png. Gungirl uses 5x5 grid; others 6x6. */
 function getShootingSheetPath(characterId: string): string {
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shooting.png`;
 }
@@ -68,8 +71,12 @@ const SHIELD_SHEET_ROWS = 6;
 const SHIELD_FRAME_MS = 80;
 const SHIELD_FRAME_COUNT = SHIELD_SHEET_COLS * SHIELD_SHEET_ROWS;
 
+/** Gungirl uses 5x5 sprite sheets for shield and shooting (25 frames each). */
+const GUNGIRL_SHEET_COLS = 5;
+const GUNGIRL_SHEET_ROWS = 5;
+
 /** Current player character id (one of many usable characters). Can later come from run state or selection. */
-const DEFAULT_PLAYER_CHARACTER_ID = 'gunboy';
+const DEFAULT_PLAYER_CHARACTER_ID = 'gungirl';
 
 @Injectable({ providedIn: 'root' })
 export class CombatAssetsService {
@@ -242,7 +249,9 @@ export class CombatAssetsService {
       try {
         const sheetPath = this.resolveUrl(getShieldSheetPath(cid));
         const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
-        const frames = this.buildSheetFrames(sheetTexture);
+        const cols = cid === 'gungirl' ? GUNGIRL_SHEET_COLS : SHIELD_SHEET_COLS;
+        const rows = cid === 'gungirl' ? GUNGIRL_SHEET_ROWS : SHIELD_SHEET_ROWS;
+        const frames = this.buildSheetFrames(sheetTexture, cols, rows);
         if (frames.length > 0) {
           if (!this.playerTextures.has(cid)) this.playerTextures.set(cid, frames[0]);
           if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shieldFrameTextures = frames;
@@ -253,7 +262,9 @@ export class CombatAssetsService {
       try {
         const shootingPath = this.resolveUrl(getShootingSheetPath(cid));
         const shootingTexture = (await PIXI.Assets.load(shootingPath)) as PIXI.Texture;
-        const frames = this.buildSheetFrames(shootingTexture);
+        const cols = cid === 'gungirl' ? GUNGIRL_SHEET_COLS : SHIELD_SHEET_COLS;
+        const rows = cid === 'gungirl' ? GUNGIRL_SHEET_ROWS : SHIELD_SHEET_ROWS;
+        const frames = this.buildSheetFrames(shootingTexture, cols, rows);
         if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = frames;
       } catch {
         if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = [];
@@ -310,16 +321,17 @@ export class CombatAssetsService {
     await this.loadCombatAssets(DEFAULT_PLAYER_CHARACTER_ID, []);
   }
 
-  private buildSheetFrames(sheetTexture: PIXI.Texture): PIXI.Texture[] {
+  private buildSheetFrames(sheetTexture: PIXI.Texture, cols: number = SHIELD_SHEET_COLS, rows: number = SHIELD_SHEET_ROWS): PIXI.Texture[] {
     const source = sheetTexture.source;
     const sheetW = sheetTexture.width;
     const sheetH = sheetTexture.height;
-    const frameW = Math.floor(sheetW / SHIELD_SHEET_COLS);
-    const frameH = Math.floor(sheetH / SHIELD_SHEET_ROWS);
+    const frameCount = cols * rows;
+    const frameW = Math.floor(sheetW / cols);
+    const frameH = Math.floor(sheetH / rows);
     const out: PIXI.Texture[] = [];
-    for (let i = 0; i < SHIELD_FRAME_COUNT; i++) {
-      const col = i % SHIELD_SHEET_COLS;
-      const row = Math.floor(i / SHIELD_SHEET_COLS);
+    for (let i = 0; i < frameCount; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
       const frame = new PIXI.Rectangle(col * frameW, row * frameH, frameW, frameH);
       out.push(new PIXI.Texture({ source, frame }));
     }
@@ -388,7 +400,7 @@ export class CombatAssetsService {
   getShieldVideoTexture(): PIXI.Texture | null {
     if (this.shieldFrameTextures.length === 0 || this.shieldStartTime == null) return null;
     const elapsed = Date.now() - this.shieldStartTime;
-    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), SHIELD_FRAME_COUNT - 1);
+    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), this.shieldFrameTextures.length - 1);
     return this.shieldFrameTextures[frameIndex] ?? null;
   }
 
@@ -396,7 +408,8 @@ export class CombatAssetsService {
   getShieldAnimationDone(): void {
     if (this.shieldStartTime == null || !this.shieldResolve) return;
     const elapsed = Date.now() - this.shieldStartTime;
-    if (elapsed >= SHIELD_FRAME_COUNT * SHIELD_FRAME_MS) {
+    const durationMs = this.shieldFrameTextures.length * SHIELD_FRAME_MS;
+    if (elapsed >= durationMs) {
       this.shieldStartTime = null;
       const resolve = this.shieldResolve;
       this.shieldResolve = null;
@@ -417,7 +430,7 @@ export class CombatAssetsService {
   getShootingTexture(): PIXI.Texture | null {
     if (this.shootingFrameTextures.length === 0 || this.shootingStartTime == null) return null;
     const elapsed = Date.now() - this.shootingStartTime;
-    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), SHIELD_FRAME_COUNT - 1);
+    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), this.shootingFrameTextures.length - 1);
     return this.shootingFrameTextures[frameIndex] ?? null;
   }
 
@@ -425,7 +438,8 @@ export class CombatAssetsService {
   getShootingAnimationDone(): void {
     if (this.shootingStartTime == null || !this.shootingResolve) return;
     const elapsed = Date.now() - this.shootingStartTime;
-    if (elapsed >= SHIELD_FRAME_COUNT * SHIELD_FRAME_MS) {
+    const durationMs = this.shootingFrameTextures.length * SHIELD_FRAME_MS;
+    if (elapsed >= durationMs) {
       this.shootingStartTime = null;
       const resolve = this.shootingResolve;
       this.shootingResolve = null;
