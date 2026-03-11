@@ -6,6 +6,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   OnInit,
+  HostListener,
 } from '@angular/core';
 import { SoundService } from '../services/sound.service';
 import { GameSettingsService } from '../services/game-settings.service';
@@ -39,6 +40,11 @@ export class SettingsModalComponent implements OnInit {
   ngOnInit(): void {
     this.sound.loadSoundPreferences();
     this.cdr.markForCheck();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.onClose();
   }
 
   isElectron(): boolean {

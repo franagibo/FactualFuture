@@ -156,6 +156,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.showPauseSettings) {
+      this.closePauseSettings();
+      return;
+    }
+    if (this.showPauseMenu) {
+      this.closePauseMenu();
+      return;
+    }
     if (this.cardInteractionState !== 'idle' && this.cardInteractionState !== 'hover') {
       this.cardInteractionState = 'idle';
       this.cardInteractionCardIndex = null;
@@ -749,7 +757,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.dragListenersBound = null;
   }
 
-  /** Magnetic hover: resolve which card is hovered from mouse position; hover lock with release radius. */
+  /** Magnetic hover: resolve which card is hovered from mouse position; hover lock with release radius. Card position is pivot (bottom-center), so use visual center (y - cardHeight/2) for distance. */
   private resolveHover(clientX: number, clientY: number): void {
     if (this._runPhase !== 'combat' || !this.app) return;
     const state = this.bridge.getState();
@@ -761,15 +769,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const h = this.app.screen.height;
     const layout = getHandLayout(hand.length, w, h, null);
     const cardWidth = COMBAT_LAYOUT.cardWidth;
+    const cardHeight = COMBAT_LAYOUT.cardHeight;
     const hoverRadius = cardWidth * ((COMBAT_LAYOUT as { hoverRadiusRatio?: number }).hoverRadiusRatio ?? 0.6);
     const hoverReleaseRadius = cardWidth * ((COMBAT_LAYOUT as { hoverReleaseRadiusRatio?: number }).hoverReleaseRadiusRatio ?? 0.8);
+    const cardCenterYOffset = cardHeight / 2;
 
     if (this.cardInteractionState === 'dragging' && this.cardInteractionCardIndex !== null) return;
 
     if (this.hoveredCardIndex != null && this.hoveredCardIndex < layout.positions.length) {
       const pos = layout.positions[this.hoveredCardIndex];
       const cx = pos.x + (pos.spreadOffsetX ?? 0);
-      const dist = Math.hypot(mouseX - cx, mouseY - pos.y);
+      const cy = pos.y - cardCenterYOffset;
+      const dist = Math.hypot(mouseX - cx, mouseY - cy);
       if (dist < hoverReleaseRadius) return;
     }
 
@@ -777,7 +788,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     for (let i = 0; i < layout.positions.length; i++) {
       const pos = layout.positions[i];
       const cx = pos.x + (pos.spreadOffsetX ?? 0);
-      const dist = Math.hypot(mouseX - cx, mouseY - pos.y);
+      const cy = pos.y - cardCenterYOffset;
+      const dist = Math.hypot(mouseX - cx, mouseY - cy);
       if (dist < hoverRadius && (best == null || dist < best.dist)) best = { index: i, dist };
     }
     const newHover = best?.index ?? null;

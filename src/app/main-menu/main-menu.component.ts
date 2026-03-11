@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
@@ -269,6 +269,13 @@ export class MainMenuComponent implements OnInit {
     const ok = await this.bridge.loadRun();
     if (ok) this.router.navigate(['/game']);
     else this.cdr.markForCheck();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.showSettings) {
+      this.closeSettings();
+    }
   }
 
   onSettings(): void {
