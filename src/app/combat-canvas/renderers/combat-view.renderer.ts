@@ -5,6 +5,7 @@
 import * as PIXI from 'pixi.js';
 import type { GameState, EnemyIntent } from '../../../engine/types';
 import { COMBAT_LAYOUT, getCombatSlotBounds, getEnemyLayout } from '../constants/combat-layout.constants';
+import { ENEMY_ANIMATION_TIMING } from '../constants/combat-timing.constants';
 import type { FloatingNumber } from '../constants/combat-types';
 import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 
@@ -81,6 +82,16 @@ export interface CombatViewContext {
   getBlockIconTexture?: () => PIXI.Texture | null;
   getPlayerTexture?: () => PIXI.Texture | null;
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
+  /** Placeholder enemy: variant 1–3 per index; hurt/dying start times (ms); animation texture getter. */
+  enemyVariants?: number[];
+  enemyHurtStartMs?: (number | null)[];
+  enemyDyingStartMs?: (number | null)[];
+  getEnemyAnimationTexture?: (
+    variant: number,
+    animation: 'idle' | 'hurt' | 'dying',
+    nowMs: number,
+    startMs?: number
+  ) => PIXI.Texture | null;
   /** Optional card art texture lookup; if absent or null, a solid placeholder is shown. */
   getCardArtTexture?: (cardId: string) => PIXI.Texture | null;
   /** B15: Per-card hover influence 0..1 for smooth lift/scale; same length as hand. If absent, use binary from hoveredCardIndex/cardInteractionCardIndex. */
@@ -93,6 +104,9 @@ export interface CombatViewContext {
   /** When true, player sprite shows shooting animation (e.g. for strike card). */
   shootingAnimationPlaying?: boolean;
   getShootingTexture?: () => PIXI.Texture | null;
+  /** When true, player sprite shows chibi slashing animation (strike card). */
+  slashingAnimationPlaying?: boolean;
+  getSlashingTexture?: () => PIXI.Texture | null;
   /** Text scale for card and overlay fonts (default 1). */
   textScale?: number;
   /** When 'off', floating numbers and hit flashes are not drawn. */
@@ -174,9 +188,10 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const playerContainer = new PIXI.Container();
   playerContainer.x = playerBounds.x;
   playerContainer.y = playerBounds.y;
+  const slashingTex = ctx.slashingAnimationPlaying && ctx.getSlashingTexture?.() ? ctx.getSlashingTexture() : null;
   const shootingTex = ctx.shootingAnimationPlaying && ctx.getShootingTexture?.() ? ctx.getShootingTexture() : null;
   const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
-  const playerTex = shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
+  const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
     const sprite = new PIXI.Sprite(playerTex);
     sprite.anchor.set(0.5, 1);
@@ -457,6 +472,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   const targetingMode =
     ctx.isDraggingCard && (ctx.dragIsTargetingEnemy ?? true);
   const enemies = state.enemies;
+  const nowMs = performance.now();
 
   const sizeScale = (size: 'small' | 'medium' | 'large' | undefined): number =>
     size === 'small' ? 0.8 : size === 'large' ? 1.2 : 1;
@@ -467,7 +483,26 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     const isValidTarget = targetingMode && isAlive;
     const isHoveredEnemy = targetingMode && ctx.hoveredEnemyIndex === i && isAlive;
     const container = new PIXI.Container();
-    const enemyTex = ctx.getEnemyTexture?.(e.id) ?? null;
+    let enemyTex: PIXI.Texture | null = null;
+    const variant = ctx.enemyVariants?.[i];
+    const getAnimTex = ctx.getEnemyAnimationTexture;
+    if (variant != null && (variant === 1 || variant === 2 || variant === 3) && getAnimTex) {
+      const dyingStart = ctx.enemyDyingStartMs?.[i];
+      const hurtStart = ctx.enemyHurtStartMs?.[i];
+      if (e.hp <= 0) {
+        enemyTex = getAnimTex(variant, 'dying', nowMs, dyingStart ?? 0);
+      } else if (
+        hurtStart != null &&
+        nowMs - hurtStart < ENEMY_ANIMATION_TIMING.hurtDurationMs
+      ) {
+        enemyTex = getAnimTex(variant, 'hurt', nowMs, hurtStart);
+      } else {
+        enemyTex = getAnimTex(variant, 'idle', nowMs);
+      }
+    }
+    if (enemyTex == null) {
+      enemyTex = ctx.getEnemyTexture?.(e.id) ?? null;
+    }
     if (enemyTex) {
       const sprite = new PIXI.Sprite(enemyTex);
       sprite.width = enemyPlaceholderW;

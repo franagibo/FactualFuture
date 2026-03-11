@@ -1,3 +1,17 @@
 {
-  "default": "background_fight2.png"
+  "default": "background_level_1_variant.png",
+  "backgrounds": [
+    "background_arcane_forest.png",
+    "background_desert_ruins.png",
+    "background_engineering.png",
+    "background_engineering_space.png",
+    "background_frozen.png",
+    "background_frozen_desert_engineering.png",
+    "background_level_1_variant.png",
+    "background_magitech.png",
+    "background_spaceship.png",
+    "background_underwater.png",
+    "background_underwater_engineering.png",
+    "background_volcanic_engineering.png"
+  ]
 }

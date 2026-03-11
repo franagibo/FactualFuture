@@ -16,3 +16,17 @@ export const COMBAT_TIMING = {
   /** Map load timeout; on expiry show error and Retry. */
   mapLoadTimeoutMs: 10_000,
 } as const;
+
+/** Enemy placeholder (Zombie_Villager) animation timing. Same folder names (Idle, Hurt, Dying) used for future per-enemy folders. */
+export const ENEMY_ANIMATION_TIMING = {
+  frameMs: 55,
+  idleFrameCount: 18,
+  hurtFrameCount: 12,
+  dyingFrameCount: 15,
+  get hurtDurationMs(): number {
+    return this.hurtFrameCount * this.frameMs;
+  },
+  get dyingDurationMs(): number {
+    return this.dyingFrameCount * this.frameMs;
+  },
+} as const;

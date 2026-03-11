@@ -21,7 +21,7 @@ import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
 import { COMBAT_LAYOUT, getEnemyCenter, getEnemyIndexAtPoint, getPlayerCenter } from './constants/combat-layout.constants';
-import { COMBAT_TIMING } from './constants/combat-timing.constants';
+import { COMBAT_TIMING, ENEMY_ANIMATION_TIMING } from './constants/combat-timing.constants';
 import { getHandLayout } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
@@ -127,6 +127,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   shieldAnimationPlaying = false;
   /** When true, player shows shooting animation (played when strike card is used). */
   shootingAnimationPlaying = false;
+  /** When true, player shows chibi slashing animation (strike card). */
+  slashingAnimationPlaying = false;
+  /** Placeholder enemy: variant 1–3 (Zombie_Villager_X) per enemy index. Set when combat starts. */
+  enemyVariants: number[] = [];
+  /** Per-enemy: when hurt animation started (ms). Cleared when reinitializing for new combat. */
+  enemyHurtStartMs: (number | null)[] = [];
+  /** Per-enemy: when dying animation started (ms). Set when HP goes to 0. */
+  enemyDyingStartMs: (number | null)[] = [];
   /** Active card impact VFX (drawn each frame, removed when animation done). */
   private activeCardVfx: { vfxId: string; x: number; y: number; startTime: number }[] = [];
 
@@ -357,7 +365,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const factor = 1 - Math.exp(-5 * dt);
       const spreadFactor = 1 - Math.exp(-4 * dt);
       let changed = false;
+      const now = performance.now();
+      if (state.characterId === 'chibi') changed = true;
       if (this.activeCardVfx.length > 0) changed = true;
+      if (this.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs)) changed = true;
+      if (this.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs)) changed = true;
       if (this.cardInteractionState === 'returning') {
         const elapsed = performance.now() - this.returnStartTime;
         const raw = Math.min(1, elapsed / this.returnDurationMs);
@@ -389,10 +401,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         }
       }
       if (changed) {
+        const enemyAnimPlaying =
+          this.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs) ||
+          this.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs);
         if (
           this.activeCardVfx.length > 0 ||
           this.cardSprites.size !== hand.length ||
-          this.cardInteractionState === 'returning'
+          this.cardInteractionState === 'returning' ||
+          state.characterId === 'chibi' ||
+          enemyAnimPlaying
         ) {
           this.redraw();
         } else {
@@ -668,6 +685,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     h: number,
     padding: number
   ): CombatViewContext {
+    if (state.runPhase === 'combat' && state.enemies.length !== this.enemyVariants.length) {
+      this.enemyVariants = state.enemies.map(() => 1 + Math.floor(Math.random() * 3));
+      this.enemyHurtStartMs = state.enemies.map(() => null);
+      this.enemyDyingStartMs = state.enemies.map(() => null);
+    }
     return {
       stage,
       state,
@@ -709,8 +731,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
       getHpIconTexture: () => this.combatAssets.getHpIconTexture(),
       getBlockIconTexture: () => this.combatAssets.getBlockIconTexture(),
-      getPlayerTexture: () => this.combatAssets.getPlayerTexture(),
+      getPlayerTexture: () => this.combatAssets.getPlayerTexture(performance.now()),
       getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
+      enemyVariants: this.enemyVariants,
+      enemyHurtStartMs: this.enemyHurtStartMs,
+      enemyDyingStartMs: this.enemyDyingStartMs,
+      getEnemyAnimationTexture: (variant, animation, nowMs, startMs) =>
+        this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, animation, nowMs, startMs),
       getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
       hoverLerp: this.hoverLerp,
       spreadLerp: this.spreadLerp,
@@ -720,6 +747,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
       shootingAnimationPlaying: this.shootingAnimationPlaying,
       getShootingTexture: () => this.combatAssets.getShootingTexture(),
+      slashingAnimationPlaying: this.slashingAnimationPlaying,
+      getSlashingTexture: () => this.combatAssets.getSlashingTexture(),
     };
   }
 
@@ -838,25 +867,39 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return cardId === 'strike';
   }
 
-  /** If the card is Strike, play shooting animation on the player character. Pixi-only; no overlay change. */
+  /** If the card is Strike, play shooting or chibi slashing animation on the player character. Pixi-only; no overlay change. */
   private triggerShootingAnimationIfStrike(cardId: string): void {
     if (!this.cardIsStrike(cardId)) return;
-    this.shootingAnimationPlaying = true;
-    this.ensurePlayerAnimationTicker();
-    this.redraw();
-    this.combatAssets.playShootingAnimation().then(() => {
-      this.shootingAnimationPlaying = false;
-      this.removePlayerAnimationTickerIfIdle();
+    const state = this.bridge.getState();
+    const isChibi = state?.characterId === 'chibi';
+    if (isChibi) {
+      this.slashingAnimationPlaying = true;
+      this.ensurePlayerAnimationTicker();
       this.redraw();
-    });
+      this.combatAssets.playSlashingAnimation().then(() => {
+        this.slashingAnimationPlaying = false;
+        this.removePlayerAnimationTickerIfIdle();
+        this.redraw();
+      });
+    } else {
+      this.shootingAnimationPlaying = true;
+      this.ensurePlayerAnimationTicker();
+      this.redraw();
+      this.combatAssets.playShootingAnimation().then(() => {
+        this.shootingAnimationPlaying = false;
+        this.removePlayerAnimationTickerIfIdle();
+        this.redraw();
+      });
+    }
   }
 
   private ensurePlayerAnimationTicker(): void {
     if (this.app && !this.shieldTicker) {
       const runShieldTickerOutsideZone = (): void => {
-        if (this.shieldAnimationPlaying || this.shootingAnimationPlaying) {
+        if (this.shieldAnimationPlaying || this.shootingAnimationPlaying || this.slashingAnimationPlaying) {
           this.combatAssets.getShieldAnimationDone();
           this.combatAssets.getShootingAnimationDone();
+          this.combatAssets.getSlashingAnimationDone();
           this.redraw();
         }
       };
@@ -866,7 +909,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   private removePlayerAnimationTickerIfIdle(): void {
-    if (this.shieldAnimationPlaying || this.shootingAnimationPlaying) return;
+    if (this.shieldAnimationPlaying || this.shootingAnimationPlaying || this.slashingAnimationPlaying) return;
     if (this.shieldTicker && this.app) {
       this.app.ticker.remove(this.shieldTicker);
       this.shieldTicker = null;
@@ -1230,6 +1273,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           if (hpLost > 0) {
             toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
             this.sound.playHit();
+            this.enemyHurtStartMs[enemyIndex] = now;
+            if (newState.enemies[enemyIndex].hp <= 0) {
+              this.enemyDyingStartMs[enemyIndex] = now;
+            }
           }
         }
         const blockGain = newState.playerBlock - oldState.playerBlock;

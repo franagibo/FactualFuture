@@ -9,7 +9,8 @@
 export const COMBAT_LAYOUT = {
   playerZoneXRatio: 0.18,
   enemyZoneStartRatio: 0.52,
-  baselineBottomRatio: 0.6,
+  /** Baseline for player/enemy slots (0–1). Higher = lower on screen. Raised ~20% to lower characters. */
+  baselineBottomRatio: 0.72,
   playerYOffsetFromBottom: 28,
   playerPlaceholderW: 240,
   playerPlaceholderH: 310,
@@ -37,7 +38,7 @@ export const COMBAT_LAYOUT = {
   /** Pixels of movement before entering Dragging from Pressed. */
   dragThreshold: 12,
   /** Hand vertical offset from (playerY - cardHeight). Positive = hand lower on screen. */
-  handYOffset: 180,
+  handYOffset: 268,
   /** Horizontal padding on both sides of the scene. */
   padding: 20,
   costRadius: 36,

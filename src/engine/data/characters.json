@@ -1,5 +1,22 @@
 [
   {
+    "id": "chibi",
+    "name": "Chibi",
+    "description": "Test character using chibi idle animation.",
+    "starterDeck": [
+      "strike", "strike", "strike", "strike", "strike",
+      "defend", "defend", "defend", "defend",
+      "bash"
+    ],
+    "cardPoolIds": [
+      "strike", "defend", "bash", "override", "hardened_plating", "body_slam", "clash", "sweep_shot", "stun_round", "stim",
+      "heavy_caliber", "iron_wave", "calibrated_shot", "pommel_strike", "shrug_it_off", "ricochet", "shock_burst", "scrap_shield", "burst_fire", "tactical_draw",
+      "reckless_shot", "burning_pact", "carnage", "disarm", "dual_wield", "entrench", "hemokinesis", "inflame", "intimidate", "pummel",
+      "seeing_red", "sever_soul", "uppercut", "bloodletting", "second_wind", "impervious", "exhume", "fiend_fire", "immolate", "offering",
+      "bludgeon", "demon_form", "heavy_strike", "block", "suppress", "void_grenade", "emergency_shield"
+    ]
+  },
+  {
     "id": "gunboy",
     "name": "Gunboy",
     "description": "Space-human with a gun and a blade. Balanced attacks and defense.",

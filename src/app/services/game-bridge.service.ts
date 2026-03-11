@@ -229,7 +229,8 @@ export class GameBridgeService {
   }
 
   /** Start a new run. No-op if data load previously failed (call ensureDataLoaded + check isDataLoadFailed first). Uses characterId's starter deck and stores characterId in state. Default character: gunboy. */
-  startRun(characterId: string = 'gunboy'): void {
+  /** Default 'chibi' for testing chibi idle animation; use 'gunboy' for normal play. */
+  startRun(characterId: string = 'chibi'): void {
     if (this.dataLoadFailed || !this.mapConfig) return;
     const act1 = this.mapConfig['act1'];
     if (!act1) return;

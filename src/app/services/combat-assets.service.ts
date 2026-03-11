@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as PIXI from 'pixi.js';
 import { logger } from '../util/app-logger';
+import { ENEMY_ANIMATION_TIMING } from '../combat-canvas/constants/combat-timing.constants';
 
 const FIGHT_LOCATION_PREFIX = '/assets/fight-location/';
 const FIGHT_LOCATION_CONFIG_URL = '/assets/data/fight-location.json';
@@ -30,6 +31,38 @@ function getShootingSheetPath(characterId: string): string {
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shooting.png`;
 }
 
+/** Chibi idle animation: 18 frames in Idle/0_Dark_Oracle_Idle_000.png .. 017.png. Used when characterId is 'chibi'. */
+const CHIBI_IDLE_FRAME_COUNT = 18;
+/** Shorter = faster, smoother idle loop. ~50ms per frame ≈ 20 fps animation. */
+const CHIBI_IDLE_FRAME_MS = 15;
+function getChibiIdleFramePath(frameIndex: number): string {
+  const pad = String(frameIndex).padStart(3, '0');
+  return `${PLAYER_CHARACTERS_PREFIX}chibi/Idle/0_Dark_Oracle_Idle_${pad}.png`;
+}
+
+/** Chibi slashing animation (e.g. for strike card): 12 frames in Slashing/0_Dark_Oracle_Slashing_000.png .. 011.png. */
+const CHIBI_SLASHING_FRAME_COUNT = 12;
+const CHIBI_SLASHING_FRAME_MS = 10;
+function getChibiSlashingFramePath(frameIndex: number): string {
+  const pad = String(frameIndex).padStart(3, '0');
+  return `${PLAYER_CHARACTERS_PREFIX}chibi/Slashing/0_Dark_Oracle_Slashing_${pad}.png`;
+}
+
+/** Zombie placeholder: variants 1–3 under characters. Path: .../Zombie_Villager_X/PNG/PNG Sequences/{Idle|Hurt|Dying}/. Future: per-enemy folder with same names. */
+const ZOMBIE_PLACEHOLDER_VARIANTS = [1, 2, 3] as const;
+const ZOMBIE_IDLE_FRAME_COUNT = 18;
+const ZOMBIE_HURT_FRAME_COUNT = 12;
+const ZOMBIE_DYING_FRAME_COUNT = 15;
+
+function getZombiePlaceholderFramePath(
+  variantId: 1 | 2 | 3,
+  animation: 'Idle' | 'Hurt' | 'Dying',
+  frameIndex: number
+): string {
+  const pad = String(frameIndex).padStart(3, '0');
+  return `${PLAYER_CHARACTERS_PREFIX}Zombie_Villager_${variantId}/PNG/PNG Sequences/${animation}/0_Zombie_Villager_${animation}_${pad}.png`;
+}
+
 const SHIELD_SHEET_COLS = 6;
 const SHIELD_SHEET_ROWS = 6;
 const SHIELD_FRAME_MS = 80;
@@ -42,10 +75,14 @@ const DEFAULT_PLAYER_CHARACTER_ID = 'gunboy';
 export class CombatAssetsService {
   /** Enemy id (or 'default') -> background filename. Loaded from fight-location.json. */
   private combatBgByEnemy: Record<string, string> = {};
-  /** Cache of loaded combat bg textures by key (enemy id or 'default'). */
+  /** Optional pool of background filenames for random fight location. From fight-location.json "backgrounds" array. */
+  private combatBgPool: string[] = [];
+  /** Cache of loaded combat bg textures by key (enemy id, 'default', or filename from pool). */
   private combatBgTextureCache = new Map<string, PIXI.Texture>();
   /** Key for current fight so getCombatBgTexture() returns the right one. */
   private currentCombatBgKey = 'default';
+  /** Signature of the fight we chose the current bg for; avoids re-randomizing on every redraw. */
+  private currentCombatBgSignature = '';
   /** Fallback card art when {cardId}.png is missing. Loaded with global combat assets. */
   private emptyCardTemplateTexture: PIXI.Texture | null = null;
   private playerTextures = new Map<string, PIXI.Texture>();
@@ -61,6 +98,21 @@ export class CombatAssetsService {
   private hpIconTexture: PIXI.Texture | null = null;
   private blockIconTexture: PIXI.Texture | null = null;
   private globalLoadPromise: Promise<void> | null = null;
+  /** Character id last loaded in loadCombatAssets; used so getPlayerTexture returns the correct character. */
+  private currentPlayerCharacterId = DEFAULT_PLAYER_CHARACTER_ID;
+  /** Chibi idle animation frames (18). Populated when loading character 'chibi'. */
+  private chibiIdleTextures: PIXI.Texture[] = [];
+  /** Chibi slashing animation (12 frames). Played when chibi uses strike card. */
+  private chibiSlashingTextures: PIXI.Texture[] = [];
+  private slashingStartTime: number | null = null;
+  private slashingResolve: (() => void) | null = null;
+
+  /** Placeholder enemy animations (Idle, Hurt, Dying) per Zombie_Villager variant. Loaded once when combat uses placeholders. */
+  private zombiePlaceholderTextures: Record<
+    1 | 2 | 3,
+    { idle: PIXI.Texture[]; hurt: PIXI.Texture[]; dying: PIXI.Texture[] }
+  > = { 1: { idle: [], hurt: [], dying: [] }, 2: { idle: [], hurt: [], dying: [] }, 3: { idle: [], hurt: [], dying: [] } };
+  private zombiePlaceholderLoadPromise: Promise<void> | null = null;
 
   /** Load only global combat assets (fight-location config + default bg + empty card template). Call once at app/game start. Failures are cached (no retries). */
   async loadGlobalCombatAssets(): Promise<void> {
@@ -68,12 +120,24 @@ export class CombatAssetsService {
     this.globalLoadPromise = (async () => {
       try {
         const res = await fetch(this.resolveUrl(FIGHT_LOCATION_CONFIG_URL));
-        const data = (await res.json()) as Record<string, string>;
-        this.combatBgByEnemy = data ?? {};
+        const data = (await res.json()) as Record<string, unknown>;
+        const raw = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {};
+        this.combatBgByEnemy = {};
+        for (const k of Object.keys(raw)) {
+          if (k !== 'backgrounds' && typeof (raw as Record<string, unknown>)[k] === 'string') {
+            this.combatBgByEnemy[k] = (raw as Record<string, string>)[k];
+          }
+        }
+        if (Array.isArray(raw['backgrounds'])) {
+          this.combatBgPool = (raw['backgrounds'] as unknown[]).filter((f): f is string => typeof f === 'string');
+        } else {
+          this.combatBgPool = [];
+        }
       } catch {
-        this.combatBgByEnemy = { default: 'background_fight2.png' };
+        this.combatBgByEnemy = { default: 'background_level_1.png' };
+        this.combatBgPool = [];
       }
-      const defaultFilename = this.combatBgByEnemy['default'] ?? 'background_fight2.png';
+      const defaultFilename = this.combatBgByEnemy['default'] ?? 'background_level_1.png';
       try {
         const tex = (await PIXI.Assets.load(this.resolveUrl(FIGHT_LOCATION_PREFIX + defaultFilename))) as PIXI.Texture;
         this.combatBgTextureCache.set('default', tex);
@@ -103,21 +167,70 @@ export class CombatAssetsService {
   /** Load combat assets for the current fight: global (bg) + character sheets + enemy textures. Safe to call multiple times. */
   async loadCombatAssets(characterId?: string, enemyIds?: string[]): Promise<void> {
     await this.loadGlobalCombatAssets();
-    const bgKey = enemyIds?.[0] ?? 'default';
-    const hasMapping = bgKey !== 'default' && this.combatBgByEnemy[bgKey] != null;
-    const effectiveKey = hasMapping ? bgKey : 'default';
-    const filename = this.combatBgByEnemy[effectiveKey] ?? 'background_fight2.png';
+    const signature = `${characterId ?? ''}|${(enemyIds ?? []).join(',')}`;
+    const isNewFight = signature !== this.currentCombatBgSignature;
+
+    let effectiveKey: string;
+    let filename: string;
+    if (this.combatBgPool.length > 0) {
+      if (isNewFight) {
+        filename = this.combatBgPool[Math.floor(Math.random() * this.combatBgPool.length)];
+        effectiveKey = filename;
+        this.currentCombatBgSignature = signature;
+        this.currentCombatBgKey = effectiveKey;
+      } else {
+        effectiveKey = this.currentCombatBgKey;
+        filename = this.combatBgPool.includes(effectiveKey) ? effectiveKey : this.combatBgPool[0];
+      }
+    } else {
+      const bgKey = enemyIds?.[0] ?? 'default';
+      const hasMapping = bgKey !== 'default' && this.combatBgByEnemy[bgKey] != null;
+      effectiveKey = hasMapping ? bgKey : 'default';
+      filename = this.combatBgByEnemy[effectiveKey] ?? 'background_level_1.png';
+      if (isNewFight) {
+        this.currentCombatBgSignature = signature;
+        this.currentCombatBgKey = effectiveKey;
+      }
+    }
     if (!this.combatBgTextureCache.has(effectiveKey)) {
       try {
         const tex = (await PIXI.Assets.load(this.resolveUrl(FIGHT_LOCATION_PREFIX + filename))) as PIXI.Texture;
         this.combatBgTextureCache.set(effectiveKey, tex);
       } catch {
-        // Per-enemy bg failed; getCombatBgTexture will fall back to default
+        // Per-enemy or random bg failed; getCombatBgTexture will fall back to default
       }
     }
-    this.currentCombatBgKey = effectiveKey;
     const cid = characterId ?? DEFAULT_PLAYER_CHARACTER_ID;
-    if (!this.playerTextures.has(cid)) {
+    this.currentPlayerCharacterId = cid;
+
+    if (cid === 'chibi') {
+      // Chibi uses a numbered idle animation (18 frames) instead of a single static image.
+      if (this.chibiIdleTextures.length === 0) {
+        for (let i = 0; i < CHIBI_IDLE_FRAME_COUNT; i++) {
+          try {
+            const path = this.resolveUrl(getChibiIdleFramePath(i));
+            const tex = (await PIXI.Assets.load(path)) as PIXI.Texture;
+            this.chibiIdleTextures.push(tex);
+          } catch {
+            logger.warn('Chibi idle frame load failed', getChibiIdleFramePath(i));
+          }
+        }
+        if (this.chibiIdleTextures.length > 0) {
+          this.playerTextures.set('chibi', this.chibiIdleTextures[0]);
+        }
+        if (this.chibiSlashingTextures.length === 0) {
+          for (let i = 0; i < CHIBI_SLASHING_FRAME_COUNT; i++) {
+            try {
+              const path = this.resolveUrl(getChibiSlashingFramePath(i));
+              const tex = (await PIXI.Assets.load(path)) as PIXI.Texture;
+              this.chibiSlashingTextures.push(tex);
+            } catch {
+              logger.warn('Chibi slashing frame load failed', getChibiSlashingFramePath(i));
+            }
+          }
+        }
+      }
+    } else if (!this.playerTextures.has(cid)) {
       // Prefer dedicated static image ({id}_static.png) for default pose; fall back to first frame of shield sheet.
       try {
         const staticPath = this.resolveUrl(getStaticImagePath(cid));
@@ -149,6 +262,48 @@ export class CombatAssetsService {
     for (const id of enemyIds ?? []) {
       await this.loadEnemyTexture(id);
     }
+    await this.loadZombiePlaceholderAssets();
+  }
+
+  /** Load Idle, Hurt, Dying sequences for Zombie_Villager_1/2/3. Called from loadCombatAssets. Safe to call multiple times. */
+  private async loadZombiePlaceholderAssets(): Promise<void> {
+    if (this.zombiePlaceholderLoadPromise) return this.zombiePlaceholderLoadPromise;
+    this.zombiePlaceholderLoadPromise = (async () => {
+      for (const v of ZOMBIE_PLACEHOLDER_VARIANTS) {
+        const idle: PIXI.Texture[] = [];
+        for (let i = 0; i < ZOMBIE_IDLE_FRAME_COUNT; i++) {
+          try {
+            const tex = (await PIXI.Assets.load(this.resolveUrl(getZombiePlaceholderFramePath(v, 'Idle', i)))) as PIXI.Texture;
+            idle.push(tex);
+          } catch {
+            if (i === 0) logger.warn('Zombie placeholder Idle load failed', getZombiePlaceholderFramePath(v, 'Idle', i));
+            break;
+          }
+        }
+        const hurt: PIXI.Texture[] = [];
+        for (let i = 0; i < ZOMBIE_HURT_FRAME_COUNT; i++) {
+          try {
+            const tex = (await PIXI.Assets.load(this.resolveUrl(getZombiePlaceholderFramePath(v, 'Hurt', i)))) as PIXI.Texture;
+            hurt.push(tex);
+          } catch {
+            if (i === 0) logger.warn('Zombie placeholder Hurt load failed', getZombiePlaceholderFramePath(v, 'Hurt', i));
+            break;
+          }
+        }
+        const dying: PIXI.Texture[] = [];
+        for (let i = 0; i < ZOMBIE_DYING_FRAME_COUNT; i++) {
+          try {
+            const tex = (await PIXI.Assets.load(this.resolveUrl(getZombiePlaceholderFramePath(v, 'Dying', i)))) as PIXI.Texture;
+            dying.push(tex);
+          } catch {
+            if (i === 0) logger.warn('Zombie placeholder Dying load failed', getZombiePlaceholderFramePath(v, 'Dying', i));
+            break;
+          }
+        }
+        this.zombiePlaceholderTextures[v] = { idle, hurt, dying };
+      }
+    })();
+    return this.zombiePlaceholderLoadPromise;
   }
 
   private async doLoad(): Promise<void> {
@@ -218,9 +373,15 @@ export class CombatAssetsService {
     return this.emptyCardTemplateTexture;
   }
 
-  /** Returns the current player character texture (static image or first frame of shield sheet). */
-  getPlayerTexture(): PIXI.Texture | null {
-    return this.playerTextures.get(DEFAULT_PLAYER_CHARACTER_ID) ?? null;
+  /** Returns the current player character texture. For chibi, uses idle animation frame from time; otherwise static/first frame. */
+  getPlayerTexture(animationTimeMs?: number): PIXI.Texture | null {
+    const cid = this.currentPlayerCharacterId;
+    if (cid === 'chibi' && this.chibiIdleTextures.length > 0) {
+      const t = animationTimeMs ?? 0;
+      const index = Math.floor((t / CHIBI_IDLE_FRAME_MS) % this.chibiIdleTextures.length);
+      return this.chibiIdleTextures[index] ?? this.chibiIdleTextures[0];
+    }
+    return this.playerTextures.get(cid) ?? null;
   }
 
   /** Returns the current shield animation frame texture, or null if not playing or no frames. */
@@ -281,9 +442,64 @@ export class CombatAssetsService {
     });
   }
 
+  /** Returns current chibi slashing frame, or null if not playing or no frames. */
+  getSlashingTexture(): PIXI.Texture | null {
+    if (this.chibiSlashingTextures.length === 0 || this.slashingStartTime == null) return null;
+    const elapsed = Date.now() - this.slashingStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / CHIBI_SLASHING_FRAME_MS), this.chibiSlashingTextures.length - 1);
+    return this.chibiSlashingTextures[frameIndex] ?? null;
+  }
+
+  /** Call each tick while slashing is playing. Resolves the play promise when animation is done. */
+  getSlashingAnimationDone(): void {
+    if (this.slashingStartTime == null || !this.slashingResolve) return;
+    const elapsed = Date.now() - this.slashingStartTime;
+    const durationMs = this.chibiSlashingTextures.length * CHIBI_SLASHING_FRAME_MS;
+    if (elapsed >= durationMs) {
+      this.slashingStartTime = null;
+      const resolve = this.slashingResolve;
+      this.slashingResolve = null;
+      resolve();
+    }
+  }
+
+  /** Plays the chibi slashing animation once (e.g. for strike card). Resolves when the animation ends. */
+  playSlashingAnimation(): Promise<void> {
+    if (this.chibiSlashingTextures.length === 0) return Promise.resolve();
+    this.slashingStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.slashingResolve = resolve;
+    });
+  }
+
   /** Returns player texture for a given character id (for future character selection). */
   getPlayerTextureForCharacter(characterId: string): PIXI.Texture | null {
     return this.playerTextures.get(characterId) ?? null;
+  }
+
+  /**
+   * Returns current frame texture for placeholder enemy animation (Zombie_Villager variants).
+   * idle: loops using nowMs. hurt/dying: one-shot from animationStartMs; past duration returns last frame.
+   */
+  getEnemyAnimationTexture(
+    variantId: 1 | 2 | 3,
+    animation: 'idle' | 'hurt' | 'dying',
+    nowMs: number,
+    animationStartMs?: number
+  ): PIXI.Texture | null {
+    const key = animation === 'idle' ? 'idle' : animation === 'hurt' ? 'hurt' : 'dying';
+    const frames = this.zombiePlaceholderTextures[variantId][key];
+    if (!frames?.length) return null;
+    const frameMs = ENEMY_ANIMATION_TIMING.frameMs;
+    if (animation === 'idle') {
+      const frameIndex = Math.floor((nowMs / frameMs) % frames.length);
+      return frames[frameIndex] ?? frames[0];
+    }
+    const start = animationStartMs ?? 0;
+    const elapsed = nowMs - start;
+    const duration = animation === 'hurt' ? ENEMY_ANIMATION_TIMING.hurtDurationMs : ENEMY_ANIMATION_TIMING.dyingDurationMs;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), frames.length - 1);
+    return frames[Math.max(0, frameIndex)] ?? frames[frames.length - 1];
   }
 
   /** Returns texture for enemy by id if loaded (e.g. /assets/combat/enemies/slime.png). Load on demand. */
