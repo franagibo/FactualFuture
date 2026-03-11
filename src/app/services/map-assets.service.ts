@@ -17,6 +17,12 @@ export class MapAssetsService {
   private mapBgTexture: PIXI.Texture | null = null;
   private nodeTextures = new Map<MapNodeType, PIXI.Texture>();
   private loadPromise: Promise<void> | null = null;
+  private loaded = false;
+
+  /** True after map background and node icons have been loaded at least once. */
+  isMapLoaded(): boolean {
+    return this.loaded;
+  }
 
   /** Load map background and all node icons. Resolves when done; safe to call multiple times. */
   async loadMapAssets(): Promise<void> {
@@ -40,6 +46,7 @@ export class MapAssetsService {
         // fallback in UI
       }
     }
+    this.loaded = true;
   }
 
   getMapBgTexture(): PIXI.Texture | null {

@@ -77,6 +77,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private hoverLerp: number[] = [];
   /** B15: Target values for hoverLerp (0 or 1); set each redraw in combat. */
   private targetLerp: number[] = [];
+  /** Lerped per-card spread offset X so neighbor cards move smoothly when hover changes. */
+  private spreadLerp: number[] = [];
   private _steamWarning = '';
   private _combatResult: GameState['combatResult'] = null;
   private _runPhase: RunPhase | undefined = undefined;
@@ -98,6 +100,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private shieldTicker: (() => void) | null = null;
   /** When in map phase, total height of map content (px) for scroll. */
   mapContentHeight = 0;
+  /** True when map assets are loaded and map has been drawn (enables reveal animation). */
+  mapReady = signal(false);
+  private mapLoadScheduled = false;
   /** Map node id currently hovered (for tooltip). */
   private hoveredNodeId: string | null = null;
   /** True until we have drawn with valid canvas size once (fixes initial map/combat not showing). */
@@ -222,7 +227,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.sound.loadSoundPreferences();
-    this.sound.startSoundtrack();
     this.cardVfx.loadConfig().catch(() => {});
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
       (window as unknown as { electronAPI: { onSteamWarning: (cb: (m: string) => void) => void } }).electronAPI.onSteamWarning((msg) => {
@@ -234,7 +238,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.sound.stopSoundtrack();
     if (this.hoverResolveBound) {
       this.hoverResolveBound();
       this.hoverResolveBound = null;
@@ -306,13 +309,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (!state) return;
       const hand = state.hand;
       if (hand.length !== this.hoverLerp.length) {
-      this.targetLerp = hand.map((cardId, i) =>
-        (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
-        (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
-          ? 1
-          : 0
-      );
-      this.hoverLerp = [...this.targetLerp];
+        this.targetLerp = hand.map((cardId, i) =>
+          (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+          (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+            ? 1
+            : 0
+        );
+        this.hoverLerp = [...this.targetLerp];
+        const layoutInit = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, this.hoveredCardIndex);
+        this.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
         this.redraw();
         return;
       }
@@ -323,7 +328,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           : 0
       );
       const dt = (ticker.deltaTime ?? 1) / 60;
-      const factor = 1 - Math.exp(-8 * dt);
+      const factor = 1 - Math.exp(-5 * dt);
+      const spreadFactor = 1 - Math.exp(-4 * dt);
       let changed = false;
       if (this.activeCardVfx.length > 0) changed = true;
       if (this.cardInteractionState === 'returning') {
@@ -335,6 +341,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           this.cardInteractionCardIndex = null;
           this.cardInteractionCardId = null;
         }
+        changed = true;
+      }
+      const layout = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, this.hoveredCardIndex);
+      if (this.spreadLerp.length === layout.positions.length) {
+        for (let i = 0; i < this.spreadLerp.length; i++) {
+          const target = layout.positions[i].spreadOffsetX ?? 0;
+          const prev = this.spreadLerp[i];
+          this.spreadLerp[i] = prev + (target - prev) * spreadFactor;
+          if (Math.abs(this.spreadLerp[i] - prev) > 0.3) changed = true;
+        }
+      } else {
+        this.spreadLerp = layout.positions.map((p) => p.spreadOffsetX ?? 0);
         changed = true;
       }
       if (this.hoverLerp.length === this.targetLerp.length) {
@@ -363,11 +381,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.hoverResolveBound = (): void => document.removeEventListener('pointermove', onPointerMove);
     this.redraw();
     this.scheduleCanvasLayoutFix({ scrollToBottom: this._runPhase === 'map' });
-    if (this._runPhase === 'map') {
-      this.mapAssets.loadMapAssets().then(() => {
-        requestAnimationFrame(() => this.redraw());
-      });
-    }
   }
 
   /** Schedules a paint outside Angular (coalesced). Use requestTemplateUpdate() only when overlay state (runPhase, rewards, potions, gold) actually changed. */
@@ -383,6 +396,51 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         requestAnimationFrame(() => this.redraw());
       }
     });
+  }
+
+  /** True for map and any overlay that shows the map as background (reward, rest, shop, event, victory). */
+  private isMapOrOverlayPhase(phase: RunPhase | undefined): boolean {
+    return (
+      phase === 'map' ||
+      phase === 'reward' ||
+      phase === 'rest' ||
+      phase === 'shop' ||
+      phase === 'event' ||
+      phase === 'victory'
+    );
+  }
+
+  /** Starts map asset load if not yet started; on completion sets mapReady and runs layout fix. */
+  private ensureMapLoadThenReveal(): void {
+    if (this.mapLoadScheduled) return;
+    this.mapLoadScheduled = true;
+    this.mapAssets.loadMapAssets().then(() => {
+      this.mapLoadScheduled = false;
+      this.mapReady.set(true);
+      this.zone.run(() => this.cdr.detectChanges());
+      this.scheduleCanvasLayoutFix({ scrollToBottom: true });
+    });
+  }
+
+  /** Draws a loading state on the stage while map assets are loading. */
+  private drawMapLoadingState(stage: PIXI.Container, w: number, h: number): void {
+    const bg = new PIXI.Graphics();
+    bg.rect(0, 0, w, h).fill(0x1a1822);
+    bg.zIndex = 0;
+    stage.addChild(bg);
+    const text = new PIXI.Text({
+      text: 'Loading map…',
+      style: {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 28,
+        fill: 0xcccccc,
+      },
+    });
+    text.anchor.set(0.5, 0.5);
+    text.x = w / 2;
+    text.y = h / 2;
+    text.zIndex = 1;
+    stage.addChild(text);
   }
 
   /**
@@ -441,6 +499,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.cardInteractionCardId = null;
       this.clearDragListeners();
     }
+    if (prevPhase === 'map' && this._runPhase !== 'map') {
+      this.mapReady.set(false);
+      this.mapLoadScheduled = false;
+    }
     this.syncOverlaySignals(state);
     if (state.combatResult === 'win' && prevResult !== 'win') this.sound.playVictory();
     if (state.combatResult === 'lose' && prevResult !== 'lose') this.sound.playDefeat();
@@ -456,15 +518,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const padding = COMBAT_LAYOUT.padding;
 
     // Map phase and overlays (reward, rest, shop, event, victory): render map as background.
-    if (
-      (this._runPhase === 'map' ||
-        this._runPhase === 'reward' ||
-        this._runPhase === 'rest' ||
-        this._runPhase === 'shop' ||
-        this._runPhase === 'event' ||
-        this._runPhase === 'victory') &&
-      state.map
-    ) {
+    if (this.isMapOrOverlayPhase(this._runPhase) && state.map) {
+      if (!this.mapAssets.isMapLoaded()) {
+        this.drawMapLoadingState(stage, w, h);
+        this.ensureMapLoadThenReveal();
+        this.requestTemplateUpdate();
+        return;
+      }
+      this.mapReady.set(true);
       const mapContext = {
         getAvailableNextNodes: () => this.bridge.getAvailableNextNodes(),
         getNodeTexture: (type: MapNodeType) => this.mapAssets.getNodeTexture(type),
@@ -511,6 +572,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     // Combat phase only: ensure combat assets loading (global + character + enemies), build context and delegate to combat renderer.
     if (this._runPhase !== 'combat') return;
+    if (state.hand.length > 0 && this.spreadLerp.length !== state.hand.length) {
+      const layoutInit = getHandLayout(state.hand.length, w, h, this.hoveredCardIndex);
+      this.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
+    }
     const characterId = state.characterId ?? undefined;
     const enemyIds = state.enemies.map((e) => e.id);
     this.combatAssets.loadCombatAssets(characterId, enemyIds);
@@ -574,6 +639,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
       getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
       hoverLerp: this.hoverLerp,
+      spreadLerp: this.spreadLerp,
       textScale: this.gameSettings.textScale(),
       vfxIntensity: this.gameSettings.vfxIntensity(),
       shieldAnimationPlaying: this.shieldAnimationPlaying,
@@ -647,7 +713,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const applyHover = (isHovered || isSelected) && lerp > 0.5;
 
       const pos = layout.positions[i];
-      const cardX = pos.x + (pos.spreadOffsetX ?? 0);
+      const spreadX = this.spreadLerp[i] ?? pos.spreadOffsetX ?? 0;
+      const cardX = pos.x + spreadX;
       const cardY = pos.y - (isActive ? lerp * hoverLift : 0);
       const scale = 1 + (isActive ? lerp : 0) * (hoverScale - 1);
       const zIndex = applyHover || (isActive && lerp > 0.5) ? 100 : i;
@@ -757,7 +824,45 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.dragListenersBound = null;
   }
 
-  /** Magnetic hover: resolve which card is hovered from mouse position; hover lock with release radius. Card position is pivot (bottom-center), so use visual center (y - cardHeight/2) for distance. */
+  /**
+   * Returns the axis-aligned bounding box of a card (rotated rect). Card pivot is bottom-center.
+   * Used so hover only highlights the card whose visual bounds contain the cursor.
+   */
+  private getCardAABB(
+    pos: { x: number; y: number; rotation: number; spreadOffsetX?: number },
+    cardWidth: number,
+    cardHeight: number
+  ): { minX: number; minY: number; maxX: number; maxY: number } {
+    const cx = pos.x + (pos.spreadOffsetX ?? 0);
+    const cy = pos.y;
+    const r = pos.rotation;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const hw = cardWidth / 2;
+    const corners = [
+      [cx + (-hw) * cos - 0 * sin, cy + (-hw) * sin + 0 * cos],
+      [cx + hw * cos - 0 * sin, cy + hw * sin + 0 * cos],
+      [cx + hw * cos - -cardHeight * sin, cy + hw * sin + -cardHeight * cos],
+      [cx + (-hw) * cos - -cardHeight * sin, cy + (-hw) * sin + -cardHeight * cos],
+    ];
+    let minX = corners[0][0];
+    let maxX = corners[0][0];
+    let minY = corners[0][1];
+    let maxY = corners[0][1];
+    for (let i = 1; i < corners.length; i++) {
+      minX = Math.min(minX, corners[i][0]);
+      maxX = Math.max(maxX, corners[i][0]);
+      minY = Math.min(minY, corners[i][1]);
+      maxY = Math.max(maxY, corners[i][1]);
+    }
+    return { minX, minY, maxX, maxY };
+  }
+
+  private pointInAABB(px: number, py: number, aabb: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
+    return px >= aabb.minX && px <= aabb.maxX && py >= aabb.minY && py <= aabb.maxY;
+  }
+
+  /** Hover: only highlight the card whose visual bounds contain the cursor (card-width hit area, no overlap). */
   private resolveHover(clientX: number, clientY: number): void {
     if (this._runPhase !== 'combat' || !this.app) return;
     const state = this.bridge.getState();
@@ -770,27 +875,24 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const layout = getHandLayout(hand.length, w, h, null);
     const cardWidth = COMBAT_LAYOUT.cardWidth;
     const cardHeight = COMBAT_LAYOUT.cardHeight;
-    const hoverRadius = cardWidth * ((COMBAT_LAYOUT as { hoverRadiusRatio?: number }).hoverRadiusRatio ?? 0.6);
-    const hoverReleaseRadius = cardWidth * ((COMBAT_LAYOUT as { hoverReleaseRadiusRatio?: number }).hoverReleaseRadiusRatio ?? 0.8);
     const cardCenterYOffset = cardHeight / 2;
 
     if (this.cardInteractionState === 'dragging' && this.cardInteractionCardIndex !== null) return;
 
     if (this.hoveredCardIndex != null && this.hoveredCardIndex < layout.positions.length) {
-      const pos = layout.positions[this.hoveredCardIndex];
-      const cx = pos.x + (pos.spreadOffsetX ?? 0);
-      const cy = pos.y - cardCenterYOffset;
-      const dist = Math.hypot(mouseX - cx, mouseY - cy);
-      if (dist < hoverReleaseRadius) return;
+      const aabb = this.getCardAABB(layout.positions[this.hoveredCardIndex], cardWidth, cardHeight);
+      if (this.pointInAABB(mouseX, mouseY, aabb)) return;
     }
 
     let best: { index: number; dist: number } | null = null;
     for (let i = 0; i < layout.positions.length; i++) {
       const pos = layout.positions[i];
+      const aabb = this.getCardAABB(pos, cardWidth, cardHeight);
+      if (!this.pointInAABB(mouseX, mouseY, aabb)) continue;
       const cx = pos.x + (pos.spreadOffsetX ?? 0);
       const cy = pos.y - cardCenterYOffset;
       const dist = Math.hypot(mouseX - cx, mouseY - cy);
-      if (dist < hoverRadius && (best == null || dist < best.dist)) best = { index: i, dist };
+      if (best == null || dist < best.dist) best = { index: i, dist };
     }
     const newHover = best?.index ?? null;
     if (newHover !== this.hoveredCardIndex) {

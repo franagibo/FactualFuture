@@ -93,6 +93,8 @@ export interface CombatViewContext {
   getCardArtTexture?: (cardId: string) => PIXI.Texture | null;
   /** B15: Per-card hover influence 0..1 for smooth lift/scale; same length as hand. If absent, use binary from hoveredCardIndex/cardInteractionCardIndex. */
   hoverLerp?: number[];
+  /** Lerped per-card spread offset X for smooth neighbor movement; same length as hand. If absent, use layout spreadOffsetX. */
+  spreadLerp?: number[];
   /** When true, player sprite shows shield animation instead of static texture. */
   shieldAnimationPlaying?: boolean;
   getShieldVideoTexture?: () => PIXI.Texture | null;
@@ -286,7 +288,8 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const applyHover = (isHovered || isSelected) && lerp > 0.5;
 
     const pos = layout?.positions[i];
-    const cardX = pos ? pos.x + (pos.spreadOffsetX ?? 0) : w / 2 + (i - (hand.length - 1) / 2) * cardWidth * L.overlapRatio;
+    const spreadX = (ctx.spreadLerp && ctx.spreadLerp[i] !== undefined) ? ctx.spreadLerp[i] : (pos?.spreadOffsetX ?? 0);
+    const cardX = pos ? pos.x + spreadX : w / 2 + (i - (hand.length - 1) / 2) * cardWidth * L.overlapRatio;
     const cardY = pos ? pos.y : 0;
     const rot = pos?.rotation ?? 0;
     const baseY = pos?.y ?? 0;

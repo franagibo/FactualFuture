@@ -4,9 +4,19 @@
   [style.--game-text-scale]="gameSettings.textScale()"
 >
   <div #scrollArea class="scroll-area">
-    <div class="game-view-inner" [style.height]="(runPhaseSignal() === 'map' && mapContentHeight) ? (mapContentHeight + 'px') : '100%'">
+    <div
+      class="game-view-inner"
+      [class.map-reveal]="runPhaseSignal() === 'map' && mapReady()"
+      [style.height]="(runPhaseSignal() === 'map' && mapContentHeight) ? (mapContentHeight + 'px') : '100%'"
+    >
       <div #canvasHost class="pixi-host"></div>
     </div>
+    @if (runPhaseSignal() === 'map' && !mapReady()) {
+      <div class="map-loading-overlay" aria-busy="true">
+        <span class="map-loading-spinner"></span>
+        <span class="map-loading-label">Loading map…</span>
+      </div>
+    }
   </div>
   @if (feedbackMessage()) {
     <div class="feedback-toast">{{ feedbackMessage() }}</div>
