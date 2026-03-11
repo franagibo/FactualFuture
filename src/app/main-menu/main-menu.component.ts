@@ -10,7 +10,13 @@ import { SettingsModalComponent } from '../settings-modal/settings-modal.compone
   imports: [SettingsModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="menu-wrap">
+    <div class="menu-wrap" [class.bg-ready]="backgroundReady">
+      @if (!backgroundReady) {
+        <div class="menu-loading-overlay" aria-busy="true">
+          <span class="menu-loading-spinner"></span>
+          <span class="menu-loading-label">Loading…</span>
+        </div>
+      }
       <div class="menu-panel">
         <h1 class="menu-title">Slay the Spire Like</h1>
         @if (meta) {
@@ -67,8 +73,38 @@ import { SettingsModalComponent } from '../settings-modal/settings-modal.compone
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: #1a1a2e url('/assets/main-menu.jpg') center center no-repeat;
+        position: relative;
+        background: #1a1a2e center center no-repeat;
         background-size: cover;
+      }
+      .menu-wrap.bg-ready {
+        background-image: url('/assets/main-menu.jpg');
+      }
+      .menu-loading-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        background: #1a1a2e;
+        z-index: 10;
+      }
+      .menu-loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255, 255, 255, 0.15);
+        border-top-color: #b48cff;
+        border-radius: 50%;
+        animation: menu-loading-spin 0.8s linear infinite;
+      }
+      .menu-loading-label {
+        font-size: 1rem;
+        color: #cccccc;
+      }
+      @keyframes menu-loading-spin {
+        to { transform: rotate(360deg); }
       }
       .menu-panel {
         background: rgba(12, 10, 24, 0.85);
@@ -232,6 +268,7 @@ export class MainMenuComponent implements OnInit {
   public showSettings = false;
   showContinue = false;
   meta: MetaState | null = null;
+  backgroundReady = false;
 
   constructor(
     private router: Router,
@@ -240,11 +277,25 @@ export class MainMenuComponent implements OnInit {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.loadBackgroundImage();
     await this.bridge.ensureDataLoaded();
     this.meta = this.bridge.getMeta();
     const has = await this.bridge.hasSavedRun();
     this.showContinue = has;
     this.cdr.markForCheck();
+  }
+
+  private loadBackgroundImage(): void {
+    const img = new Image();
+    img.onload = () => {
+      this.backgroundReady = true;
+      this.cdr.markForCheck();
+    };
+    img.onerror = () => {
+      this.backgroundReady = true;
+      this.cdr.markForCheck();
+    };
+    img.src = '/assets/main-menu.jpg';
   }
 
   getCardDisplayName(cardId: string): string {

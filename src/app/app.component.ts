@@ -20,6 +20,12 @@ export class AppComponent implements OnInit {
     this.sound.loadSoundPreferences();
     this.sound.startSoundtrack();
     this.mapAssets.loadMapAssets().catch(() => {});
+    this.preloadMainMenuBackground();
+  }
+
+  private preloadMainMenuBackground(): void {
+    const img = new Image();
+    img.src = '/assets/main-menu.jpg';
   }
 
   @HostListener('document:click')
