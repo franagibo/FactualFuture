@@ -12,8 +12,15 @@ import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 /** Re-export for consumers that import from the renderer. */
 export type { FloatingNumber };
 
-/** B12: Draw a simple intent icon (attack=triangle, block=shield, debuff=diamond, none=?) into container at x,y. */
-function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], value: number, x: number, y: number): void {
+/** B12: Draw a simple intent icon (attack=triangle, block=shield, debuff=diamond, none=?) into container at x,y. Optional addStatus appends to label (e.g. "+ N to draw"). */
+function drawIntentIcon(
+  container: PIXI.Container,
+  type: EnemyIntent['type'],
+  value: number,
+  x: number,
+  y: number,
+  addStatus?: { cardId: string; count: number; to: 'draw' | 'discard' }[]
+): void {
   const g = new PIXI.Graphics();
   g.x = x;
   g.y = y;
@@ -40,8 +47,13 @@ function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], va
       break;
   }
   container.addChild(g);
-  const label =
+  let label =
     type === 'none' ? '?' : type === 'attack' ? `Attack ${value}` : type === 'block' ? `Block ${value}` : type === 'debuff' ? `Weak ${value}` : type === 'vulnerable' ? `Vuln ${value}` : `? ${value}`;
+  if (addStatus?.length) {
+    const n = addStatus.reduce((s, a) => s + a.count, 0);
+    const to = addStatus[0].to === 'draw' ? 'draw' : 'discard';
+    label += ` +${n} to ${to}`;
+  }
   const valueText = new PIXI.Text({
     text: label,
     style: { fontFamily: 'system-ui', fontSize: 10, fill: 0xffdd88, fontWeight: 'bold' },
@@ -51,16 +63,77 @@ function drawIntentIcon(container: PIXI.Container, type: EnemyIntent['type'], va
   container.addChild(valueText);
 }
 
+/** Hand/cards subset of combat context for readability. */
+export interface CombatViewHandContext {
+  hoveredCardIndex: number | null;
+  cardInteractionState?: 'idle' | 'hover' | 'pressed' | 'dragging' | 'playing' | 'returning';
+  cardInteractionCardIndex: number | null;
+  cardInteractionCardId: string | null;
+  getHandLayout?: (count: number, hoveredIndex: number | null) => HandLayoutResult;
+  spreadLerp?: number[];
+  hoverLerp?: number[];
+  cardSprites: Map<string, PIXI.Container>;
+  getCardArtTexture?: (cardId: string) => PIXI.Texture | null;
+  isDraggingCard?: boolean;
+  dragCardId?: string | null;
+  dragHandIndex?: number | null;
+  dragScreenX?: number;
+  dragScreenY?: number;
+  dragIsTargetingEnemy?: boolean;
+  returnProgress?: number | null;
+  returnStartX?: number;
+  returnStartY?: number;
+}
+
+/** Player subset of combat context. */
+export interface CombatViewPlayerContext {
+  getPlayerTexture?: () => PIXI.Texture | null;
+  shieldAnimationPlaying?: boolean;
+  getShieldVideoTexture?: () => PIXI.Texture | null;
+  shootingAnimationPlaying?: boolean;
+  getShootingTexture?: () => PIXI.Texture | null;
+  slashingAnimationPlaying?: boolean;
+  getSlashingTexture?: () => PIXI.Texture | null;
+  onPlayerSpriteCreated?: (sprite: PIXI.Sprite) => void;
+}
+
+/** Enemies subset of combat context. */
+export interface CombatViewEnemiesContext {
+  enemyVariants?: number[];
+  enemyHurtStartMs?: (number | null)[];
+  enemyDyingStartMs?: (number | null)[];
+  getEnemyAnimationTexture?: (
+    variant: number,
+    animation: 'idle' | 'hurt' | 'dying',
+    nowMs: number,
+    startMs?: number
+  ) => PIXI.Texture | null;
+  getEnemyTexture?: (id: string) => PIXI.Texture | null;
+  hoveredEnemyIndex: number | null;
+  onEnemySpriteCreated?: (index: number, sprite: PIXI.Sprite) => void;
+}
+
 export interface CombatViewContext {
   stage: PIXI.Container;
   state: GameState;
   w: number;
   h: number;
   padding: number;
+  /** Grouped hand state (preferred). Falls back to flat props for backward compat. */
+  hand?: CombatViewHandContext;
+  /** Grouped player state (preferred). */
+  player?: CombatViewPlayerContext;
+  /** Grouped enemies state (preferred). */
+  enemies?: CombatViewEnemiesContext;
+  /** @deprecated Use hand.hoveredCardIndex */
   hoveredCardIndex: number | null;
+  /** @deprecated Use hand.cardInteractionState */
   cardInteractionState?: 'idle' | 'hover' | 'pressed' | 'dragging' | 'playing' | 'returning';
+  /** @deprecated Use hand.cardInteractionCardIndex */
   cardInteractionCardIndex: number | null;
+  /** @deprecated Use hand.cardInteractionCardId */
   cardInteractionCardId: string | null;
+  /** @deprecated Use enemies.hoveredEnemyIndex */
   hoveredEnemyIndex: number | null;
   floatingNumbers: FloatingNumber[];
   showingEnemyTurn: boolean;
@@ -74,56 +147,69 @@ export interface CombatViewContext {
   onCardPointerOut(): void;
   onEnemyPointerOver(enemyIndex: number): void;
   onEnemyPointerOut(): void;
+  /** @deprecated Use hand.cardSprites */
   cardSprites: Map<string, PIXI.Container>;
   markForCheck(): void;
-  /** B13/B14: Optional combat bg and character textures; null = use Graphics placeholder. */
   getCombatBgTexture?: () => PIXI.Texture | null;
   getHpIconTexture?: () => PIXI.Texture | null;
   getBlockIconTexture?: () => PIXI.Texture | null;
+  /** @deprecated Use player.getPlayerTexture */
   getPlayerTexture?: () => PIXI.Texture | null;
+  /** @deprecated Use enemies.getEnemyTexture */
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
-  /** Placeholder enemy: variant 1–3 per index; hurt/dying start times (ms); animation texture getter. */
+  /** @deprecated Use enemies.enemyVariants */
   enemyVariants?: number[];
+  /** @deprecated Use enemies.enemyHurtStartMs */
   enemyHurtStartMs?: (number | null)[];
+  /** @deprecated Use enemies.enemyDyingStartMs */
   enemyDyingStartMs?: (number | null)[];
+  /** @deprecated Use enemies.getEnemyAnimationTexture */
   getEnemyAnimationTexture?: (
     variant: number,
     animation: 'idle' | 'hurt' | 'dying',
     nowMs: number,
     startMs?: number
   ) => PIXI.Texture | null;
-  /** Optional card art texture lookup; if absent or null, a solid placeholder is shown. */
+  /** @deprecated Use hand.getCardArtTexture */
   getCardArtTexture?: (cardId: string) => PIXI.Texture | null;
-  /** B15: Per-card hover influence 0..1 for smooth lift/scale; same length as hand. If absent, use binary from hoveredCardIndex/cardInteractionCardIndex. */
+  /** @deprecated Use hand.hoverLerp */
   hoverLerp?: number[];
-  /** Lerped per-card spread offset X for smooth neighbor movement; same length as hand. If absent, use layout spreadOffsetX. */
+  /** @deprecated Use hand.spreadLerp */
   spreadLerp?: number[];
-  /** When true, player sprite shows shield animation instead of static texture. */
+  /** @deprecated Use player.shieldAnimationPlaying */
   shieldAnimationPlaying?: boolean;
+  /** @deprecated Use player.getShieldVideoTexture */
   getShieldVideoTexture?: () => PIXI.Texture | null;
-  /** When true, player sprite shows shooting animation (e.g. for strike card). */
+  /** @deprecated Use player.shootingAnimationPlaying */
   shootingAnimationPlaying?: boolean;
+  /** @deprecated Use player.getShootingTexture */
   getShootingTexture?: () => PIXI.Texture | null;
-  /** When true, player sprite shows chibi slashing animation (strike card). */
+  /** @deprecated Use player.slashingAnimationPlaying */
   slashingAnimationPlaying?: boolean;
+  /** @deprecated Use player.getSlashingTexture */
   getSlashingTexture?: () => PIXI.Texture | null;
-  /** Text scale for card and overlay fonts (default 1). */
   textScale?: number;
-  /** When 'off', floating numbers and hit flashes are not drawn. */
   vfxIntensity?: 'full' | 'reduced' | 'off';
-  /** Drag-to-target: card is being dragged toward an enemy. */
+  /** @deprecated Use hand.isDraggingCard */
   isDraggingCard?: boolean;
+  /** @deprecated Use hand.dragCardId */
   dragCardId?: string | null;
+  /** @deprecated Use hand.dragHandIndex */
   dragHandIndex?: number | null;
   dragScreenX?: number;
   dragScreenY?: number;
-  /** True when the dragged card actually targets an enemy (attack, debuff, etc.). */
+  /** @deprecated Use hand.dragIsTargetingEnemy */
   dragIsTargetingEnemy?: boolean;
-  /** Returning animation: 0..1 progress (ease-in). */
+  /** @deprecated Use hand.returnProgress */
   returnProgress?: number | null;
   returnStartX?: number;
   returnStartY?: number;
+  /** @deprecated Use hand.getHandLayout */
   getHandLayout?: (count: number, hoveredIndex: number | null) => HandLayoutResult;
+  /** @deprecated Use player.onPlayerSpriteCreated */
+  onPlayerSpriteCreated?: (sprite: PIXI.Sprite) => void;
+  /** @deprecated Use enemies.onEnemySpriteCreated */
+  onEnemySpriteCreated?: (index: number, sprite: PIXI.Sprite) => void;
 }
 
 const L = COMBAT_LAYOUT;
@@ -136,7 +222,7 @@ function scaledFontSize(base: number, ctx: CombatViewContext): number {
   return Math.round(base * scale);
 }
 
-/** Draws a neon/glow border (Slay the Spire style) on a Graphics. Multiple stroked layers for glow. */
+/** Draws a neon/glow border (Slay the Spire style) on a Graphics. Stroke uses alignment 1 (inside). Width is inset so the border matches the card frame; height unchanged. */
 function drawNeonBorder(
   g: PIXI.Graphics,
   cardWidth: number,
@@ -147,12 +233,36 @@ function drawNeonBorder(
   const color = isSelected ? L.neonBorderSelectedColor : L.neonBorderHoverColor;
   const widths = isSelected ? L.neonBorderSelectedWidths : L.neonBorderHoverWidths;
   const alphas = isSelected ? L.neonBorderSelectedAlphas : L.neonBorderHoverAlphas;
+  const insetX = L.neonBorderWidthInset ?? 0;
+  const x = insetX;
+  const width = cardWidth - 2 * insetX;
+  const radius = Math.max(0, cornerRadius - insetX);
   g.clear();
   for (let i = 0; i < widths.length; i++) {
     const w = widths[i];
     const alpha = alphas[i] ?? 1;
-    g.roundRect(0, 0, cardWidth, cardHeight, cornerRadius)
-      .stroke({ width: w, color, alpha });
+    g.roundRect(x, 0, width, cardHeight, radius)
+      .stroke({ width: w, color, alpha, alignment: 1 });
+  }
+}
+
+/** Draws the enemy target highlight (valid target vs hovered). Layered glow + crisp edge, stroke inside so it aligns with the placeholder. */
+function drawEnemyTargetBorder(
+  g: PIXI.Graphics,
+  placeholderW: number,
+  placeholderH: number,
+  cornerRadius: number,
+  isHovered: boolean
+): void {
+  const color = isHovered ? L.enemyTargetBorderHoverColor : L.enemyTargetBorderColor;
+  const widths = isHovered ? L.enemyTargetBorderHoverWidths : L.enemyTargetBorderWidths;
+  const alphas = isHovered ? L.enemyTargetBorderHoverAlphas : L.enemyTargetBorderAlphas;
+  g.clear();
+  for (let i = 0; i < widths.length; i++) {
+    const w = widths[i];
+    const alpha = alphas[i] ?? 1;
+    g.roundRect(0, 0, placeholderW, placeholderH, cornerRadius)
+      .stroke({ width: w, color, alpha, alignment: 1 });
   }
 }
 
@@ -170,7 +280,7 @@ function drawCombatBackground(ctx: CombatViewContext): void {
     bg.zIndex = 0;
     stage.addChild(bg);
     const overlay = new PIXI.Graphics();
-    overlay.rect(bgBounds.x, bgBounds.y, bgBounds.width, bgBounds.height).fill({ color: 0x000000, alpha: 0.35 });
+    overlay.rect(bgBounds.x, bgBounds.y, bgBounds.width, bgBounds.height).fill({ color: 0x000000, alpha: 0.42 });
     overlay.zIndex = 1;
     stage.addChild(overlay);
   } else {
@@ -198,19 +308,25 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
   const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
-    const shadow = new PIXI.Graphics();
-    const shadowW = playerPlaceholderW * 0.85;
-    const shadowH = playerPlaceholderH * 0.2;
-    const shadowY = playerPlaceholderH - 8;
-    shadow.ellipse(playerPlaceholderW / 2, shadowY, shadowW / 2, shadowH).fill({ color: 0x000000, alpha: 0.5 });
-    playerContainer.addChild(shadow);
+    const centerX = playerPlaceholderW / 2;
+    const feetY = playerPlaceholderH;
+    const groundShadow = new PIXI.Graphics();
+    const shadowW = playerPlaceholderW * 0.7;
+    const shadowH = playerPlaceholderH * 0.07;
+    const shadowY = feetY - 28;
+    groundShadow.ellipse(centerX, shadowY, shadowW / 2, shadowH).fill({ color: 0x000000, alpha: 0.48 });
+    playerContainer.addChild(groundShadow);
     const sprite = new PIXI.Sprite(playerTex);
     sprite.anchor.set(0.5, 1);
-    sprite.x = playerPlaceholderW / 2;
-    sprite.y = playerPlaceholderH;
-    sprite.width = playerPlaceholderW;
-    sprite.height = playerPlaceholderH;
+    sprite.x = centerX;
+    sprite.y = feetY;
+    const texW = playerTex.width;
+    const texH = playerTex.height;
+    const fitScale = Math.min(playerPlaceholderW / texW, playerPlaceholderH / texH);
+    sprite.width = texW * fitScale;
+    sprite.height = texH * fitScale;
     playerContainer.addChild(sprite);
+    ctx.onPlayerSpriteCreated?.(sprite);
   } else {
     const playerBody = new PIXI.Graphics();
     playerBody.roundRect(20, 44, 60, 72, 8).fill({ color: 0x3a4a6a }).stroke({ width: 2, color: 0x5a6a8a });
@@ -231,8 +347,9 @@ function drawPlayerArea(ctx: CombatViewContext): void {
 /** Draws HP, block, and energy as icons with numbers centered (Slay the Spire style). */
 function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   const { state, stage, w, h } = ctx;
+  const playerBounds = getCombatSlotBounds('player', w, h);
   const hpBounds = getCombatSlotBounds('hpBlockEnergy', w, h);
-  const centerX = hpBounds.x + L.playerPlaceholderW / 2;
+  const centerX = playerBounds.x + playerBounds.width / 2;
   const baseY = hpBounds.y;
   const iconSize = HP_BLOCK_ENERGY_ICON_SIZE;
   const gap = HP_BLOCK_ENERGY_GAP;
@@ -293,12 +410,12 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
   const hand = state.hand;
   const cardWidth = L.cardWidth;
   const cardHeight = L.cardHeight;
-  const hoverLift = L.hoverLift;
   const hoverScale = L.hoverScale;
 
   const layout = ctx.getHandLayout
     ? ctx.getHandLayout(hand.length, ctx.hoveredCardIndex)
     : getHandLayout(hand.length, w, h, ctx.hoveredCardIndex);
+  const hoverLift = layout.hoverLift;
 
   const handContainer = new PIXI.Container();
   handContainer.sortableChildren = true;
@@ -349,6 +466,8 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const lerp = useHoverLerp ? (ctx.hoverLerp![i] ?? 0) : (isHovered || isSelected ? 1 : 0);
     const isActive = isHovered || isSelected || lerp > 0.02;
     const applyHover = (isHovered || isSelected) && lerp > 0.5;
+    /** Only the single hovered or selected card is on top; avoid lerp-based z so multiple cards don't get 100 during transitions. */
+    const isOnTop = isHovered || isSelected;
 
     const pos = layout?.positions[i];
     const spreadX = (ctx.spreadLerp && ctx.spreadLerp[i] !== undefined) ? ctx.spreadLerp[i] : (pos?.spreadOffsetX ?? 0);
@@ -434,7 +553,7 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     container.y = cardY - liftY;
     container.rotation = rot;
     container.scale.set(1 + (isActive ? lerp : 0) * (hoverScale - 1));
-    container.zIndex = applyHover || (isActive && lerp > 0.5) ? 100 : i;
+    container.zIndex = isOnTop ? 100 : i;
     container.alpha = playable ? (applyHover ? 1 : 0.92) : 0.6;
 
     container.eventMode = 'static';
@@ -520,36 +639,32 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     }
     if (enemyTex) {
       const sprite = new PIXI.Sprite(enemyTex);
-      sprite.width = enemyPlaceholderW;
-      sprite.height = enemyPlaceholderH;
+      const texW = enemyTex.width;
+      const texH = enemyTex.height;
+      const fitScale = Math.min(enemyPlaceholderW / texW, enemyPlaceholderH / texH);
+      sprite.width = texW * fitScale;
+      sprite.height = texH * fitScale;
+      sprite.anchor.set(0.5, 1);
+      sprite.x = enemyPlaceholderW / 2;
+      sprite.y = enemyPlaceholderH;
+      sprite.scale.x = -Math.abs(sprite.scale.x);
       container.addChild(sprite);
+      ctx.onEnemySpriteCreated?.(i, sprite);
     } else {
       const placeholder = new PIXI.Graphics();
       placeholder.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius)
         .fill({ color: 0x4a3030 })
-        .stroke({ width: isValidTarget ? 4 : 2, color: isHoveredEnemy ? 0xffcc44 : isValidTarget ? 0xcc8866 : 0x8a4a4a });
+        .stroke({ width: 2, color: 0x8a4a4a });
       container.addChild(placeholder);
     }
-    if (enemyTex && (isValidTarget || isHoveredEnemy)) {
-      const stroke = new PIXI.Graphics();
-      stroke.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius)
-        .stroke({ width: isValidTarget ? 4 : 2, color: isHoveredEnemy ? 0xffcc44 : 0xcc8866 });
-      container.addChild(stroke);
-    }
     if (isValidTarget) {
-      const highlight = new PIXI.Graphics();
-      highlight.roundRect(-3, -3, enemyPlaceholderW + 6, enemyPlaceholderH + 6, 12)
-        .stroke({ width: isHoveredEnemy ? 3 : 2, color: isHoveredEnemy ? 0xffdd66 : 0xe8c060, alpha: 0.9 });
-      container.addChild(highlight);
+      const targetBorder = new PIXI.Graphics();
+      drawEnemyTargetBorder(targetBorder, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius, !!isHoveredEnemy);
+      container.addChild(targetBorder);
     }
     const wasJustHit = ctx.floatingNumbers.some((f) => f.type === 'damage' && f.enemyIndex === i);
     const vfxOn = ctx.vfxIntensity !== 'off';
     const centerPos = enemyLayout.getCenter(i);
-    if (wasJustHit && vfxOn) {
-      const hitOverlay = new PIXI.Graphics();
-      hitOverlay.roundRect(0, 0, enemyPlaceholderW, enemyPlaceholderH, L.enemyCornerRadius).fill({ color: 0xff4444, alpha: 0.35 });
-      container.addChild(hitOverlay);
-    }
     const hitPop = wasJustHit && vfxOn ? 1.06 : 1;
     const scale = sizeScale(e.size) * (isHoveredEnemy ? 1.06 : 1) * hitPop;
     container.pivot.set(enemyPlaceholderW / 2, enemyPlaceholderH / 2);
@@ -571,7 +686,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     hpT.y = 26;
     container.addChild(hpT);
     if (e.intent) {
-      drawIntentIcon(container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY);
+      drawIntentIcon(container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY, e.intent.addStatus);
     } else {
       drawIntentIcon(container, 'none', 0, L.intentPosX, L.intentPosY);
     }
@@ -656,7 +771,7 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
     const pos = handLayout.positions[idx];
     if (pos) {
       fromX = pos.x + (pos.spreadOffsetX ?? 0);
-      fromY = pos.y - L2.hoverLift - L2.cardHeight;
+      fromY = pos.y - handLayout.hoverLift - L2.cardHeight;
     } else {
       fromX = typeof dragScreenX === 'number' ? dragScreenX : stage.width / 2;
       fromY = typeof dragScreenY === 'number' ? dragScreenY - L2.cardHeight : 0;

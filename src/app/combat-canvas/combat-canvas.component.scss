@@ -2,7 +2,46 @@
   display: block;
   height: 100%;
   width: 100%;
+  --color-primary: #8c64dc;
+  --color-bg: #1a1a2e;
+  --border-width: 1px;
 }
+:host.theme-high-contrast {
+  --color-primary: #e8e0ff;
+  --color-bg: #0f0e18;
+  --border-width: 2px;
+}
+
+/* Focus indicators for accessibility (keyboard/screen reader). */
+:host-context(.combat-canvas) button:focus-visible,
+:host button:focus-visible,
+:host .reward-card:focus-visible,
+:host .btn-rest:focus-visible,
+:host .btn-rest-card:focus-visible,
+:host .btn-shop-buy:focus-visible,
+:host .combat-header-potion:focus-visible,
+:host .combat-header-settings:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+:host input:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* High-contrast theme (optional; toggle via .theme-high-contrast on host or parent). */
+:host.theme-high-contrast .reward-card,
+:host.theme-high-contrast .btn-rest,
+:host.theme-high-contrast .combat-header {
+  border-width: 2px;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+:host.theme-high-contrast .reward-card:hover,
+:host.theme-high-contrast .btn-rest:hover {
+  filter: none;
+  box-shadow: 0 0 0 2px #fff;
+}
+
 .canvas-wrap {
   position: relative;
   width: 100%;
@@ -11,6 +50,11 @@
   background: #1a1a2e;
   display: flex;
   flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  box-sizing: border-box;
 }
 .canvas-wrap.map-mode .scroll-area {
   flex: 1 1 0;
@@ -121,13 +165,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  background: linear-gradient(180deg, rgba(12, 10, 24, 0.95) 0%, rgba(12, 10, 24, 0.75) 100%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(180, 140, 255, 0.25);
+  padding: 0;
   z-index: 900;
   pointer-events: auto;
+  overflow: hidden;
+}
+.combat-header-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+.combat-header-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  padding: 0 16px;
 }
 .combat-header-left {
   display: flex;
@@ -150,6 +209,16 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: #ddd;
+}
+.combat-header-seed {
+  font-size: 0.75rem;
+  color: #999;
+  font-weight: 500;
+}
+.combat-header-piles {
+  font-size: 0.8rem;
+  color: #aaa;
+  cursor: help;
 }
 .combat-header-icon {
   flex-shrink: 0;
@@ -191,6 +260,62 @@
 }
 .combat-header-gear {
   display: block;
+}
+
+.combat-card-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  margin-top: -8px;
+  padding: 8px 12px;
+  min-width: 140px;
+  max-width: 220px;
+  background: rgba(20, 15, 35, 0.95);
+  border: 1px solid rgba(180, 140, 255, 0.4);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  z-index: 800;
+  pointer-events: none;
+}
+.combat-card-tooltip-name {
+  display: block;
+  font-weight: 600;
+  color: #e8e0ff;
+  font-size: 0.9rem;
+}
+.combat-card-tooltip-desc {
+  display: block;
+  font-size: 0.78rem;
+  color: #b8b0d0;
+  margin-top: 4px;
+}
+
+@media (max-height: 640px) {
+  .combat-header {
+    height: 52px;
+  }
+  .combat-header-content {
+    padding: 0 10px;
+  }
+  .combat-header-left {
+    gap: 14px;
+  }
+  .combat-header-character {
+    font-size: 1.2rem;
+  }
+  .combat-header-hp,
+  .combat-header-gold,
+  .combat-header-level {
+    font-size: 0.8rem;
+    gap: 4px;
+  }
+  .combat-header-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .combat-header-potion-icon {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 .overlay-actions {
@@ -325,6 +450,10 @@
   flex-wrap: wrap;
 }
 .reward-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   padding: 12px 18px;
   font-size: calc(1rem * var(--game-text-scale, 1));
   font-weight: 600;
@@ -336,6 +465,23 @@
   box-shadow: 0 4px 0 #1a1630, 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease, opacity 0.25s ease;
+}
+.reward-card-art {
+  width: 80px;
+  height: 112px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.reward-card-name {
+  font-weight: 600;
+}
+.reward-card-desc {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #b8b0d0;
+  text-align: center;
+  max-width: 120px;
 }
 .reward-card:hover {
   transform: translateY(-2px) scale(1.03);
@@ -418,6 +564,10 @@
   flex-wrap: wrap;
 }
 .btn-rest-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   padding: 10px 14px;
   font-weight: 500;
   background: linear-gradient(180deg, #3d3560 0%, #2a2345 100%);
@@ -429,6 +579,16 @@
   box-shadow: 0 3px 0 #1a1630, 0 3px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.rest-card-art {
+  width: 56px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.rest-card-name {
+  font-size: 0.8rem;
 }
 .btn-rest-card:hover {
   transform: translateY(-1px) scale(1.02);
@@ -454,15 +614,31 @@
 .shop-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 8px 12px;
   background: rgba(40, 35, 60, 0.8);
   border-radius: 8px;
   border: 1px solid rgba(180, 140, 255, 0.25);
 }
-.shop-item-name {
+.shop-item-art {
+  width: 48px;
+  height: 67px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.shop-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 100px;
+}
+.shop-item-name {
   font-weight: 500;
+}
+.shop-item-desc {
+  font-size: 0.7rem;
+  color: #b8b0d0;
 }
 .shop-item-price {
   color: #ffc107;
@@ -618,7 +794,10 @@
   appearance: none;
   background: rgba(40, 35, 65, 0.9);
   border-radius: 4px;
-  outline: none;
+}
+.pause-settings-range:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 .pause-settings-range::-webkit-slider-thumb {
   -webkit-appearance: none;

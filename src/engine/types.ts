@@ -97,6 +97,8 @@ export interface GameState {
   act?: number;
   /** Playable character id for this run (e.g. "gunboy"). Drives starter deck and card pools. */
   characterId?: string;
+  /** Run seed used for map generation and initial deck shuffle; enables reproducible runs. */
+  seed?: number;
   /** Potion IDs (max 3). One-time use in combat. */
   potions?: string[];
   /** Frail stacks on player; damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */

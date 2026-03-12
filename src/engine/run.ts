@@ -60,6 +60,7 @@ export function startRun(
     floor: 0,
     act: 1,
     characterId: options?.characterId,
+    seed,
   };
 }
 

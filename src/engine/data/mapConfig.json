@@ -10,12 +10,14 @@
     "encounterPool": [
       "sts_cultist", "sts_jaw_worm", "sts_two_louses", "sts_slimes_ma_sa", "sts_slimes_ma_ss", "sts_slimes_ms_sa", "sts_slimes_ms_ss",
       "sts_gremlin_gang", "sts_large_slime_acid", "sts_large_slime_spike", "sts_lots_of_slimes", "sts_blue_slaver", "sts_red_slaver",
-      "sts_three_louses", "sts_two_fungi", "sts_exordium_thugs", "sts_exordium_wildlife", "sts_looter"
+      "sts_three_louses", "sts_two_fungi", "sts_exordium_thugs", "sts_exordium_wildlife", "sts_looter",
+      "sts_double_fungi", "sts_three_small_slimes", "sts_cultist_louse"
     ],
     "encounterWeights": {
       "sts_cultist": 25, "sts_jaw_worm": 25, "sts_two_louses": 25, "sts_slimes_ma_sa": 6, "sts_slimes_ma_ss": 6, "sts_slimes_ms_sa": 6, "sts_slimes_ms_ss": 7,
       "sts_gremlin_gang": 6, "sts_large_slime_acid": 12, "sts_large_slime_spike": 12, "sts_lots_of_slimes": 6, "sts_blue_slaver": 12, "sts_red_slaver": 6,
-      "sts_three_louses": 12, "sts_two_fungi": 12, "sts_exordium_thugs": 9, "sts_exordium_wildlife": 9, "sts_looter": 12
+      "sts_three_louses": 12, "sts_two_fungi": 12, "sts_exordium_thugs": 9, "sts_exordium_wildlife": 9, "sts_looter": 12,
+      "sts_double_fungi": 8, "sts_three_small_slimes": 8, "sts_cultist_louse": 6
     },
     "eliteEncounterPool": ["sts_sentry_guardian", "sts_three_cultists", "sts_gremlin_gang"],
     "bossEncounter": "boss_act1"

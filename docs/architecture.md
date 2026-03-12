@@ -35,3 +35,14 @@
 
 - **Data** (cards, enemies, encounters, map config, etc.) is loaded from `src/engine/data/` (or `assets/data/`) via `loadData.ts` and the bridge’s `ensureDataLoaded()`.
 - **Assets** (images, VFX, sounds) are under `src/assets/` and loaded on demand by the asset services. Map and combat backgrounds can be switched via config (e.g. per encounter).
+
+## Performance (combat redraw)
+
+- **Full redraw** runs when hand size changes, card hover/drag/return, active VFX, shield/shooting/slashing, or enemy hurt/dying animations. It clears the stage and calls `drawCombatView()` again.
+- **Idle-only path:** When the only change is time (player and enemy idle animations), the ticker calls `updatePlayerAndEnemyTexturesOnly()` instead of a full redraw. The renderer passes sprite refs via `onPlayerSpriteCreated` and `onEnemySpriteCreated`; the component updates only `.texture` on those sprites. This keeps frame cost low during idle combat.
+- **Coalescing:** At most one `doRedrawBody()` runs per animation frame. `redraw()` schedules a single `requestAnimationFrame`; further calls within the same frame set `redrawAgain` so one more pass runs after the current one finishes.
+
+## Theming and localization
+
+- **Theming:** Combat canvas uses CSS variables on the host: `--game-text-scale`, `--color-primary`, `--color-bg`, `--border-width`. Apply `theme-high-contrast` on the host for stronger borders and higher contrast. Additional theme classes can override these variables.
+- **Localization:** User-facing strings are currently hardcoded in templates. To add i18n later, introduce a single layer (e.g. `{{ 'reward.title' | i18n }}` with a pipe or service that reads from locale JSON) and replace copy gradually.

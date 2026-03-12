@@ -16,7 +16,7 @@ const BLOCK_ICON_PATH = `${EFFECTS_PREFIX}block.svg`;
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
-/** Default static / idle image. Path: /assets/characters/{id}/{id}_static.png. Gungirl uses _idle.png temporarily until idle animation exists. */
+/** Default static / idle image. Path: /assets/characters/{id}/{id}_static.png. Gungirl uses _idle.png (5x5 sprite sheet for idle animation). */
 function getStaticImagePath(characterId: string): string {
   if (characterId === 'gungirl') {
     return `${PLAYER_CHARACTERS_PREFIX}gungirl/gungirl_idle.png`;
@@ -71,9 +71,11 @@ const SHIELD_SHEET_ROWS = 6;
 const SHIELD_FRAME_MS = 80;
 const SHIELD_FRAME_COUNT = SHIELD_SHEET_COLS * SHIELD_SHEET_ROWS;
 
-/** Gungirl uses 5x5 sprite sheets for shield and shooting (25 frames each). */
+/** Gungirl uses 5x5 sprite sheets for idle, shield and shooting (25 frames each). */
 const GUNGIRL_SHEET_COLS = 5;
 const GUNGIRL_SHEET_ROWS = 5;
+/** Idle animation: ms per frame. ~60ms ≈ 25 frames in 1.5s loop. */
+const GUNGIRL_IDLE_FRAME_MS = 60;
 
 /** Current player character id (one of many usable characters). Can later come from run state or selection. */
 const DEFAULT_PLAYER_CHARACTER_ID = 'gungirl';
@@ -113,6 +115,8 @@ export class CombatAssetsService {
   private chibiSlashingTextures: PIXI.Texture[] = [];
   private slashingStartTime: number | null = null;
   private slashingResolve: (() => void) | null = null;
+  /** Gungirl idle animation (5x5 = 25 frames from gungirl_idle.png). */
+  private gungirlIdleTextures: PIXI.Texture[] = [];
 
   /** Placeholder enemy animations (Idle, Hurt, Dying) per Zombie_Villager variant. Loaded once when combat uses placeholders. */
   private zombiePlaceholderTextures: Record<
@@ -238,13 +242,27 @@ export class CombatAssetsService {
         }
       }
     } else if (!this.playerTextures.has(cid)) {
-      // Prefer dedicated static image ({id}_static.png) for default pose; fall back to first frame of shield sheet.
-      try {
-        const staticPath = this.resolveUrl(getStaticImagePath(cid));
-        const staticTexture = (await PIXI.Assets.load(staticPath)) as PIXI.Texture;
-        this.playerTextures.set(cid, staticTexture);
-      } catch {
-        // No static image; use first frame of shield sheet as fallback
+      // Gungirl: idle is a 5x5 sprite sheet; slice and store for animation.
+      if (cid === 'gungirl') {
+        try {
+          const idlePath = this.resolveUrl(getStaticImagePath(cid));
+          const idleSheet = (await PIXI.Assets.load(idlePath)) as PIXI.Texture;
+          this.gungirlIdleTextures = this.buildSheetFrames(idleSheet, GUNGIRL_SHEET_COLS, GUNGIRL_SHEET_ROWS);
+          if (this.gungirlIdleTextures.length > 0) {
+            this.playerTextures.set(cid, this.gungirlIdleTextures[0]);
+          }
+        } catch {
+          this.gungirlIdleTextures = [];
+        }
+      }
+      if (!this.playerTextures.has(cid)) {
+        try {
+          const staticPath = this.resolveUrl(getStaticImagePath(cid));
+          const staticTexture = (await PIXI.Assets.load(staticPath)) as PIXI.Texture;
+          this.playerTextures.set(cid, staticTexture);
+        } catch {
+          // No static image; use first frame of shield sheet as fallback
+        }
       }
       try {
         const sheetPath = this.resolveUrl(getShieldSheetPath(cid));
@@ -385,13 +403,18 @@ export class CombatAssetsService {
     return this.emptyCardTemplateTexture;
   }
 
-  /** Returns the current player character texture. For chibi, uses idle animation frame from time; otherwise static/first frame. */
+  /** Returns the current player character texture. For chibi/gungirl, uses idle animation frame from time; otherwise static/first frame. */
   getPlayerTexture(animationTimeMs?: number): PIXI.Texture | null {
     const cid = this.currentPlayerCharacterId;
     if (cid === 'chibi' && this.chibiIdleTextures.length > 0) {
       const t = animationTimeMs ?? 0;
       const index = Math.floor((t / CHIBI_IDLE_FRAME_MS) % this.chibiIdleTextures.length);
       return this.chibiIdleTextures[index] ?? this.chibiIdleTextures[0];
+    }
+    if (cid === 'gungirl' && this.gungirlIdleTextures.length > 0) {
+      const t = animationTimeMs ?? 0;
+      const index = Math.floor((t / GUNGIRL_IDLE_FRAME_MS) % this.gungirlIdleTextures.length);
+      return this.gungirlIdleTextures[index] ?? this.gungirlIdleTextures[0];
     }
     return this.playerTextures.get(cid) ?? null;
   }

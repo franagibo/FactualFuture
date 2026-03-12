@@ -7,8 +7,8 @@
  * (player, enemies, HP text, etc.) via getCombatSlotBounds().
  */
 export const COMBAT_LAYOUT = {
-  playerZoneXRatio: 0.18,
-  enemyZoneStartRatio: 0.52,
+  playerZoneXRatio: 0.28,
+  enemyZoneStartRatio: 0.44,
   /** Baseline for player/enemy slots (0–1). Higher = lower on screen. Raised ~20% to lower characters. */
   baselineBottomRatio: 0.72,
   playerYOffsetFromBottom: 28,
@@ -49,6 +49,8 @@ export const COMBAT_LAYOUT = {
   neonBorderHoverColor: 0xa0ddff,
   neonBorderHoverWidths: [10, 5, 2],
   neonBorderHoverAlphas: [0.2, 0.5, 0.95],
+  /** Horizontal inset (px each side) so neon border width matches card frame; height unchanged. */
+  neonBorderWidthInset: 6,
   /** Larger, different color when card is selected (ready to play/drop). */
   neonBorderSelectedColor: 0xffdd44,
   neonBorderSelectedWidths: [14, 7, 3],
@@ -63,6 +65,14 @@ export const COMBAT_LAYOUT = {
   hpBlockEnergyGap: 56,
   /** Offset from cost circle center for cost text (costCenter = costRadius + costCenterOffset). */
   costCenterOffset: 18,
+  /** Enemy target border (when dragging a targeting card): valid target. */
+  enemyTargetBorderColor: 0xc9a227,
+  enemyTargetBorderWidths: [6, 3, 1.5],
+  enemyTargetBorderAlphas: [0.2, 0.45, 0.9],
+  /** Enemy target border: hovered (ready to release). */
+  enemyTargetBorderHoverColor: 0xffe066,
+  enemyTargetBorderHoverWidths: [10, 5, 2],
+  enemyTargetBorderHoverAlphas: [0.28, 0.55, 0.98],
   /** Intent icon X position relative to enemy placeholder. */
   intentPosX: 8,
   /** Intent icon Y position relative to enemy placeholder. */

@@ -61,6 +61,8 @@ export interface PotionDef {
   /** common 65%, uncommon 25%, rare 10% when offered. */
   rarity: PotionRarity;
   effect: { type: string; value: number; value2?: number };
+  /** Optional path for potion icon (e.g. "potions/block_potion.png"). Resolved under /assets/. */
+  iconPath?: string;
 }
 
 /** Playable character: owns starter deck and optional card pool for rewards/shops. */
@@ -72,6 +74,8 @@ export interface CharacterDef {
   starterDeck: string[];
   /** If set, only these card IDs can appear in rewards and shops for this character. If null/absent, all non-curse cards are allowed. */
   cardPoolIds: string[] | null;
+  /** When true, combat view advances idle animation every frame (e.g. chibi, gungirl). Default true if omitted. */
+  animatedIdle?: boolean;
 }
 
 export function loadPotions(data: PotionDef[]): Map<string, PotionDef> {

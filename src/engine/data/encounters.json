@@ -42,5 +42,8 @@
   { "id": "sts_transient", "enemies": ["transient"] },
   { "id": "sts_writhing_mass", "enemies": ["writhing_mass"] },
   { "id": "sts_jaw_worm_horde", "enemies": ["jaw_worm", "jaw_worm", "jaw_worm"] },
-  { "id": "boss_act1", "enemies": ["act1_boss"] }
+  { "id": "boss_act1", "enemies": ["act1_boss"] },
+  { "id": "sts_double_fungi", "enemies": ["fungi_beast", "fungi_beast"] },
+  { "id": "sts_three_small_slimes", "enemies": ["acid_slime_s", "spike_slime_s", "acid_slime_s"] },
+  { "id": "sts_cultist_louse", "enemies": ["cultist", "red_louse", "green_louse"] }
 ]

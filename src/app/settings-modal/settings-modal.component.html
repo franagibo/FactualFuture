@@ -180,6 +180,38 @@
                 </button>
               </div>
             </div>
+            <div class="settings-row">
+              <label class="settings-label">Hand layout</label>
+              <div class="settings-options">
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.handLayout() === 'default'"
+                  (click)="gameSettings.setHandLayout('default'); cdr.markForCheck()"
+                >
+                  Default
+                </button>
+                <button
+                  type="button"
+                  class="settings-opt-btn"
+                  [class.active]="gameSettings.handLayout() === 'compact'"
+                  (click)="gameSettings.setHandLayout('compact'); cdr.markForCheck()"
+                >
+                  Compact
+                </button>
+              </div>
+            </div>
+            <div class="settings-row settings-row-checkbox">
+              <label class="settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  [checked]="gameSettings.reducedMotion()"
+                  (change)="gameSettings.setReducedMotion($any($event.target).checked); cdr.markForCheck()"
+                  class="settings-checkbox"
+                />
+                Reduced motion
+              </label>
+            </div>
           </section>
         }
         @case ('display') {

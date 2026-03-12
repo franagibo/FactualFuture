@@ -228,8 +228,8 @@ export class GameBridgeService {
     await this.loadMeta();
   }
 
-  /** Start a new run. No-op if data load previously failed (call ensureDataLoaded + check isDataLoadFailed first). Uses characterId's starter deck and stores characterId in state. Default character: gungirl. */
-  startRun(characterId: string = 'gungirl'): void {
+  /** Start a new run. No-op if data load previously failed (call ensureDataLoaded + check isDataLoadFailed first). Uses characterId's starter deck and stores characterId in state. Default character: gungirl. Optional seed for reproducible runs. */
+  startRun(characterId: string = 'gungirl', seed?: number): void {
     if (this.dataLoadFailed || !this.mapConfig) return;
     const act1 = this.mapConfig['act1'];
     if (!act1) return;
@@ -245,11 +245,16 @@ export class GameBridgeService {
     };
     const character = this.charactersMap.get(characterId);
     const starterDeck = character?.starterDeck;
-    const seed = Date.now() & 0xffffffff;
-    this.setState(engineStartRun(seed, actConfig, {
+    const runSeed = seed ?? (Date.now() & 0xffffffff);
+    this.setState(engineStartRun(runSeed, actConfig, {
       starterDeck: starterDeck?.length ? starterDeck : undefined,
       characterId: character ? characterId : undefined,
     }));
+  }
+
+  /** Current run seed (if any). Used for display and "New run with seed". */
+  getRunSeed(): number | undefined {
+    return this.state?.seed;
   }
 
   getCharacters(): CharacterDef[] {
@@ -258,6 +263,13 @@ export class GameBridgeService {
 
   getCharacter(id: string): CharacterDef | undefined {
     return this.charactersMap.get(id);
+  }
+
+  /** True when the character has frame-by-frame idle animation (e.g. chibi, gungirl). */
+  hasAnimatedIdle(characterId: string): boolean {
+    if (!characterId) return false;
+    const def = this.charactersMap.get(characterId);
+    return def?.animatedIdle === true;
   }
 
   getCurrentCharacterId(): string | undefined {
@@ -391,6 +403,39 @@ export class GameBridgeService {
   getAvailableNextNodes(): string[] {
     if (!this.state) return [];
     return engineGetAvailableNextNodes(this.state);
+  }
+
+  /**
+   * Enemy IDs that may be needed for the next map nodes (combat/elite/boss).
+   * Use to preload combat assets when on map so entering combat is smoother.
+   */
+  getEnemyIdsForNextPossibleEncounters(): string[] {
+    if (!this.state?.map || !this.mapConfig || !this.encountersMap) return [];
+    const nextIds = engineGetAvailableNextNodes(this.state);
+    if (nextIds.length === 0) return [];
+    const actKey = `act${this.state.act ?? 1}`;
+    const actConfig = this.mapConfig[actKey];
+    if (!actConfig) return [];
+    const encounterIds = new Set<string>();
+    for (const nodeId of nextIds) {
+      const node = engineGetNodeById(this.state!.map!, nodeId);
+      if (!node) continue;
+      if (node.type === 'boss' && actConfig.bossEncounter) {
+        encounterIds.add(actConfig.bossEncounter);
+      }
+      if (node.type === 'elite' && actConfig.eliteEncounterPool?.length) {
+        actConfig.eliteEncounterPool.forEach((id) => encounterIds.add(id));
+      }
+      if ((node.type === 'combat' || node.type === 'elite') && actConfig.encounterPool?.length) {
+        actConfig.encounterPool.forEach((id) => encounterIds.add(id));
+      }
+    }
+    const enemyIds = new Set<string>();
+    for (const encId of encounterIds) {
+      const enc = this.encountersMap!.get(encId);
+      if (enc?.enemies) enc.enemies.forEach((eid) => enemyIds.add(eid));
+    }
+    return Array.from(enemyIds);
   }
 
   /**

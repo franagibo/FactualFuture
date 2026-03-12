@@ -5,17 +5,22 @@ const STORAGE_KEY = 'game-settings';
 export type VfxIntensity = 'full' | 'reduced' | 'off';
 export type AnimationSpeed = 'slow' | 'normal' | 'fast';
 export type TextSize = 'small' | 'normal' | 'large';
+export type HandLayoutMode = 'default' | 'compact';
 
 export interface GameSettings {
   vfxIntensity: VfxIntensity;
   animationSpeed: AnimationSpeed;
   textSize: TextSize;
+  handLayout: HandLayoutMode;
+  reducedMotion: boolean;
 }
 
 const DEFAULTS: GameSettings = {
   vfxIntensity: 'full',
   animationSpeed: 'normal',
   textSize: 'normal',
+  handLayout: 'default',
+  reducedMotion: false,
 };
 
 /** Multiplier for animation duration (card fly, etc.): higher = faster. */
@@ -43,6 +48,8 @@ export class GameSettingsService {
   vfxIntensity = computed(() => this.stored().vfxIntensity);
   animationSpeed = computed(() => this.stored().animationSpeed);
   textSize = computed(() => this.stored().textSize);
+  handLayout = computed(() => this.stored().handLayout);
+  reducedMotion = computed(() => this.stored().reducedMotion);
   animationSpeedMultiplier = computed(() => animationSpeedMultiplier(this.stored().animationSpeed));
   textScale = computed(() => textSizeScale(this.stored().textSize));
 
@@ -56,6 +63,14 @@ export class GameSettingsService {
 
   setTextSize(value: TextSize): void {
     this.update({ textSize: value });
+  }
+
+  setHandLayout(value: HandLayoutMode): void {
+    this.update({ handLayout: value });
+  }
+
+  setReducedMotion(value: boolean): void {
+    this.update({ reducedMotion: value });
   }
 
   getSettings(): GameSettings {
@@ -72,6 +87,8 @@ export class GameSettingsService {
         vfxIntensity: this.validVfx(parsed.vfxIntensity),
         animationSpeed: this.validSpeed(parsed.animationSpeed),
         textSize: this.validTextSize(parsed.textSize),
+        handLayout: parsed.handLayout === 'compact' ? 'compact' : 'default',
+        reducedMotion: Boolean(parsed.reducedMotion),
       };
     } catch {
       return { ...DEFAULTS };

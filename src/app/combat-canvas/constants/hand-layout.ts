@@ -35,15 +35,23 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+/** Optional overrides for accessibility (compact hand, reduced motion). */
+export interface HandLayoutOptions {
+  handLayout?: 'default' | 'compact';
+  reducedMotion?: boolean;
+}
+
 /**
  * Returns arc-based positions for each card in the hand. For large hands,
  * the fan angle is reduced so cards don't spread too far.
+ * Options: compact = smaller fan and lift; reducedMotion = no lift, no spread.
  */
 export function getHandLayout(
   cardCount: number,
   w: number,
   h: number,
-  hoveredIndex: number | null
+  hoveredIndex: number | null,
+  options?: HandLayoutOptions
 ): HandLayoutResult {
   const playerY = h - L.playerYOffsetFromBottom;
   const cardWidth = L.cardWidth;
@@ -51,6 +59,10 @@ export function getHandLayout(
   const handY = playerY - cardHeight + (L.handYOffset ?? 0);
   const centerX = w / 2;
   const baseY = handY;
+
+  const reducedMotion = options?.reducedMotion === true;
+  const compact = options?.handLayout === 'compact';
+  const effectiveHoverLift = reducedMotion ? 0 : compact ? L.hoverLift * 0.5 : L.hoverLift;
 
   if (cardCount <= 0) {
     const cardSpacing = cardWidth * L.overlapRatio;
@@ -66,13 +78,16 @@ export function getHandLayout(
       center: 0,
       handY,
       arcAmplitude: L.arcAmplitude,
-      hoverLift: L.hoverLift,
+      hoverLift: effectiveHoverLift,
     };
   }
 
   const middle = (cardCount - 1) / 2;
   const baseFanAngleRad = (L.baseFanAngleDeg ?? 35) * (Math.PI / 180);
-  const maxFanAngleRad = baseFanAngleRad * clamp(7 / cardCount, 0.5, 1);
+  const fanClamp = clamp(7 / cardCount, 0.5, 1);
+  const cardCountScale = Math.min(1, (cardCount + 1) / 6);
+  let maxFanAngleRad = baseFanAngleRad * fanClamp * cardCountScale;
+  if (compact) maxFanAngleRad *= 0.7;
   const angleStep = cardCount > 1 ? maxFanAngleRad / (cardCount - 1) : 0;
   const fanRadius = L.fanRadius ?? 750;
   const arcVertical = (L as { fanArcVerticalExtent?: number }).fanArcVerticalExtent ?? 80;
@@ -86,7 +101,7 @@ export function getHandLayout(
     const rotation = angle * rotationMultiplier;
 
     let spreadOffsetX = 0;
-    if (hoveredIndex != null) {
+    if (!reducedMotion && hoveredIndex != null) {
       const dist = Math.abs(i - hoveredIndex);
       if (dist === 1) spreadOffsetX = i > hoveredIndex ? 20 : -20;
       else if (dist === 2) spreadOffsetX = i > hoveredIndex ? 10 : -10;
@@ -109,6 +124,6 @@ export function getHandLayout(
     center: middle,
     handY,
     arcAmplitude: L.arcAmplitude,
-    hoverLift: L.hoverLift,
+    hoverLift: effectiveHoverLift,
   };
 }
