@@ -9,6 +9,7 @@ import {
   NgZone,
   HostListener,
   signal,
+  type Signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { CardVfxService } from '../services/card-vfx.service';
@@ -25,10 +26,17 @@ import { COMBAT_TIMING, ENEMY_ANIMATION_TIMING } from './constants/combat-timing
 import { getHandLayout } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
-import { drawCombatView, type CombatViewContext } from './renderers/combat-view.renderer';
+import { drawCombatView } from './renderers/combat-view.renderer';
+import { MapPhaseController, type MapPhaseHost } from './controllers/map-phase.controller';
+import { CombatPhaseController, type CombatPhaseHost } from './controllers/combat-phase.controller';
 import type { FloatingNumber } from './constants/combat-types';
 import { logger } from '../util/app-logger';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
+import { RewardPanelComponent } from './panels/reward-panel.component';
+import { RestPanelComponent } from './panels/rest-panel.component';
+import { ShopPanelComponent } from './panels/shop-panel.component';
+import { EventPanelComponent } from './panels/event-panel.component';
+import { VictoryPanelComponent } from './panels/victory-panel.component';
 
 /**
  * Main game canvas: owns PixiJS app lifecycle, game state sync, and user actions.
@@ -37,7 +45,14 @@ import { SettingsModalComponent } from '../settings-modal/settings-modal.compone
 @Component({
   selector: 'app-combat-canvas',
   standalone: true,
-  imports: [SettingsModalComponent],
+  imports: [
+    SettingsModalComponent,
+    RewardPanelComponent,
+    RestPanelComponent,
+    ShopPanelComponent,
+    EventPanelComponent,
+    VictoryPanelComponent,
+  ],
   templateUrl: './combat-canvas.component.html',
   styleUrls: ['./combat-canvas.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,43 +62,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   @ViewChild('scrollArea') scrollAreaRef?: ElementRef<HTMLElement>;
 
   private app: PIXI.Application | null = null;
-  private cardSprites: Map<string, PIXI.Container> = new Map();
   private cardsMap: Map<string, CardDef> | null = null;
-  /** Card interaction state machine. */
-  cardInteractionState: 'idle' | 'hover' | 'pressed' | 'dragging' | 'playing' | 'returning' = 'idle';
-  /** Hand index of the card in a non-idle state (pressed/dragging/returning). */
-  cardInteractionCardIndex: number | null = null;
-  cardInteractionCardId: string | null = null;
-  /** Index of card in hand currently hovered; used for lift/scale/z-order. */
-  hoveredCardIndex: number | null = null;
-  /** In targeting mode, index of enemy currently hovered (for arrow and highlight). */
-  hoveredEnemyIndex: number | null = null;
-  /** Press start position for drag threshold. */
-  private pressStartX = 0;
-  private pressStartY = 0;
-  dragScreenX = 0;
-  dragScreenY = 0;
-  /** Returning animation: start position and time. */
-  returnStartX = 0;
-  returnStartY = 0;
-  returnStartTime = 0;
-  get returnDurationMs(): number {
-    return this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.returnDurationMs;
-  }
-  /** 0..1 when returning; set by ticker, used by renderer. */
-  returnProgress = 0;
   private dragListenersBound: (() => void) | null = null;
   private hoverResolveBound: (() => void) | null = null;
-  /** B9/B20: Floating numbers to show (damage/block) with screen position; addedAt for expiry. */
-  private floatingNumbers: FloatingNumber[] = [];
-  /** B11: When true, show "Enemy turn" banner before resolving enemy phase. */
-  private showingEnemyTurn = false;
-  /** B15: Per-card hover influence 0..1 for smooth animation; length = hand length. */
-  private hoverLerp: number[] = [];
-  /** B15: Target values for hoverLerp (0 or 1); set each redraw in combat. */
-  private targetLerp: number[] = [];
-  /** Lerped per-card spread offset X so neighbor cards move smoothly when hover changes. */
-  private spreadLerp: number[] = [];
   private _steamWarning = '';
   private _combatResult: GameState['combatResult'] = null;
   private _runPhase: RunPhase | undefined = undefined;
@@ -104,22 +85,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   feedbackMessage = signal<string | null>(null);
   /** When set, reward panel shows chosen state before transitioning; used for micro-animation. */
   chosenRewardCardId: string | null = null;
-  /** Combat card tooltip: position (client coords) and card id when hovering a card in hand. */
-  hoveredCardTooltipSignal = signal<{ cardId: string; x: number; y: number } | null>(null);
   private resizeObserver: ResizeObserver | null = null;
   private hoverLerpTicker: ((ticker: PIXI.Ticker) => void) | null = null;
   private shieldTicker: (() => void) | null = null;
-  /** Refs for lightweight idle-only texture updates (avoid full redraw every frame). */
-  private playerSpriteRef: PIXI.Sprite | null = null;
-  private enemySpriteRefs: PIXI.Sprite[] = [];
-  /** When in map phase, total height of map content (px) for scroll. */
-  mapContentHeight = 0;
-  /** True when map assets are loaded and map has been drawn (enables reveal animation). */
-  mapReady = signal(false);
-  mapLoadError = signal(false);
-  private mapLoadScheduled = false;
-  /** Map node id currently hovered (for tooltip). */
-  private hoveredNodeId: string | null = null;
+  /** Map-phase state and context building; created in ngOnInit. */
+  private mapController!: MapPhaseController;
+  /** Combat-phase state and context building; created in ngOnInit. */
+  private combatController!: CombatPhaseController;
   /** True until we have drawn with valid canvas size once (fixes initial map/combat not showing). */
   private hadZeroSize = true;
   /** Coalesce redraws: if redraw() is called while doRedraw runs, schedule one more next frame. */
@@ -132,20 +104,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private resizeRedrawScheduled = false;
   showPauseMenu = false;
   showPauseSettings = false;
-  /** When true, player shows shield animation (played when a block card is used). */
-  shieldAnimationPlaying = false;
-  /** When true, player shows shooting animation (played when strike card is used). */
-  shootingAnimationPlaying = false;
-  /** When true, player shows chibi slashing animation (strike card). */
-  slashingAnimationPlaying = false;
-  /** Placeholder enemy: variant 1–3 (Zombie_Villager_X) per enemy index. Set when combat starts. */
-  enemyVariants: number[] = [];
-  /** Per-enemy: when hurt animation started (ms). Cleared when reinitializing for new combat. */
-  enemyHurtStartMs: (number | null)[] = [];
-  /** Per-enemy: when dying animation started (ms). Set when HP goes to 0. */
-  enemyDyingStartMs: (number | null)[] = [];
-  /** Active card impact VFX (drawn each frame, removed when animation done). */
-  private activeCardVfx: { vfxId: string; x: number; y: number; startTime: number }[] = [];
+
+  /** Combat state is on CombatPhaseController; expose for template. */
+  get cardInteractionState(): 'idle' | 'hover' | 'pressed' | 'dragging' | 'playing' | 'returning' {
+    return this.combatController?.cardInteractionState ?? 'idle';
+  }
+
+  get returnDurationMs(): number {
+    return this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.returnDurationMs;
+  }
 
   constructor(
     private bridge: GameBridgeService,
@@ -199,11 +166,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.closePauseMenu();
       return;
     }
-    if (this.cardInteractionState !== 'idle' && this.cardInteractionState !== 'hover') {
-      this.cardInteractionState = 'idle';
-      this.cardInteractionCardIndex = null;
-      this.cardInteractionCardId = null;
-      this.hoveredEnemyIndex = null;
+    if (this.combatController.cardInteractionState !== 'idle' && this.combatController.cardInteractionState !== 'hover') {
+      this.combatController.cardInteractionState = 'idle';
+      this.combatController.cardInteractionCardIndex = null;
+      this.combatController.cardInteractionCardId = null;
+      this.combatController.hoveredEnemyIndex = null;
       this.clearDragListeners();
       this.redraw();
       this.requestTemplateUpdate();
@@ -262,7 +229,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   steamWarning = () => this._steamWarning;
 
+  /** Getters for template: map state is owned by MapPhaseController. */
+  get mapContentHeight(): number {
+    return this.mapController?.getMapContentHeight() ?? 0;
+  }
+  get mapReady(): Signal<boolean> {
+    return this.mapController?.mapReady ?? signal(false);
+  }
+  get mapLoadError(): Signal<boolean> {
+    return this.mapController?.mapLoadError ?? signal(false);
+  }
+
   ngOnInit(): void {
+    this.mapController = new MapPhaseController(this.createMapPhaseHost());
+    this.combatController = new CombatPhaseController();
     this.sound.loadSoundPreferences();
     this.cardVfx.loadConfig().catch((err) => { logger.warn('Card VFX config load failed', err); });
     if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: { onSteamWarning?: (cb: (m: string) => void) => void } }).electronAPI?.onSteamWarning) {
@@ -272,6 +252,57 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       });
     }
     this.initPixi();
+  }
+
+  private createMapPhaseHost(): MapPhaseHost {
+    return {
+      getBridge: () => this.bridge,
+      getMapAssets: () => this.mapAssets,
+      getApp: () => this.app,
+      getZone: () => this.zone,
+      getCdr: () => this.cdr,
+      redraw: () => this.redraw(),
+      requestTemplateUpdate: () => this.requestTemplateUpdate(),
+      scheduleCanvasLayoutFix: (opts) => this.scheduleCanvasLayoutFix(opts),
+    };
+  }
+
+  private createCombatPhaseHost(): CombatPhaseHost {
+    return {
+      getCardCost: (id) => this.getCardCost(id),
+      getCardName: (id) => this.getCardName(id),
+      getCardEffectDescription: (id) => this.getCardEffectDescriptionText(id),
+      getCombatAssets: () => ({
+        getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
+        getPlayerTexture: (now) => this.combatAssets.getPlayerTexture(now),
+        getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
+        getEnemyAnimationTexture: (v, a, n, s) => this.combatAssets.getEnemyAnimationTexture(v as 1 | 2 | 3, a, n, s),
+        getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
+        getHpIconTexture: () => this.combatAssets.getHpIconTexture(),
+        getBlockIconTexture: () => this.combatAssets.getBlockIconTexture(),
+        getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
+        getShootingTexture: () => this.combatAssets.getShootingTexture(),
+        getSlashingTexture: () => this.combatAssets.getSlashingTexture(),
+      }),
+      getGameSettings: () => ({
+        handLayout: () => this.gameSettings.handLayout(),
+        reducedMotion: () => this.gameSettings.reducedMotion(),
+        textScale: () => this.gameSettings.textScale(),
+        vfxIntensity: () => this.gameSettings.vfxIntensity(),
+      }),
+      getApp: () => this.app,
+      redraw: () => this.redraw(),
+      requestTemplateUpdate: () => this.requestTemplateUpdate(),
+      onCardPointerOver: (i) => this.onCardPointerOver(i),
+      onCardPointerOut: () => this.onCardPointerOut(),
+      onCardPointerDown: (cardId, handIndex, stageX, stageY) => this.onCardPointerDown(cardId, handIndex, stageX, stageY),
+      onCardClick: (cardId, handIndex) => this.onCardClick(cardId, handIndex),
+      onEnemyTargetClick: (enemyIndex) => this.onEnemyTargetClick(enemyIndex),
+      onEnemyPointerOver: (enemyIndex) => { this.combatController.hoveredEnemyIndex = enemyIndex; this.redraw(); },
+      onEnemyPointerOut: () => { this.combatController.hoveredEnemyIndex = null; this.redraw(); },
+      cardNeedsEnemyTarget: (cardId) => this.cardNeedsEnemyTarget(cardId),
+      markForCheck: () => this.requestTemplateUpdate(),
+    };
   }
 
   ngOnDestroy(): void {
@@ -345,31 +376,31 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const state = this.bridge.getState();
       if (!state) return;
       const hand = state.hand;
-      if (this.cardInteractionCardIndex != null && this.cardInteractionCardIndex >= hand.length) {
-        this.cardInteractionState = 'idle';
-        this.cardInteractionCardIndex = null;
-        this.cardInteractionCardId = null;
+      if (this.combatController.cardInteractionCardIndex != null && this.combatController.cardInteractionCardIndex >= hand.length) {
+        this.combatController.cardInteractionState = 'idle';
+        this.combatController.cardInteractionCardIndex = null;
+        this.combatController.cardInteractionCardId = null;
         this.clearDragListeners();
       }
-      if (hand.length !== this.hoverLerp.length) {
-        this.targetLerp = hand.map((cardId, i) =>
-          (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
-          (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+      if (hand.length !== this.combatController.hoverLerp.length) {
+        this.combatController.targetLerp = hand.map((cardId, i) =>
+          (i === this.combatController.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+          (i === this.combatController.cardInteractionCardIndex && (this.combatController.cardInteractionState === 'pressed' || this.combatController.cardInteractionState === 'dragging'))
             ? 1
             : 0
         );
-        this.hoverLerp = [...this.targetLerp];
-        const layoutInit = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, this.hoveredCardIndex, {
+        this.combatController.hoverLerp = [...this.combatController.targetLerp];
+        const layoutInit = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, this.combatController.hoveredCardIndex, {
           handLayout: this.gameSettings.handLayout(),
           reducedMotion: this.gameSettings.reducedMotion(),
         });
-        this.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
+        this.combatController.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
         this.redraw();
         return;
       }
-      this.targetLerp = hand.map((cardId, i) =>
-        (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
-        (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+      this.combatController.targetLerp = hand.map((cardId, i) =>
+        (i === this.combatController.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+        (i === this.combatController.cardInteractionCardIndex && (this.combatController.cardInteractionState === 'pressed' || this.combatController.cardInteractionState === 'dragging'))
           ? 1
           : 0
       );
@@ -380,63 +411,63 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const now = performance.now();
       // Drive redraw every frame when character or enemies have idle animations so they advance
       if (this.bridge.hasAnimatedIdle(state.characterId ?? '')) changed = true;
-      if (this.activeCardVfx.length > 0) changed = true;
-      if (this.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs)) changed = true;
-      if (this.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs)) changed = true;
-      if (this.cardInteractionState === 'returning') {
-        const elapsed = performance.now() - this.returnStartTime;
+      if (this.combatController.activeCardVfx.length > 0) changed = true;
+      if (this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs)) changed = true;
+      if (this.combatController.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs)) changed = true;
+      if (this.combatController.cardInteractionState === 'returning') {
+        const elapsed = performance.now() - this.combatController.returnStartTime;
         const raw = Math.min(1, elapsed / this.returnDurationMs);
-        this.returnProgress = 1 - (1 - raw) * (1 - raw);
+        this.combatController.returnProgress = 1 - (1 - raw) * (1 - raw);
         if (raw >= 1) {
-          this.cardInteractionState = 'idle';
-          this.cardInteractionCardIndex = null;
-          this.cardInteractionCardId = null;
+          this.combatController.cardInteractionState = 'idle';
+          this.combatController.cardInteractionCardIndex = null;
+          this.combatController.cardInteractionCardId = null;
         }
         changed = true;
       }
-      const layout = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, this.hoveredCardIndex, {
+      const layout = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, this.combatController.hoveredCardIndex, {
         handLayout: this.gameSettings.handLayout(),
         reducedMotion: this.gameSettings.reducedMotion(),
       });
-      if (this.spreadLerp.length === layout.positions.length) {
-        for (let i = 0; i < this.spreadLerp.length; i++) {
+      if (this.combatController.spreadLerp.length === layout.positions.length) {
+        for (let i = 0; i < this.combatController.spreadLerp.length; i++) {
           const target = layout.positions[i].spreadOffsetX ?? 0;
-          const prev = this.spreadLerp[i];
-          this.spreadLerp[i] = prev + (target - prev) * spreadFactor;
-          if (Math.abs(this.spreadLerp[i] - prev) > 0.3) changed = true;
+          const prev = this.combatController.spreadLerp[i];
+          this.combatController.spreadLerp[i] = prev + (target - prev) * spreadFactor;
+          if (Math.abs(this.combatController.spreadLerp[i] - prev) > 0.3) changed = true;
         }
       } else {
-        this.spreadLerp = layout.positions.map((p) => p.spreadOffsetX ?? 0);
+        this.combatController.spreadLerp = layout.positions.map((p) => p.spreadOffsetX ?? 0);
         changed = true;
       }
-      if (this.hoverLerp.length === this.targetLerp.length) {
-        for (let i = 0; i < this.hoverLerp.length; i++) {
-          const prev = this.hoverLerp[i];
-          this.hoverLerp[i] = prev + (this.targetLerp[i] - prev) * factor;
-          if (Math.abs(this.hoverLerp[i] - prev) > 0.002) changed = true;
+      if (this.combatController.hoverLerp.length === this.combatController.targetLerp.length) {
+        for (let i = 0; i < this.combatController.hoverLerp.length; i++) {
+          const prev = this.combatController.hoverLerp[i];
+          this.combatController.hoverLerp[i] = prev + (this.combatController.targetLerp[i] - prev) * factor;
+          if (Math.abs(this.combatController.hoverLerp[i] - prev) > 0.002) changed = true;
         }
       }
       if (changed) {
         const enemyAnimPlaying =
-          this.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs) ||
-          this.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs);
+          this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs) ||
+          this.combatController.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs);
         const useIdleOnlyPath =
           this.bridge.hasAnimatedIdle(state.characterId ?? '') &&
-          this.activeCardVfx.length === 0 &&
-          this.cardSprites.size === hand.length &&
-          this.cardInteractionState !== 'returning' &&
-          !this.shieldAnimationPlaying &&
-          !this.shootingAnimationPlaying &&
-          !this.slashingAnimationPlaying &&
+          this.combatController.activeCardVfx.length === 0 &&
+          this.combatController.cardSprites.size === hand.length &&
+          this.combatController.cardInteractionState !== 'returning' &&
+          !this.combatController.shieldAnimationPlaying &&
+          !this.combatController.shootingAnimationPlaying &&
+          !this.combatController.slashingAnimationPlaying &&
           !enemyAnimPlaying &&
-          this.playerSpriteRef != null &&
-          this.enemySpriteRefs.length === state.enemies.length;
+          this.combatController.playerSpriteRef != null &&
+          this.combatController.enemySpriteRefs.length === state.enemies.length;
         if (useIdleOnlyPath) {
           this.updatePlayerAndEnemyTexturesOnly();
         } else if (
-          this.activeCardVfx.length > 0 ||
-          this.cardSprites.size !== hand.length ||
-          this.cardInteractionState === 'returning' ||
+          this.combatController.activeCardVfx.length > 0 ||
+          this.combatController.cardSprites.size !== hand.length ||
+          this.combatController.cardInteractionState === 'returning' ||
           this.bridge.hasAnimatedIdle(state.characterId ?? '') ||
           enemyAnimPlaying
         ) {
@@ -484,63 +515,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Starts map asset load if not yet started; on completion sets mapReady and runs layout fix. Timeout and rejection set mapLoadError. */
-  private ensureMapLoadThenReveal(): void {
-    if (this.mapLoadScheduled) return;
-    this.mapLoadScheduled = true;
-    this.mapLoadError.set(false);
-    const timeoutId = window.setTimeout(() => {
-      if (!this.mapAssets.isMapLoaded()) {
-        this.mapLoadScheduled = false;
-        this.mapLoadError.set(true);
-        this.zone.run(() => this.cdr.detectChanges());
-      }
-    }, COMBAT_TIMING.mapLoadTimeoutMs);
-    this.mapAssets.loadMapAssets()
-      .then(() => {
-        window.clearTimeout(timeoutId);
-        this.mapLoadScheduled = false;
-        this.mapLoadError.set(false);
-        this.mapReady.set(true);
-        this.zone.run(() => this.cdr.detectChanges());
-        this.scheduleCanvasLayoutFix({ scrollToBottom: true });
-      })
-      .catch((err) => {
-        window.clearTimeout(timeoutId);
-        this.mapLoadScheduled = false;
-        this.mapLoadError.set(true);
-        logger.warn('Map assets load failed', err);
-        this.zone.run(() => this.cdr.detectChanges());
-      });
-  }
-
-  /** Retry map load and clear error (e.g. user clicked Retry). */
+  /** Retry map load and clear error (e.g. user clicked Retry). Delegates to MapPhaseController. */
   retryMapLoad(): void {
-    this.mapLoadError.set(false);
-    this.mapReady.set(false);
-    this.mapLoadScheduled = false;
-    this.ensureMapLoadThenReveal();
-  }
-
-  /** Draws a loading state on the stage while map assets are loading. */
-  private drawMapLoadingState(stage: PIXI.Container, w: number, h: number): void {
-    const bg = new PIXI.Graphics();
-    bg.rect(0, 0, w, h).fill(0x1a1822);
-    bg.zIndex = 0;
-    stage.addChild(bg);
-    const text = new PIXI.Text({
-      text: 'Loading map…',
-      style: {
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: 28,
-        fill: 0xcccccc,
-      },
-    });
-    text.anchor.set(0.5, 0.5);
-    text.x = w / 2;
-    text.y = h / 2;
-    text.zIndex = 1;
-    stage.addChild(text);
+    this.mapController.retryMapLoad();
   }
 
   /**
@@ -595,22 +572,19 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
     const now = performance.now();
     const floatTtl = this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.floatingNumberTtlMs;
-    this.floatingNumbers = this.floatingNumbers.filter((fn) => (fn.addedAt == null) || now - fn.addedAt <= floatTtl);
+    this.combatController.floatingNumbers = this.combatController.floatingNumbers.filter((fn) => (fn.addedAt == null) || now - fn.addedAt <= floatTtl);
     const prevResult = this._combatResult;
     const prevPhase = this._runPhase;
     this._combatResult = state.combatResult;
     this._runPhase = this.bridge.getRunPhase();
     if (this._runPhase !== 'combat') {
-      this.cardInteractionState = 'idle';
-      this.cardInteractionCardIndex = null;
-      this.cardInteractionCardId = null;
-      this.hoveredCardTooltipSignal.set(null);
+      this.combatController.cardInteractionState = 'idle';
+      this.combatController.cardInteractionCardIndex = null;
+      this.combatController.cardInteractionCardId = null;
       this.clearDragListeners();
     }
     if (prevPhase === 'map' && this._runPhase !== 'map') {
-      this.mapReady.set(false);
-      this.mapLoadError.set(false);
-      this.mapLoadScheduled = false;
+      this.mapController.resetOnLeaveMap();
     }
     this.syncOverlaySignals(state);
     if (state.combatResult === 'win' && prevResult !== 'win') this.sound.playVictory();
@@ -635,48 +609,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     // Map phase and overlays (reward, rest, shop, event, victory): render map as background.
     if (this.isMapOrOverlayPhase(this._runPhase) && state.map) {
       if (!this.mapAssets.isMapLoaded()) {
-        this.drawMapLoadingState(stage, w, h);
-        this.ensureMapLoadThenReveal();
+        this.mapController.drawMapLoadingState(stage, w, h);
+        this.mapController.ensureMapLoadThenReveal();
         this.requestTemplateUpdate();
         return;
       }
-      this.mapReady.set(true);
-      const mapContext = {
-        getAvailableNextNodes: () => this.bridge.getAvailableNextNodes(),
-        getNodeTexture: (type: MapNodeType) => this.mapAssets.getNodeTexture(type),
-        getMapBgTexture: () => this.mapAssets.getMapBgTexture(),
-        onMapContentHeight: (height: number) => {
-          const prev = this.mapContentHeight;
-          this.mapContentHeight = height;
-          if (height > 0 && height !== prev && this.app) {
-            this.zone.run(() => this.cdr.detectChanges());
-            this.app.resize();
-            requestAnimationFrame(() => {
-              if (this.app) this.redraw();
-            });
-          }
-        },
-        markForCheck: () => this.requestTemplateUpdate(),
-        onChooseNode:
-          this._runPhase === 'map'
-            ? (nodeId: string) => {
-                this.bridge.chooseNode(nodeId);
-                this.redraw();
-              }
-            : () => {},
-        loadMapAssets: () => this.mapAssets.loadMapAssets(),
-        hoveredNodeId: this.hoveredNodeId,
-        onNodePointerOver: (nodeId: string) => {
-          if (this.hoveredNodeId === nodeId) return;
-          this.hoveredNodeId = nodeId;
-          this.redraw();
-        },
-        onNodePointerOut: () => {
-          if (this.hoveredNodeId === null) return;
-          this.hoveredNodeId = null;
-          this.redraw();
-        },
-      };
+      this.mapController.setMapReady(true);
+      const mapContext = this.mapController.buildMapContext(state, this._runPhase);
       drawMapView(mapContext, state, stage, w, h, padding);
       if (this._runPhase === 'map' && this.bridge.getAvailableNextNodes().length > 0) {
         const characterId = state.characterId ?? undefined;
@@ -694,20 +633,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     // Combat phase only: ensure combat assets loading (global + character + enemies), build context and delegate to combat renderer.
     if (this._runPhase !== 'combat') return;
-    this.playerSpriteRef = null;
-    this.enemySpriteRefs = [];
-    if (this.cardInteractionCardIndex != null && this.cardInteractionCardIndex >= state.hand.length) {
-      this.cardInteractionState = 'idle';
-      this.cardInteractionCardIndex = null;
-      this.cardInteractionCardId = null;
+    this.combatController.playerSpriteRef = null;
+    this.combatController.enemySpriteRefs = [];
+    if (this.combatController.cardInteractionCardIndex != null && this.combatController.cardInteractionCardIndex >= state.hand.length) {
+      this.combatController.cardInteractionState = 'idle';
+      this.combatController.cardInteractionCardIndex = null;
+      this.combatController.cardInteractionCardId = null;
       this.clearDragListeners();
     }
-    if (state.hand.length > 0 && this.spreadLerp.length !== state.hand.length) {
-      const layoutInit = getHandLayout(state.hand.length, w, h, this.hoveredCardIndex, {
+    if (state.hand.length > 0 && this.combatController.spreadLerp.length !== state.hand.length) {
+      const layoutInit = getHandLayout(state.hand.length, w, h, this.combatController.hoveredCardIndex, {
         handLayout: this.gameSettings.handLayout(),
         reducedMotion: this.gameSettings.reducedMotion(),
       });
-      this.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
+      this.combatController.spreadLerp = layoutInit.positions.map((p) => p.spreadOffsetX ?? 0);
     }
     const characterId = state.characterId ?? undefined;
     const enemyIds = state.enemies.map((e) => e.id);
@@ -716,162 +655,48 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (cardIds.length) this.cardVfx.preloadVfxForCards(cardIds);
     });
     const hand = state.hand;
-    if (this.hoveredCardIndex != null && this.hoveredCardIndex >= hand.length) this.hoveredCardIndex = null;
+    if (this.combatController.hoveredCardIndex != null && this.combatController.hoveredCardIndex >= hand.length) this.combatController.hoveredCardIndex = null;
 
-    this.targetLerp = hand.map((cardId, i) =>
-      (i === this.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
-      (i === this.cardInteractionCardIndex && (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging'))
+    this.combatController.targetLerp = hand.map((cardId, i) =>
+      (i === this.combatController.hoveredCardIndex && state.energy >= this.getCardCost(cardId)) ||
+      (i === this.combatController.cardInteractionCardIndex && (this.combatController.cardInteractionState === 'pressed' || this.combatController.cardInteractionState === 'dragging'))
         ? 1
         : 0
     );
-    if (this.hoverLerp.length !== this.targetLerp.length) {
-      this.hoverLerp = [...this.targetLerp];
+    if (this.combatController.hoverLerp.length !== this.combatController.targetLerp.length) {
+      this.combatController.hoverLerp = [...this.combatController.targetLerp];
     }
 
-    const combatContext = this.buildCombatContext(stage, state, w, h, padding);
-    drawCombatView(combatContext);
-    this.drawCardImpactVfx(stage, now);
-  }
-
-  /** Build the combat view context for the renderer. Keeps doRedrawBody shorter and context shape consistent. */
-  private buildCombatContext(
-    stage: PIXI.Container,
-    state: GameState,
-    w: number,
-    h: number,
-    padding: number
-  ): CombatViewContext {
-    if (state.runPhase === 'combat' && state.enemies.length !== this.enemyVariants.length) {
-      this.enemyVariants = state.enemies.map(() => 1 + Math.floor(Math.random() * 3));
-      this.enemyHurtStartMs = state.enemies.map(() => null);
-      this.enemyDyingStartMs = state.enemies.map(() => null);
-    }
-    const getHandLayoutFn = (count: number, hoveredIdx: number | null) =>
-      getHandLayout(count, w, h, hoveredIdx, {
-        handLayout: this.gameSettings.handLayout(),
-        reducedMotion: this.gameSettings.reducedMotion(),
-      });
-    return {
+    const combatContext = this.combatController.buildCombatContext(
+      this.createCombatPhaseHost(),
       stage,
       state,
       w,
       h,
-      padding,
-      hand: {
-        hoveredCardIndex: this.hoveredCardIndex,
-        cardInteractionState: this.cardInteractionState,
-        cardInteractionCardIndex: this.cardInteractionCardIndex,
-        cardInteractionCardId: this.cardInteractionCardId,
-        getHandLayout: getHandLayoutFn,
-        spreadLerp: this.spreadLerp,
-        hoverLerp: this.hoverLerp,
-        cardSprites: this.cardSprites,
-        getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
-        isDraggingCard: this.cardInteractionState === 'dragging',
-        dragCardId: this.cardInteractionState === 'dragging' ? this.cardInteractionCardId : null,
-        dragHandIndex: this.cardInteractionState === 'dragging' ? this.cardInteractionCardIndex : null,
-        dragScreenX: this.dragScreenX,
-        dragScreenY: this.dragScreenY,
-        dragIsTargetingEnemy: this.cardInteractionCardId ? this.cardNeedsEnemyTarget(this.cardInteractionCardId) : false,
-        returnProgress: this.cardInteractionState === 'returning' ? this.returnProgress : null,
-        returnStartX: this.returnStartX,
-        returnStartY: this.returnStartY,
-      },
-      player: {
-        getPlayerTexture: () => this.combatAssets.getPlayerTexture(performance.now()),
-        shieldAnimationPlaying: this.shieldAnimationPlaying,
-        getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
-        shootingAnimationPlaying: this.shootingAnimationPlaying,
-        getShootingTexture: () => this.combatAssets.getShootingTexture(),
-        slashingAnimationPlaying: this.slashingAnimationPlaying,
-        getSlashingTexture: () => this.combatAssets.getSlashingTexture(),
-        onPlayerSpriteCreated: (s) => { this.playerSpriteRef = s; },
-      },
-      enemies: {
-        enemyVariants: this.enemyVariants,
-        enemyHurtStartMs: this.enemyHurtStartMs,
-        enemyDyingStartMs: this.enemyDyingStartMs,
-        getEnemyAnimationTexture: (variant, animation, nowMs, startMs) =>
-          this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, animation, nowMs, startMs),
-        getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
-        hoveredEnemyIndex: this.hoveredEnemyIndex,
-        onEnemySpriteCreated: (i, s) => { this.enemySpriteRefs[i] = s; },
-      },
-      hoveredCardIndex: this.hoveredCardIndex,
-      cardInteractionState: this.cardInteractionState,
-      cardInteractionCardIndex: this.cardInteractionCardIndex,
-      cardInteractionCardId: this.cardInteractionCardId,
-      hoveredEnemyIndex: this.hoveredEnemyIndex,
-      isDraggingCard: this.cardInteractionState === 'dragging',
-      dragCardId: this.cardInteractionState === 'dragging' ? this.cardInteractionCardId : null,
-      dragHandIndex: this.cardInteractionState === 'dragging' ? this.cardInteractionCardIndex : null,
-      dragScreenX: this.dragScreenX,
-      dragScreenY: this.dragScreenY,
-      dragIsTargetingEnemy: this.cardInteractionCardId ? this.cardNeedsEnemyTarget(this.cardInteractionCardId) : false,
-      returnProgress: this.cardInteractionState === 'returning' ? this.returnProgress : null,
-      returnStartX: this.returnStartX,
-      returnStartY: this.returnStartY,
-      getHandLayout: getHandLayoutFn,
-      floatingNumbers: this.floatingNumbers,
-      showingEnemyTurn: this.showingEnemyTurn,
-      getCardCost: (id) => this.getCardCost(id),
-      getCardName: (id) => this.getCardName(id),
-      getCardEffectDescription: (id) => getCardEffectDescription(id, (cid) => this.bridge.getCardDef(cid)),
-      /** No-op: card play is on pointer-up/release, not click. Kept for renderer event binding. */
-      onCardClick: (cardId, handIndex) => this.onCardClick(cardId, handIndex),
-      /** No-op: targetable cards trigger on release over enemy. Kept for renderer event binding. */
-      onEnemyTargetClick: (enemyIndex) => this.onEnemyTargetClick(enemyIndex),
-      onCardPointerOver: (handIndex) => this.onCardPointerOver(handIndex),
-      onCardPointerOut: () => this.onCardPointerOut(),
-      onCardPointerDown: (cardId, handIndex, stageX, stageY) => this.onCardPointerDown(cardId, handIndex, stageX, stageY),
-      onEnemyPointerOver: (enemyIndex) => { this.hoveredEnemyIndex = enemyIndex; this.redraw(); },
-      onEnemyPointerOut: () => { this.hoveredEnemyIndex = null; this.redraw(); },
-      cardSprites: this.cardSprites,
-      markForCheck: () => this.requestTemplateUpdate(),
-      getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
-      getHpIconTexture: () => this.combatAssets.getHpIconTexture(),
-      getBlockIconTexture: () => this.combatAssets.getBlockIconTexture(),
-      getPlayerTexture: () => this.combatAssets.getPlayerTexture(performance.now()),
-      getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
-      enemyVariants: this.enemyVariants,
-      enemyHurtStartMs: this.enemyHurtStartMs,
-      enemyDyingStartMs: this.enemyDyingStartMs,
-      getEnemyAnimationTexture: (variant, animation, nowMs, startMs) =>
-        this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, animation, nowMs, startMs),
-      getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
-      hoverLerp: this.hoverLerp,
-      spreadLerp: this.spreadLerp,
-      textScale: this.gameSettings.textScale(),
-      vfxIntensity: this.gameSettings.vfxIntensity(),
-      shieldAnimationPlaying: this.shieldAnimationPlaying,
-      getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
-      shootingAnimationPlaying: this.shootingAnimationPlaying,
-      getShootingTexture: () => this.combatAssets.getShootingTexture(),
-      slashingAnimationPlaying: this.slashingAnimationPlaying,
-      getSlashingTexture: () => this.combatAssets.getSlashingTexture(),
-      onPlayerSpriteCreated: (s) => { this.playerSpriteRef = s; },
-      onEnemySpriteCreated: (i, s) => { this.enemySpriteRefs[i] = s; },
-    };
+      padding
+    );
+    drawCombatView(combatContext);
+    this.drawCardImpactVfx(stage, now);
   }
 
   /** Draw active card impact VFX and remove expired ones. Uses CardVfxService for data-driven VFX. */
   private drawCardImpactVfx(stage: PIXI.Container, now: number): void {
     if (this.gameSettings.vfxIntensity() === 'off') {
-      this.activeCardVfx.length = 0;
+      this.combatController.activeCardVfx.length = 0;
       return;
     }
-    for (let i = this.activeCardVfx.length - 1; i >= 0; i--) {
-      const e = this.activeCardVfx[i];
+    for (let i = this.combatController.activeCardVfx.length - 1; i >= 0; i--) {
+      const e = this.combatController.activeCardVfx[i];
       const meta = this.cardVfx.getVfxMeta(e.vfxId);
       const frames = this.cardVfx.getVfxFrames(e.vfxId);
       if (!meta || frames.length === 0) {
-        this.activeCardVfx.splice(i, 1);
+        this.combatController.activeCardVfx.splice(i, 1);
         continue;
       }
       const elapsed = now - e.startTime;
       const frameIndex = Math.floor(elapsed / meta.frameMs);
       if (frameIndex >= meta.frameCount) {
-        this.activeCardVfx.splice(i, 1);
+        this.combatController.activeCardVfx.splice(i, 1);
         continue;
       }
       const tex = frames[Math.min(frameIndex, frames.length - 1)];
@@ -891,35 +716,35 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
    */
   private updateHandHoverOnly(): void {
     const state = this.bridge.getState();
-    if (!state || !this.app || state.hand.length !== this.cardSprites.size) return;
+    if (!state || !this.app || state.hand.length !== this.combatController.cardSprites.size) return;
     const w = this.app.screen.width;
     const h = this.app.screen.height;
     const L = COMBAT_LAYOUT;
     const hand = state.hand;
     const hoverScale = L.hoverScale;
-    const useHoverLerp = this.hoverLerp.length === hand.length;
-    const layout = getHandLayout(hand.length, w, h, this.hoveredCardIndex, {
+    const useHoverLerp = this.combatController.hoverLerp.length === hand.length;
+    const layout = getHandLayout(hand.length, w, h, this.combatController.hoveredCardIndex, {
       handLayout: this.gameSettings.handLayout(),
       reducedMotion: this.gameSettings.reducedMotion(),
     });
     const isPressedOrDragging = (idx: number) =>
-      this.cardInteractionCardIndex === idx &&
-      (this.cardInteractionState === 'pressed' || this.cardInteractionState === 'dragging');
+      this.combatController.cardInteractionCardIndex === idx &&
+      (this.combatController.cardInteractionState === 'pressed' || this.combatController.cardInteractionState === 'dragging');
 
     for (let i = 0; i < hand.length; i++) {
-      const container = this.cardSprites.get(`${hand[i]}-${i}`);
+      const container = this.combatController.cardSprites.get(`${hand[i]}-${i}`);
       if (!container) continue;
       const cost = this.getCardCost(hand[i]);
       const playable = state.energy >= cost;
-      const isHovered = this.hoveredCardIndex === i;
+      const isHovered = this.combatController.hoveredCardIndex === i;
       const isSelected = isPressedOrDragging(i);
-      const lerp = useHoverLerp ? (this.hoverLerp[i] ?? 0) : (isHovered || isSelected ? 1 : 0);
+      const lerp = useHoverLerp ? (this.combatController.hoverLerp[i] ?? 0) : (isHovered || isSelected ? 1 : 0);
       const isActive = isHovered || isSelected || lerp > 0.02;
       const applyHover = (isHovered || isSelected) && lerp > 0.5;
       const isOnTop = isHovered || isSelected;
 
       const pos = layout.positions[i];
-      const spreadX = this.spreadLerp[i] ?? pos.spreadOffsetX ?? 0;
+      const spreadX = this.combatController.spreadLerp[i] ?? pos.spreadOffsetX ?? 0;
       const cardX = pos.x + spreadX;
       const hoverLift = layout.hoverLift;
       const cardY = pos.y - (isActive ? lerp * hoverLift : 0);
@@ -947,20 +772,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (!state || !this.app || this._runPhase !== 'combat') return;
     const now = performance.now();
 
-    if (this.playerSpriteRef && !this.shieldAnimationPlaying && !this.shootingAnimationPlaying && !this.slashingAnimationPlaying) {
+    if (this.combatController.playerSpriteRef && !this.combatController.shieldAnimationPlaying && !this.combatController.shootingAnimationPlaying && !this.combatController.slashingAnimationPlaying) {
       const tex = this.combatAssets.getPlayerTexture(now);
-      if (tex) this.playerSpriteRef.texture = tex;
+      if (tex) this.combatController.playerSpriteRef.texture = tex;
     }
 
     const enemies = state.enemies;
-    for (let i = 0; i < this.enemySpriteRefs.length; i++) {
-      const sprite = this.enemySpriteRefs[i];
+    for (let i = 0; i < this.combatController.enemySpriteRefs.length; i++) {
+      const sprite = this.combatController.enemySpriteRefs[i];
       if (!sprite || !enemies[i]) continue;
       const e = enemies[i];
-      const variant = this.enemyVariants[i];
+      const variant = this.combatController.enemyVariants[i];
       if (variant != null && (variant === 1 || variant === 2 || variant === 3)) {
-        const dyingStart = this.enemyDyingStartMs[i];
-        const hurtStart = this.enemyHurtStartMs[i];
+        const dyingStart = this.combatController.enemyDyingStartMs[i];
+        const hurtStart = this.combatController.enemyHurtStartMs[i];
         let tex: PIXI.Texture | null = null;
         if (e.hp <= 0) {
           tex = this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, 'dying', now, dyingStart ?? 0);
@@ -994,11 +819,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   /** If the card grants block, play shield animation on the player character. Pixi-only; no overlay change. */
   private triggerShieldAnimationIfBlock(cardId: string): void {
     if (!this.cardHasBlockEffect(cardId)) return;
-    this.shieldAnimationPlaying = true;
+    this.combatController.shieldAnimationPlaying = true;
     this.ensurePlayerAnimationTicker();
     this.redraw();
     this.combatAssets.playShieldAnimation().then(() => {
-      this.shieldAnimationPlaying = false;
+      this.combatController.shieldAnimationPlaying = false;
       this.removePlayerAnimationTickerIfIdle();
       this.redraw();
     });
@@ -1015,20 +840,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const state = this.bridge.getState();
     const isChibi = state?.characterId === 'chibi';
     if (isChibi) {
-      this.slashingAnimationPlaying = true;
+      this.combatController.slashingAnimationPlaying = true;
       this.ensurePlayerAnimationTicker();
       this.redraw();
       this.combatAssets.playSlashingAnimation().then(() => {
-        this.slashingAnimationPlaying = false;
+        this.combatController.slashingAnimationPlaying = false;
         this.removePlayerAnimationTickerIfIdle();
         this.redraw();
       });
     } else {
-      this.shootingAnimationPlaying = true;
+      this.combatController.shootingAnimationPlaying = true;
       this.ensurePlayerAnimationTicker();
       this.redraw();
       this.combatAssets.playShootingAnimation().then(() => {
-        this.shootingAnimationPlaying = false;
+        this.combatController.shootingAnimationPlaying = false;
         this.removePlayerAnimationTickerIfIdle();
         this.redraw();
       });
@@ -1038,7 +863,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private ensurePlayerAnimationTicker(): void {
     if (this.app && !this.shieldTicker) {
       const runShieldTickerOutsideZone = (): void => {
-        if (this.shieldAnimationPlaying || this.shootingAnimationPlaying || this.slashingAnimationPlaying) {
+        if (this.combatController.shieldAnimationPlaying || this.combatController.shootingAnimationPlaying || this.combatController.slashingAnimationPlaying) {
           this.combatAssets.getShieldAnimationDone();
           this.combatAssets.getShootingAnimationDone();
           this.combatAssets.getSlashingAnimationDone();
@@ -1051,7 +876,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   private removePlayerAnimationTickerIfIdle(): void {
-    if (this.shieldAnimationPlaying || this.shootingAnimationPlaying || this.slashingAnimationPlaying) return;
+    if (this.combatController.shieldAnimationPlaying || this.combatController.shootingAnimationPlaying || this.combatController.slashingAnimationPlaying) return;
     if (this.shieldTicker && this.app) {
       this.app.ticker.remove(this.shieldTicker);
       this.shieldTicker = null;
@@ -1157,10 +982,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const cardHeight = COMBAT_LAYOUT.cardHeight;
     const cardCenterYOffset = cardHeight / 2;
 
-    if (this.cardInteractionState === 'dragging' && this.cardInteractionCardIndex !== null) return;
+    if (this.combatController.cardInteractionState === 'dragging' && this.combatController.cardInteractionCardIndex !== null) return;
 
-    if (this.hoveredCardIndex != null && this.hoveredCardIndex < layout.positions.length) {
-      const aabb = this.getCardAABB(layout.positions[this.hoveredCardIndex], cardWidth, cardHeight);
+    if (this.combatController.hoveredCardIndex != null && this.combatController.hoveredCardIndex < layout.positions.length) {
+      const aabb = this.getCardAABB(layout.positions[this.combatController.hoveredCardIndex], cardWidth, cardHeight);
       if (this.pointInAABB(mouseX, mouseY, aabb)) return;
     }
 
@@ -1175,7 +1000,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (best == null || dist < best.dist) best = { index: i, dist };
     }
     const newHover = best?.index ?? null;
-    if (newHover !== this.hoveredCardIndex) {
+    if (newHover !== this.combatController.hoveredCardIndex) {
       if (newHover != null) {
         this.onCardPointerOver(newHover);
       } else {
@@ -1191,10 +1016,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (!state) return;
     const hand = state.hand;
     if (hand.length === 0 || handIndex < 0 || handIndex >= hand.length) return;
-    if (this.hoveredCardIndex === handIndex) return;
+    if (this.combatController.hoveredCardIndex === handIndex) return;
 
-    this.hoveredCardIndex = handIndex;
-    this.targetLerp = hand.map((_, i) => (i === handIndex ? 1 : 0));
+    this.combatController.hoveredCardIndex = handIndex;
+    this.combatController.targetLerp = hand.map((_, i) => (i === handIndex ? 1 : 0));
 
     this.redraw();
     this.requestTemplateUpdate();
@@ -1207,20 +1032,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (!state) return;
     const hand = state.hand;
     if (hand.length === 0) {
-      this.hoveredCardIndex = null;
+      this.combatController.hoveredCardIndex = null;
       return;
     }
-    if (this.hoveredCardIndex === null) return;
+    if (this.combatController.hoveredCardIndex === null) return;
 
-    this.hoveredCardIndex = null;
+    this.combatController.hoveredCardIndex = null;
     // Snap all cards back to default position immediately.
-    this.targetLerp = hand.map(() => 0);
-    this.hoverLerp = [...this.targetLerp];
+    this.combatController.targetLerp = hand.map(() => 0);
+    this.combatController.hoverLerp = [...this.combatController.targetLerp];
     const layout = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, null, {
       handLayout: this.gameSettings.handLayout(),
       reducedMotion: this.gameSettings.reducedMotion(),
     });
-    this.spreadLerp = layout.positions.map((p) => p.spreadOffsetX ?? 0);
+    this.combatController.spreadLerp = layout.positions.map((p) => p.spreadOffsetX ?? 0);
 
     this.redraw();
     this.requestTemplateUpdate();
@@ -1239,37 +1064,37 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (aliveCount === 0) return;
     }
 
-    this.cardInteractionState = 'pressed';
-    this.cardInteractionCardIndex = handIndex;
-    this.cardInteractionCardId = cardId;
-    this.pressStartX = stageX;
-    this.pressStartY = stageY;
+    this.combatController.cardInteractionState = 'pressed';
+    this.combatController.cardInteractionCardIndex = handIndex;
+    this.combatController.cardInteractionCardId = cardId;
+    this.combatController.pressStartX = stageX;
+    this.combatController.pressStartY = stageY;
     this.redraw();
     this.requestTemplateUpdate();
 
     const onMove = (e: PointerEvent): void => {
       const { x, y } = this.clientToStage(e.clientX, e.clientY);
-      if (this.cardInteractionState === 'pressed') {
-        const dx = x - this.pressStartX;
-        const dy = y - this.pressStartY;
+      if (this.combatController.cardInteractionState === 'pressed') {
+        const dx = x - this.combatController.pressStartX;
+        const dy = y - this.combatController.pressStartY;
         const threshold = COMBAT_LAYOUT.dragThreshold;
         if (Math.hypot(dx, dy) > threshold) {
-          this.cardInteractionState = 'dragging';
+          this.combatController.cardInteractionState = 'dragging';
         }
       }
-      if (this.cardInteractionState === 'dragging') {
-        this.dragScreenX = x;
-        this.dragScreenY = y;
+      if (this.combatController.cardInteractionState === 'dragging') {
+        this.combatController.dragScreenX = x;
+        this.combatController.dragScreenY = y;
         if (this.app) {
           const stateNow = this.bridge.getState();
           if (stateNow?.enemies?.length) {
             const idx = getEnemyIndexAtPoint(x, y, stateNow.enemies.length, this.app.screen.width, this.app.screen.height);
             const newHover = idx != null && stateNow.enemies[idx].hp > 0 ? idx : null;
-            if (this.hoveredEnemyIndex !== newHover) {
-              this.hoveredEnemyIndex = newHover;
+            if (this.combatController.hoveredEnemyIndex !== newHover) {
+              this.combatController.hoveredEnemyIndex = newHover;
             }
           } else {
-            this.hoveredEnemyIndex = null;
+            this.combatController.hoveredEnemyIndex = null;
           }
         }
         this.redraw();
@@ -1278,21 +1103,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     const onUp = (e: PointerEvent): void => {
       const { x, y } = this.clientToStage(e.clientX, e.clientY);
-      const currentCardId = this.cardInteractionCardId ?? cardId;
-      const currentHandIndex = this.cardInteractionCardIndex ?? handIndex;
+      const currentCardId = this.combatController.cardInteractionCardId ?? cardId;
+      const currentHandIndex = this.combatController.cardInteractionCardIndex ?? handIndex;
       const needsEnemyLocal = this.cardNeedsEnemyTarget(currentCardId);
 
-      if (this.cardInteractionState === 'pressed') {
-        this.cardInteractionState = 'idle';
-        this.cardInteractionCardIndex = null;
-        this.cardInteractionCardId = null;
+      if (this.combatController.cardInteractionState === 'pressed') {
+        this.combatController.cardInteractionState = 'idle';
+        this.combatController.cardInteractionCardIndex = null;
+        this.combatController.cardInteractionCardId = null;
         this.redraw();
         this.requestTemplateUpdate();
-      } else if (this.cardInteractionState === 'dragging') {
+      } else if (this.combatController.cardInteractionState === 'dragging') {
         const stateNow = this.bridge.getState();
         let played = false;
         if (needsEnemyLocal) {
-          const enemyIdx = this.hoveredEnemyIndex;
+          const enemyIdx = this.combatController.hoveredEnemyIndex;
           if (stateNow && enemyIdx != null && enemyIdx < stateNow.enemies.length && stateNow.enemies[enemyIdx].hp > 0) {
             this.runCardFlyThenPlay(currentCardId, enemyIdx, stateNow);
             played = true;
@@ -1309,11 +1134,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         }
 
         if (played) {
-          this.cardInteractionState = 'idle';
-          this.cardInteractionCardIndex = null;
-          this.cardInteractionCardId = null;
+          this.combatController.cardInteractionState = 'idle';
+          this.combatController.cardInteractionCardIndex = null;
+          this.combatController.cardInteractionCardId = null;
         } else {
-          this.cardInteractionState = 'returning';
+          this.combatController.cardInteractionState = 'returning';
           if (this.app && currentHandIndex >= 0 && stateNow) {
             const layout = getHandLayout(stateNow.hand.length, this.app.screen.width, this.app.screen.height, currentHandIndex, {
               handLayout: this.gameSettings.handLayout(),
@@ -1321,18 +1146,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
             });
             const pos = layout.positions[currentHandIndex];
             if (pos) {
-              this.returnStartX = pos.x + (pos.spreadOffsetX ?? 0);
-              this.returnStartY = pos.y;
+              this.combatController.returnStartX = pos.x + (pos.spreadOffsetX ?? 0);
+              this.combatController.returnStartY = pos.y;
             } else {
-              this.returnStartX = this.dragScreenX ?? 0;
-              this.returnStartY = this.dragScreenY ?? 0;
+              this.combatController.returnStartX = this.combatController.dragScreenX ?? 0;
+              this.combatController.returnStartY = this.combatController.dragScreenY ?? 0;
             }
           } else {
-            this.returnStartX = this.dragScreenX ?? 0;
-            this.returnStartY = this.dragScreenY ?? 0;
+            this.combatController.returnStartX = this.combatController.dragScreenX ?? 0;
+            this.combatController.returnStartY = this.combatController.dragScreenY ?? 0;
           }
-          this.returnStartTime = performance.now();
-          this.returnProgress = 0;
+          this.combatController.returnStartTime = performance.now();
+          this.combatController.returnProgress = 0;
         }
         this.redraw();
         this.requestTemplateUpdate();
@@ -1363,10 +1188,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Clear card interaction and hovered enemy; exit targeting mode. */
   cancelTargeting(): void {
-    this.cardInteractionState = 'idle';
-    this.cardInteractionCardIndex = null;
-    this.cardInteractionCardId = null;
-    this.hoveredEnemyIndex = null;
+    this.combatController.cardInteractionState = 'idle';
+    this.combatController.cardInteractionCardIndex = null;
+    this.combatController.cardInteractionCardId = null;
+    this.combatController.hoveredEnemyIndex = null;
     this.clearDragListeners();
     this.redraw();
     this.requestTemplateUpdate();
@@ -1389,10 +1214,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     let fromX: number;
     let fromY: number;
-    const selIdx = this.cardInteractionCardIndex != null && this.cardInteractionCardIndex < state.hand.length
-      ? this.cardInteractionCardIndex
+    const selIdx = this.combatController.cardInteractionCardIndex != null && this.combatController.cardInteractionCardIndex < state.hand.length
+      ? this.combatController.cardInteractionCardIndex
       : state.hand.indexOf(cardId);
-    const handIndexForPlay = this.cardInteractionCardIndex ?? selIdx;
+    const handIndexForPlay = this.combatController.cardInteractionCardIndex ?? selIdx;
     if (dragStart) {
       fromX = dragStart.x;
       fromY = dragStart.y;
@@ -1408,10 +1233,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
       this.triggerShieldAnimationIfBlock(cardId);
       this.triggerShootingAnimationIfStrike(cardId);
-      this.cardInteractionState = 'idle';
-      this.cardInteractionCardIndex = null;
-      this.cardInteractionCardId = null;
-      this.hoveredEnemyIndex = null;
+      this.combatController.cardInteractionState = 'idle';
+      this.combatController.cardInteractionCardIndex = null;
+      this.combatController.cardInteractionCardId = null;
+      this.combatController.hoveredEnemyIndex = null;
       this.redraw();
       this.requestTemplateUpdate();
       return;
@@ -1457,13 +1282,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         this.sound.playCardPlay();
         const vfxId = this.cardVfx.getVfxIdForCard(cardId);
         if (vfxId && this.gameSettings.vfxIntensity() !== 'off' && this.cardVfx.getVfxFrames(vfxId).length > 0) {
-          this.activeCardVfx.push({ vfxId, x: toX, y: toY, startTime: performance.now() });
+          this.combatController.activeCardVfx.push({ vfxId, x: toX, y: toY, startTime: performance.now() });
         }
         const newState = this.bridge.getState()!;
-        this.cardInteractionState = 'idle';
-        this.cardInteractionCardIndex = null;
-        this.cardInteractionCardId = null;
-        this.hoveredEnemyIndex = null;
+        this.combatController.cardInteractionState = 'idle';
+        this.combatController.cardInteractionCardIndex = null;
+        this.combatController.cardInteractionCardId = null;
+        this.combatController.hoveredEnemyIndex = null;
         const now = performance.now();
         const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt: number }[] = [];
         if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
@@ -1471,9 +1296,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           if (hpLost > 0) {
             toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
             this.sound.playHit();
-            this.enemyHurtStartMs[enemyIndex] = now;
+            this.combatController.enemyHurtStartMs[enemyIndex] = now;
             if (newState.enemies[enemyIndex].hp <= 0) {
-              this.enemyDyingStartMs[enemyIndex] = now;
+              this.combatController.enemyDyingStartMs[enemyIndex] = now;
             }
           }
         }
@@ -1483,7 +1308,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           toAdd.push({ type: 'block', value: blockGain, x: playerCenter.x, y: playerCenter.y, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
           this.sound.playBlock();
         }
-        this.floatingNumbers = [...this.floatingNumbers, ...toAdd];
+        this.combatController.floatingNumbers = [...this.combatController.floatingNumbers, ...toAdd];
         this.redraw();
         this.requestTemplateUpdate();
         if (toAdd.length > 0) {
@@ -1505,13 +1330,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   onEndTurn(): void {
     if (!this.canEndTurn()) return;
     this.sound.playTurnEnd();
-    this.showingEnemyTurn = true;
+    this.combatController.showingEnemyTurn = true;
     this.redraw();
     this.requestTemplateUpdate();
     setTimeout(() => {
       this.sound.playTurnStart();
       this.bridge.endTurn();
-      this.showingEnemyTurn = false;
+      this.combatController.showingEnemyTurn = false;
       this.redraw();
       this.requestTemplateUpdate();
     }, COMBAT_TIMING.enemyTurnBannerDelayMs);
@@ -1683,10 +1508,4 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.router.navigate(['/']);
   }
 
-  restRemovableCards(): string[] {
-    const state = this.bridge.getState();
-    if (!state) return [];
-    // Unique card IDs from deck so you remove by card type
-    return Array.from(new Set(state.deck));
-  }
 }

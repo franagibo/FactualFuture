@@ -1,6 +1,10 @@
 /**
  * Renders the combat scene (player, hand, enemies, targeting, floating numbers, banner) with PixiJS.
  * Uses a context object so the component owns state and event handlers.
+ *
+ * Sections: Types & constants | Intent icon | Neon/enemy borders | Background | Player area |
+ * HP/Block/Energy | Hand | Enemies | Targeting arrow | Drag preview & returning card |
+ * Floating numbers & banner | drawCombatView (entry).
  */
 import * as PIXI from 'pixi.js';
 import type { GameState, EnemyIntent } from '../../../engine/types';
@@ -11,6 +15,10 @@ import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 
 /** Re-export for consumers that import from the renderer. */
 export type { FloatingNumber };
+
+// ---------------------------------------------------------------------------
+// Intent icon (attack/block/debuff/vulnerable/none)
+// ---------------------------------------------------------------------------
 
 /** B12: Draw a simple intent icon (attack=triangle, block=shield, debuff=diamond, none=?) into container at x,y. Optional addStatus appends to label (e.g. "+ N to draw"). */
 function drawIntentIcon(
@@ -62,6 +70,10 @@ function drawIntentIcon(
   valueText.y = 2;
   container.addChild(valueText);
 }
+
+// ---------------------------------------------------------------------------
+// Combat view context types
+// ---------------------------------------------------------------------------
 
 /** Hand/cards subset of combat context for readability. */
 export interface CombatViewHandContext {
@@ -217,6 +229,10 @@ const INTENT_ICON_SIZE = L.intentIconSize;
 const HP_BLOCK_ENERGY_ICON_SIZE = L.hpBlockEnergyIconSize;
 const HP_BLOCK_ENERGY_GAP = L.hpBlockEnergyGap;
 
+// ---------------------------------------------------------------------------
+// Card neon border & enemy target border
+// ---------------------------------------------------------------------------
+
 function scaledFontSize(base: number, ctx: CombatViewContext): number {
   const scale = ctx.textScale ?? 1;
   return Math.round(base * scale);
@@ -266,6 +282,10 @@ function drawEnemyTargetBorder(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Background
+// ---------------------------------------------------------------------------
+
 /** B13: Draw combat background (sprite or dark rect) at zIndex 0. Adds a dark overlay to improve character visibility. */
 function drawCombatBackground(ctx: CombatViewContext): void {
   const { stage, w, h } = ctx;
@@ -291,6 +311,10 @@ function drawCombatBackground(ctx: CombatViewContext): void {
   }
   stage.sortableChildren = true;
 }
+
+// ---------------------------------------------------------------------------
+// Player area (placeholder, sprite, block overlay)
+// ---------------------------------------------------------------------------
 
 /** Draws the player character (sprite if available, else placeholder Graphics) and block-gain flash if any. */
 function drawPlayerArea(ctx: CombatViewContext): void {
@@ -343,6 +367,10 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   }
   stage.addChild(playerContainer);
 }
+
+// ---------------------------------------------------------------------------
+// HP/Block/Energy icons
+// ---------------------------------------------------------------------------
 
 /** Draws HP, block, and energy as icons with numbers centered (Slay the Spire style). */
 function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
@@ -403,6 +431,10 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   energyContainer.addChild(energyText);
   stage.addChild(energyContainer);
 }
+
+// ---------------------------------------------------------------------------
+// Hand (cards, hover/selection, pointer handlers)
+// ---------------------------------------------------------------------------
 
 /** Draws the hand container with arc layout, card visuals, hover/selection, and pointer handlers. */
 function drawHand(ctx: CombatViewContext): PIXI.Container {
@@ -577,6 +609,10 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
   return handContainer;
 }
 
+// ---------------------------------------------------------------------------
+// Enemies (placeholders, targeting border, intent, status)
+// ---------------------------------------------------------------------------
+
 /** Draws enemy placeholders (right side), highlights for targeting/hover, hit flash, and hand on top; returns layout for arrow. */
 function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   enemyLayout: ReturnType<typeof getEnemyLayout>;
@@ -745,6 +781,10 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Targeting arrow (Bezier from hand to cursor/enemy)
+// ---------------------------------------------------------------------------
+
 /** Quadratic Bezier from (x0,y0) to (x2,y2) with control point (x1,y1). */
 function bezierPoint(t: number, x0: number, y0: number, x1: number, y1: number, x2: number, y2: number): { x: number; y: number } {
   const u = 1 - t;
@@ -850,6 +890,10 @@ function drawTargetingArrow(ctx: CombatViewContext, layout: ReturnType<typeof dr
   arrow.zIndex = 550;
   stage.addChild(arrow);
 }
+
+// ---------------------------------------------------------------------------
+// Drag card preview & returning card
+// ---------------------------------------------------------------------------
 
 const DRAG_CARD_SCALE = 0.38;
 
@@ -985,6 +1029,10 @@ function drawReturningCard(ctx: CombatViewContext): void {
   stage.addChild(container);
 }
 
+// ---------------------------------------------------------------------------
+// Floating numbers & enemy turn banner
+// ---------------------------------------------------------------------------
+
 /** Draws floating damage (red) and block (green) numbers at their positions. Skipped when vfxIntensity is 'off'. */
 function drawFloatingNumbers(ctx: CombatViewContext): void {
   if (ctx.vfxIntensity === 'off') return;
@@ -1026,6 +1074,10 @@ function drawEnemyTurnBanner(ctx: CombatViewContext): void {
   turnText.y = h / 2;
   stage.addChild(turnText);
 }
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
 
 /**
  * Draws the full combat view onto the given stage (player, HP, hand, enemies, arrow, floating numbers, banner).

@@ -97,124 +97,58 @@
     }
   </div>
   @if (runPhaseSignal() === 'reward') {
-    <div class="reward-panel">
-      <div class="reward-title">Choose salvage</div>
-      <div class="reward-cards">
-        @for (cardId of rewardChoicesSignal(); track cardId; let i = $index) {
-          <button
-            type="button"
-            class="reward-card"
-            [class.chosen]="chosenRewardCardId === cardId"
-            [class.fade-out]="chosenRewardCardId != null && chosenRewardCardId !== cardId"
-            [attr.title]="getCardTooltip(cardId)"
-            [attr.aria-label]="'Choose card: ' + getCardName(cardId) + ', option ' + (i + 1) + ' of ' + rewardChoicesSignal().length"
-            (click)="onChooseReward(cardId)"
-          >
-            <img class="reward-card-art" [src]="getCardArtUrl(cardId)" alt="" />
-            <span class="reward-card-name">{{ getCardName(cardId) }}</span>
-            @if (getCardEffectDescriptionText(cardId)) {
-              <span class="reward-card-desc">{{ getCardEffectDescriptionText(cardId) }}</span>
-            }
-          </button>
-        }
-      </div>
-    </div>
+    <app-reward-panel
+      [choices]="rewardChoicesSignal()"
+      [chosenCardId]="chosenRewardCardId"
+      [getCardName]="getCardName.bind(this)"
+      [getCardArtUrl]="getCardArtUrl.bind(this)"
+      [getCardTooltip]="getCardTooltip.bind(this)"
+      [getCardEffectDescriptionText]="getCardEffectDescriptionText.bind(this)"
+      (chooseReward)="onChooseReward($event)"
+    />
   }
   @if (runPhaseSignal() === 'rest') {
-    <div class="rest-panel">
-      <div class="rest-title">Repair bay</div>
-      <div class="rest-actions">
-        <button type="button" class="btn-rest" (click)="onRestHeal()">Repair hull</button>
-      </div>
-      <div class="rest-subtitle">Jettison a card from your loadout:</div>
-      <div class="rest-cards">
-        @for (cardId of restRemovableCardsSignal(); track cardId) {
-          <button
-            type="button"
-            class="btn-rest-card"
-            [attr.title]="getCardTooltip(cardId)"
-            (click)="onRestRemoveCard(cardId)"
-          >
-            <img class="rest-card-art" [src]="getCardArtUrl(cardId)" alt="" />
-            <span class="rest-card-name">{{ getCardName(cardId) }}</span>
-          </button>
-        }
-      </div>
-    </div>
+    <app-rest-panel
+      [removableCards]="restRemovableCardsSignal()"
+      [getCardName]="getCardName.bind(this)"
+      [getCardArtUrl]="getCardArtUrl.bind(this)"
+      [getCardTooltip]="getCardTooltip.bind(this)"
+      (restHeal)="onRestHeal()"
+      (removeCard)="onRestRemoveCard($event)"
+    />
   }
   @if (runPhaseSignal() === 'shop') {
-    <div class="reward-panel shop-panel">
-      <div class="reward-title">Shop</div>
-      <div class="shop-gold">Credits: {{ goldSignal() }}</div>
-      @if (shopStateSignal(); as shop) {
-        <div class="shop-cards">
-          @for (cardId of shop.cardIds; track cardId) {
-            <div class="shop-item" [attr.title]="getCardTooltip(cardId)">
-              <img class="shop-item-art" [src]="getCardArtUrl(cardId)" alt="" />
-              <div class="shop-item-info">
-                <span class="shop-item-name">{{ getCardName(cardId) }}</span>
-                @if (getCardEffectDescriptionText(cardId)) {
-                  <span class="shop-item-desc">{{ getCardEffectDescriptionText(cardId) }}</span>
-                }
-                <span class="shop-item-price">{{ shop.cardPrices[cardId] }}c</span>
-              </div>
-              <button
-                type="button"
-                class="btn-rest btn-shop-buy"
-                [disabled]="goldSignal() < (shop.cardPrices[cardId] || 0)"
-                (click)="onPurchaseCard(cardId)"
-              >
-                Buy
-              </button>
-            </div>
-          }
-        </div>
-        <div class="shop-relics">
-          @for (relicId of shop.relicIds; track relicId) {
-            <div class="shop-item" [attr.title]="getRelicTooltip(relicId)">
-              <span class="shop-item-name">{{ getRelicName(relicId) }}</span>
-              <span class="shop-item-price">{{ shop.relicPrices[relicId] }}c</span>
-              <button
-                type="button"
-                class="btn-rest btn-shop-buy"
-                [disabled]="goldSignal() < (shop.relicPrices[relicId] || 0)"
-                (click)="onPurchaseRelic(relicId)"
-              >
-                Buy
-              </button>
-            </div>
-          }
-        </div>
-      }
-      <div class="shop-actions">
-        <button type="button" class="btn-rest" (click)="onLeaveShop()">Leave</button>
-      </div>
-    </div>
+    <app-shop-panel
+      [shopState]="shopStateSignal()"
+      [gold]="goldSignal()"
+      [getCardName]="getCardName.bind(this)"
+      [getCardArtUrl]="getCardArtUrl.bind(this)"
+      [getCardTooltip]="getCardTooltip.bind(this)"
+      [getCardEffectDescriptionText]="getCardEffectDescriptionText.bind(this)"
+      [getRelicName]="getRelicName.bind(this)"
+      [getRelicTooltip]="getRelicTooltip.bind(this)"
+      (purchaseCard)="onPurchaseCard($event)"
+      (purchaseRelic)="onPurchaseRelic($event)"
+      (leaveShop)="onLeaveShop()"
+    />
   }
   @if (runPhaseSignal() === 'event') {
-    <div class="reward-panel event-panel">
-      <div class="reward-title">Event</div>
-      <div class="event-text">{{ eventStateSignal()?.text }}</div>
-      <div class="event-choices">
-        @for (choice of (eventStateSignal()?.choices ?? []); track $index) {
-          <button type="button" class="btn-rest" (click)="onEventChoice($index)">
-            {{ choice.text }}
-          </button>
-        }
-      </div>
-    </div>
+    <app-event-panel
+      [eventState]="eventStateSignal()"
+      (eventChoice)="onEventChoice($event)"
+    />
   }
   @if (runPhaseSignal() === 'actComplete') {
-    <div class="reward-panel victory-panel">
-      <div class="reward-title">Sector clear!</div>
-      <button type="button" class="btn-rest" (click)="onAdvanceToNextAct()">Next sector</button>
-    </div>
+    <app-victory-panel
+      phase="actComplete"
+      (advance)="onAdvanceToNextAct()"
+    />
   }
   @if (runPhaseSignal() === 'victory') {
-    <div class="reward-panel victory-panel">
-      <div class="reward-title">Mission complete!</div>
-      <button type="button" class="btn-rest" (click)="onVictoryToMenu()">Command</button>
-    </div>
+    <app-victory-panel
+      phase="victory"
+      (toMenu)="onVictoryToMenu()"
+    />
   }
   @if (steamWarning()) {
     <div class="steam-warning">{{ steamWarning() }}</div>
