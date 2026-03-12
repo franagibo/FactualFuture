@@ -256,6 +256,7 @@ export class GameBridgeService {
       starterDeck: starterDeck?.length ? starterDeck : undefined,
       characterId: character ? characterId : undefined,
       starterRelicId: character?.starterRelicId,
+      startingMaxHp: character?.startingMaxHp,
     }));
   }
 

@@ -23,6 +23,8 @@ export interface StartRunOptions {
   characterId?: string;
   /** Relic ID given at run start (e.g. reactor_heart for Gungirl). */
   starterRelicId?: string;
+  /** Max HP at run start (e.g. 80 for Gungirl). If omitted, INITIAL_PLAYER_HP (70) is used. */
+  startingMaxHp?: number;
 }
 
 /**
@@ -38,10 +40,11 @@ export function startRun(
   const map = generateMap(seed, actConfig);
   const starterDeck = options?.starterDeck?.length ? options.starterDeck : DEFAULT_STARTER_DECK;
   const deck = rngShuffle([...starterDeck]);
+  const maxHp = options?.startingMaxHp ?? INITIAL_PLAYER_HP;
 
   return {
-    playerHp: INITIAL_PLAYER_HP,
-    playerMaxHp: INITIAL_PLAYER_HP,
+    playerHp: maxHp,
+    playerMaxHp: maxHp,
     playerBlock: 0,
     currentEncounter: null,
     phase: 'player',

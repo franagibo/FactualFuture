@@ -7,6 +7,7 @@ import * as PIXI from 'pixi.js';
 import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 import type { CombatViewContext } from '../renderers/combat-view.renderer';
 import type { FloatingNumber } from '../constants/combat-types';
+import type { PixiPools } from '../pools/pixi-pools';
 
 /** Host provided by the component: callbacks and getters needed to build CombatViewContext. */
 export interface CombatPhaseHost {
@@ -27,6 +28,7 @@ export interface CombatPhaseHost {
   onEnemyPointerOut(): void;
   cardNeedsEnemyTarget(cardId: string): boolean;
   markForCheck(): void;
+  getPools?(): PixiPools | undefined;
 }
 
 export class CombatPhaseController {
@@ -87,6 +89,7 @@ export class CombatPhaseController {
       w,
       h,
       padding,
+      pools: undefined,
       hand: {
         hoveredCardIndex: c.hoveredCardIndex,
         cardInteractionState: c.cardInteractionState,

@@ -160,20 +160,22 @@ export function drawMapView(
   };
   const JITTER_X = ML.jitterX;
   const JITTER_Y = ML.jitterY;
+  const marginH = ML.mapMarginH;
+  const gridWidth = Math.max(1, Math.min(w - marginH * 2, ML.maxMapWidth));
+  const gridLeft = (w - gridWidth) / 2;
+  const laneSpacing = laneCount > 1 ? gridWidth / (laneCount - 1) : gridWidth;
   const posById = new Map<string, { x: number; y: number }>();
   for (let f = 0; f <= maxFloor; f++) {
     const ids = floors[f] ?? [];
     if (!ids.length) continue;
     const baseY = contentBottomPadding + totalMapHeight - (f + 1) * FLOOR_SPACING;
-    const gapX = Math.min(ML.maxGapX, (w - padding * 2) / Math.max(1, ids.length));
-    const rowWidth = (ids.length - 1) * gapX;
-    const centerX = w / 2;
     for (let i = 0; i < ids.length; i++) {
       const nodeId = ids[i];
       const n = nodes.find((x) => x.id === nodeId);
-      const lane = (n && (n as { lane?: number }).lane != null) ? (n as { lane: number }).lane : i;
-      const laneJitter = (lane / laneCount - 0.5) * 28;
-      const baseX = centerX - rowWidth / 2 + i * gapX + laneJitter;
+      let lane = (n && (n as { lane?: number }).lane != null) ? (n as { lane: number }).lane : i;
+      if (lane < 0) lane = 0;
+      if (lane >= laneCount) lane = laneCount - 1;
+      const baseX = gridLeft + laneSpacing * (laneCount > 1 ? lane : 0.5);
       const x = baseX + jitterFrom(nodeId, f, 1) * JITTER_X;
       const y = baseY + jitterFrom(nodeId, f, 2) * JITTER_Y;
       posById.set(nodeId, { x, y });
@@ -189,15 +191,17 @@ export function drawMapView(
   const bgTex = context.getMapBgTexture();
   stage.sortableChildren = true;
   const mapH = Math.max(h, mapContentHeight);
+  const bgAlpha = ML.backgroundAlpha ?? 0.78;
   if (bgTex) {
     const bgSprite = new PIXI.Sprite(bgTex);
     bgSprite.width = w;
     bgSprite.height = mapH;
+    bgSprite.alpha = bgAlpha;
     bgSprite.zIndex = 0;
     stage.addChild(bgSprite);
   } else {
     const bg = new PIXI.Graphics();
-    bg.rect(0, 0, w, mapH).fill(0x1a1822);
+    bg.rect(0, 0, w, mapH).fill({ color: 0x1a1822, alpha: bgAlpha });
     bg.zIndex = 0;
     stage.addChild(bg);
   }
@@ -230,7 +234,8 @@ export function drawMapView(
     for (let i = rowData.length - 2; i >= 0; i--) {
       containerShape.lineTo(rowData[i].left, rowData[i].y);
     }
-    containerShape.fill({ color: 0x0c0a18, alpha: 0.88 });
+    const shapeAlpha = ML.containerShapeAlpha ?? 0.9;
+    containerShape.fill({ color: 0x0c0a18, alpha: shapeAlpha });
     containerShape.stroke({ width: 2, color: 0xb48cff, alpha: 0.45 });
     containerShape.zIndex = 1;
     stage.addChild(containerShape);

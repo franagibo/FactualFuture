@@ -40,6 +40,7 @@
     "description": "Main character with idle, shield and shooting animations (5x5 sprite sheets).",
     "animatedIdle": true,
     "starterRelicId": "reactor_heart",
+    "startingMaxHp": 80,
     "starterDeck": [
       "strike", "strike", "strike", "strike", "strike",
       "defend", "defend", "defend", "defend",

@@ -23,12 +23,13 @@ import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
 import { COMBAT_LAYOUT, getEnemyCenter, getEnemyIndexAtPoint, getPlayerCenter } from './constants/combat-layout.constants';
 import { COMBAT_TIMING, ENEMY_ANIMATION_TIMING } from './constants/combat-timing.constants';
-import { getHandLayout } from './constants/hand-layout';
+import { getHandLayout, type HandLayoutResult } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
 import { drawCombatView } from './renderers/combat-view.renderer';
 import { MapPhaseController, type MapPhaseHost } from './controllers/map-phase.controller';
 import { CombatPhaseController, type CombatPhaseHost } from './controllers/combat-phase.controller';
+import { CombatPools } from './pools/pixi-pools';
 import type { FloatingNumber } from './constants/combat-types';
 import { logger } from '../util/app-logger';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
@@ -102,6 +103,17 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private redrawScheduled = false;
   /** ResizeObserver: throttle to one redraw per frame. */
   private resizeRedrawScheduled = false;
+  /** Ticker frame counter for throttling idle and animation-only redraws. */
+  private tickerFrameCount = 0;
+  /** Persistent containers so we can update only VFX without full stage clear (avoids recreating all combat nodes every frame). */
+  private contentContainer: PIXI.Container | null = null;
+  private vfxContainer: PIXI.Container | null = null;
+  /** Throttle hover resolution to ~30fps to reduce work on pointer move. */
+  private lastResolveHoverTime = 0;
+  /** Pools for combat view display objects; reused across redraws to reduce allocations. */
+  private combatPools = new CombatPools();
+  /** True when contentContainer last drew combat (so we release to pools instead of destroy on next clear). */
+  private lastContentWasCombat = false;
   showPauseMenu = false;
   showPauseSettings = false;
 
@@ -302,6 +314,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       onEnemyPointerOut: () => { this.combatController.hoveredEnemyIndex = null; this.redraw(); },
       cardNeedsEnemyTarget: (cardId) => this.cardNeedsEnemyTarget(cardId),
       markForCheck: () => this.requestTemplateUpdate(),
+      getPools: () => this.combatPools,
     };
   }
 
@@ -318,6 +331,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.resizeObserver = null;
     this.app?.destroy(true, { children: true, texture: false });
     this.app = null;
+    this.contentContainer = null;
+    this.vfxContainer = null;
   }
 
   /** Create Pixi app, attach to host, wire resize and initial redraw. */
@@ -373,6 +388,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         return;
       }
       if (this._runPhase !== 'combat') return;
+      this.tickerFrameCount++;
       const state = this.bridge.getState();
       if (!state) return;
       const hand = state.hand;
@@ -464,7 +480,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           this.combatController.playerSpriteRef != null &&
           this.combatController.enemySpriteRefs.length === state.enemies.length;
         if (useIdleOnlyPath) {
-          this.updatePlayerAndEnemyTexturesOnly();
+          if (this.tickerFrameCount % 2 === 0) this.updatePlayerAndEnemyTexturesOnly();
         } else if (
           this.combatController.activeCardVfx.length > 0 ||
           this.combatController.cardSprites.size !== hand.length ||
@@ -472,9 +488,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           this.bridge.hasAnimatedIdle(state.characterId ?? '') ||
           enemyAnimPlaying
         ) {
-          this.redraw();
+          const animationOnlyRedraw = this.combatController.cardSprites.size === hand.length;
+          const onlyVfxNoReturning =
+            this.combatController.activeCardVfx.length > 0 &&
+            this.combatController.cardInteractionState !== 'returning' &&
+            !enemyAnimPlaying;
+          if (onlyVfxNoReturning && this.vfxContainer) {
+            this.updateVfxOnly();
+          } else if (!animationOnlyRedraw || this.tickerFrameCount % 2 === 0) {
+            this.redraw();
+          }
         } else {
-          this.updateHandHoverOnly();
+          this.updateHandHoverOnly(layout);
         }
       }
     };
@@ -602,25 +627,41 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       await this.combatAssets.loadCombatAssets(characterId, enemyIds);
     }
 
-    const stage = this.app.stage;
-    const removed = stage.removeChildren();
-    for (const child of removed) {
+    if (!this.contentContainer) {
+      this.contentContainer = new PIXI.Container();
+      this.vfxContainer = new PIXI.Container();
+      this.app.stage.addChild(this.contentContainer);
+      this.app.stage.addChild(this.vfxContainer);
+    }
+    const content = this.contentContainer;
+    const vfx = this.vfxContainer!;
+    if (this._runPhase === 'combat' || this.lastContentWasCombat) {
+      this.combatController.playerSpriteRef = null;
+      this.combatController.enemySpriteRefs = [];
+      this.combatController.cardSprites.clear();
+    }
+    const contentChildren = [...content.children];
+    for (const child of contentChildren) {
+      content.removeChild(child);
       child.destroy({ children: true, texture: false });
     }
+    const vfxChildren = vfx.removeChildren();
+    for (const child of vfxChildren) child.destroy({ children: true, texture: false });
 
     const padding = COMBAT_LAYOUT.padding;
 
     // Map phase and overlays (reward, rest, shop, event, victory): render map as background.
     if (this.isMapOrOverlayPhase(this._runPhase) && state.map) {
       if (!this.mapAssets.isMapLoaded()) {
-        this.mapController.drawMapLoadingState(stage, w, h);
+        this.mapController.drawMapLoadingState(content, w, h);
         this.mapController.ensureMapLoadThenReveal();
         this.requestTemplateUpdate();
         return;
       }
       this.mapController.setMapReady(true);
       const mapContext = this.mapController.buildMapContext(state, this._runPhase);
-      drawMapView(mapContext, state, stage, w, h, padding);
+      drawMapView(mapContext, state, content, w, h, padding);
+      this.lastContentWasCombat = false;
       if (this._runPhase === 'map' && this.bridge.getAvailableNextNodes().length > 0) {
         const characterId = state.characterId ?? undefined;
         const enemyIds = this.bridge.getEnemyIdsForNextPossibleEncounters();
@@ -637,8 +678,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     // Combat phase only: ensure combat assets loading (global + character + enemies), build context and delegate to combat renderer.
     if (this._runPhase !== 'combat') return;
-    this.combatController.playerSpriteRef = null;
-    this.combatController.enemySpriteRefs = [];
+    if (!this.lastContentWasCombat) {
+      this.combatController.playerSpriteRef = null;
+      this.combatController.enemySpriteRefs = [];
+    }
     if (this.combatController.cardInteractionCardIndex != null && this.combatController.cardInteractionCardIndex >= state.hand.length) {
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
@@ -673,14 +716,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
     const combatContext = this.combatController.buildCombatContext(
       this.createCombatPhaseHost(),
-      stage,
+      content,
       state,
       w,
       h,
       padding
     );
     drawCombatView(combatContext);
-    this.drawCardImpactVfx(stage, now);
+    this.drawCardImpactVfx(vfx, now);
+    this.lastContentWasCombat = true;
   }
 
   /** Draw active card impact VFX and remove expired ones. Uses CardVfxService for data-driven VFX. */
@@ -714,11 +758,20 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Updates only the VFX layer (no full combat redraw). Use when only card impact VFX is animating. */
+  private updateVfxOnly(): void {
+    const vfx = this.vfxContainer;
+    if (!vfx || !this.app) return;
+    const vfxChildren = vfx.removeChildren();
+    for (const child of vfxChildren) child.destroy({ children: true, texture: false });
+    this.drawCardImpactVfx(vfx, performance.now());
+  }
+
   /**
    * Updates only card transforms (x, y, rotation, scale, zIndex, alpha, shadow) from current hover lerp.
-   * Uses arc layout from getHandLayout for consistency with drawHand.
+   * Uses arc layout from getHandLayout for consistency with drawHand. Pass layout when already computed (e.g. from ticker) to avoid recomputing.
    */
-  private updateHandHoverOnly(): void {
+  private updateHandHoverOnly(layout?: HandLayoutResult): void {
     const state = this.bridge.getState();
     if (!state || !this.app || state.hand.length !== this.combatController.cardSprites.size) return;
     const w = this.app.screen.width;
@@ -727,7 +780,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const hand = state.hand;
     const hoverScale = L.hoverScale;
     const useHoverLerp = this.combatController.hoverLerp.length === hand.length;
-    const layout = getHandLayout(hand.length, w, h, this.combatController.hoveredCardIndex, {
+    const resolvedLayout = layout ?? getHandLayout(hand.length, w, h, this.combatController.hoveredCardIndex, {
       handLayout: this.gameSettings.handLayout(),
       reducedMotion: this.gameSettings.reducedMotion(),
     });
@@ -747,10 +800,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const applyHover = (isHovered || isSelected) && lerp > 0.5;
       const isOnTop = isHovered || isSelected;
 
-      const pos = layout.positions[i];
+      const pos = resolvedLayout.positions[i];
       const spreadX = this.combatController.spreadLerp[i] ?? pos.spreadOffsetX ?? 0;
       const cardX = pos.x + spreadX;
-      const hoverLift = layout.hoverLift;
+      const hoverLift = resolvedLayout.hoverLift;
       const cardY = pos.y - (isActive ? lerp * hoverLift : 0);
       const scale = 1 + (isActive ? lerp : 0) * (hoverScale - 1);
       const zIndex = isOnTop ? 100 : i;
@@ -967,9 +1020,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return px >= aabb.minX && px <= aabb.maxX && py >= aabb.minY && py <= aabb.maxY;
   }
 
-  /** Hover: only highlight the card whose visual bounds contain the cursor. Use rest layout (no hover) for hit-test so the lifted card does not move its AABB and clear hover. */
+  /** Hover: only highlight the card whose visual bounds contain the cursor. Use rest layout (no hover) for hit-test so the lifted card does not move its AABB and clear hover. Throttled to ~30fps. */
   private resolveHover(clientX: number, clientY: number): void {
     if (this._runPhase !== 'combat' || !this.app) return;
+    const now = performance.now();
+    if (now - this.lastResolveHoverTime < 32) return;
+    this.lastResolveHoverTime = now;
     const state = this.bridge.getState();
     if (!state) return;
     const hand = state.hand;

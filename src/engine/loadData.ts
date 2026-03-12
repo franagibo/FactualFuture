@@ -78,6 +78,8 @@ export interface CharacterDef {
   animatedIdle?: boolean;
   /** Relic ID given at run start (e.g. Reactor Heart for Gungirl). */
   starterRelicId?: string;
+  /** Max HP at run start (e.g. 80 for Gungirl / Ironclad). If omitted, default 70. */
+  startingMaxHp?: number;
 }
 
 export function loadPotions(data: PotionDef[]): Map<string, PotionDef> {
