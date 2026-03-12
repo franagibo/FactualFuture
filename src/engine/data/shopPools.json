@@ -1,7 +1,7 @@
 {
   "act1": {
     "cards": ["strike", "defend", "bash", "heavy_strike", "block", "clash", "pommel_strike", "iron_wave", "shrug_it_off", "body_slam"],
-    "relics": ["test_relic", "energy_relic"],
+    "relics": ["mag_lock", "plasma_vial", "combat_stim", "glow_rod", "tactical_rig", "crimson_node", "plasma_emitter", "amplifier", "adaptive_plating"],
     "cardPriceMin": 40,
     "cardPriceMax": 80,
     "relicPriceMin": 100,
@@ -11,7 +11,7 @@
   },
   "act2": {
     "cards": ["strike", "defend", "bash", "heavy_strike", "block", "clash", "pommel_strike", "iron_wave", "shrug_it_off", "body_slam", "plasma_shot", "reactive_plating", "overclock", "suppress", "void_grenade", "emergency_shield"],
-    "relics": ["test_relic", "energy_relic", "plating_fragment", "data_chip", "turbo_injector"],
+    "relics": ["mag_lock", "plasma_vial", "combat_stim", "glow_rod", "tactical_rig", "crimson_node", "plasma_emitter", "amplifier", "adaptive_plating", "repair_module", "salvage_horn", "membership_card", "toolbox", "clockwork_souvenir", "chemical_x"],
     "cardPriceMin": 50,
     "cardPriceMax": 90,
     "relicPriceMin": 120,

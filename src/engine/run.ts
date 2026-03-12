@@ -21,6 +21,8 @@ export interface StartRunOptions {
   starterDeck?: string[];
   /** Character id for this run (stored in state for UI/persistence). */
   characterId?: string;
+  /** Relic ID given at run start (e.g. reactor_heart for Gungirl). */
+  starterRelicId?: string;
 }
 
 /**
@@ -55,10 +57,12 @@ export function startRun(
     map,
     currentNodeId: null,
     gold: 0,
-    relics: [],
+    relics: options?.starterRelicId ? [options.starterRelicId] : [],
     potions: [],
     floor: 0,
     act: 1,
+    monsterEncountersCompletedThisAct: 0,
+    lastMonsterEncounterIds: [],
     characterId: options?.characterId,
     seed,
   };
@@ -322,12 +326,26 @@ export function advanceToNextAct(
     enemies: [],
     combatResult: null,
     rewardCardChoices: undefined,
+    monsterEncountersCompletedThisAct: 0,
+    lastMonsterEncounterIds: [],
+  };
+}
+
+/**
+ * Enter treasure node: go to reward phase with 3 card choices (no gold). Uses same card pool as combat rewards.
+ */
+function enterTreasure(state: GameState, rewardCardPool: string[]): GameState {
+  const choices = rngPickRandom(rewardCardPool, REWARD_CARD_COUNT);
+  return {
+    ...state,
+    runPhase: 'reward',
+    rewardCardChoices: choices,
   };
 }
 
 /**
  * Choose a node to move to. Validates adjacency, then starts combat/rest/etc.
- * eventPool: for event nodes. shopPool: for shop nodes (cards/relics and prices).
+ * eventPool: for event nodes. shopPool: for shop nodes. rewardCardPool: for treasure (card reward).
  */
 export function chooseNode(
   state: GameState,
@@ -337,7 +355,8 @@ export function chooseNode(
   enemyDefs: Map<string, EnemyDef>,
   encountersMap: Map<string, EncounterDef>,
   eventPool: EventDef[] = [],
-  shopPool?: ShopPoolConfig
+  shopPool?: ShopPoolConfig,
+  rewardCardPool: string[] = []
 ): GameState {
   if (state.runPhase !== 'map' || !state.map) return state;
 
@@ -367,6 +386,8 @@ export function chooseNode(
       return enterShop(next, shopPool);
     case 'event':
       return enterEvent(next, eventPool);
+    case 'treasure':
+      return rewardCardPool.length > 0 ? enterTreasure(next, rewardCardPool) : next;
     default:
       return next;
   }

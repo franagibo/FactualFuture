@@ -288,6 +288,7 @@ export function drawMapView(
       case 'rest': return 0xdd9922;
       case 'shop': return 0x339966;
       case 'event': return 0x5599bb;
+      case 'treasure': return 0xccaa44;
       case 'boss': return 0x7733aa;
       default: return 0x555566;
     }
@@ -300,6 +301,7 @@ export function drawMapView(
       case 'rest': return 'Repair bay';
       case 'shop': return 'Shop';
       case 'event': return 'Event';
+      case 'treasure': return 'Treasure';
       case 'boss': return 'Boss';
       default: return type;
     }

@@ -1,7 +1,7 @@
 import type { GameState } from './types';
 import type { RelicDef } from './loadData';
 
-export type RelicEvent = 'onCombatStart' | 'onTurnStart' | 'onCardPlay' | 'passive';
+export type RelicEvent = 'onCombatStart' | 'onTurnStart' | 'onCombatEnd' | 'onCardPlay' | 'passive';
 
 /**
  * Run all applicable relics for the given event. Returns new state.
@@ -21,6 +21,9 @@ export function runRelics(
     for (const trigger of def.triggers) {
       if (trigger.when !== event) continue;
       const eff = trigger.effect;
+      if (event === 'onTurnStart' && (eff as { firstTurnOnly?: boolean }).firstTurnOnly && (state.turnNumber ?? 0) !== 0) {
+        continue;
+      }
       switch (eff.type) {
         case 'maxHp':
           if (eff.value != null) {
@@ -39,6 +42,18 @@ export function runRelics(
         case 'block':
           if (eff.value != null) {
             next = { ...next, playerBlock: (next.playerBlock ?? 0) + eff.value };
+          }
+          break;
+        case 'heal':
+          if (eff.value != null) {
+            const maxHp = next.playerMaxHp ?? next.playerHp ?? 0;
+            const healed = Math.min(eff.value, Math.max(0, maxHp - next.playerHp));
+            next = { ...next, playerHp: next.playerHp + healed };
+          }
+          break;
+        case 'strength':
+          if (eff.value != null) {
+            next = { ...next, strengthStacks: (next.strengthStacks ?? 0) + eff.value };
           }
           break;
         case 'draw':

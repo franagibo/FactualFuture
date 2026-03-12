@@ -9,7 +9,7 @@ export type CombatResult = null | 'win' | 'lose';
 /** Run-level phase: map, combat, reward, rest, shop, event, actComplete (next act), victory (run complete). */
 export type RunPhase = 'map' | 'combat' | 'reward' | 'rest' | 'shop' | 'event' | 'actComplete' | 'victory';
 
-export type MapNodeType = 'combat' | 'elite' | 'rest' | 'shop' | 'event' | 'boss';
+export type MapNodeType = 'combat' | 'elite' | 'rest' | 'shop' | 'event' | 'treasure' | 'boss';
 
 export interface MapNode {
   id: string;
@@ -95,6 +95,10 @@ export interface GameState {
   };
   /** Current act (1-based). Used for multi-act runs. */
   act?: number;
+  /** Number of monster (non-elite, non-boss) combats completed this act. Used for first-N encounter pool selection. */
+  monsterEncountersCompletedThisAct?: number;
+  /** Last 2 monster encounter IDs (no same encounter in next 2 fights). */
+  lastMonsterEncounterIds?: string[];
   /** Playable character id for this run (e.g. "gunboy"). Drives starter deck and card pools. */
   characterId?: string;
   /** Run seed used for map generation and initial deck shuffle; enables reproducible runs. */

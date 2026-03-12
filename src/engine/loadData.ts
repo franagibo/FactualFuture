@@ -47,7 +47,7 @@ export interface RelicDef {
   id: string;
   name: string;
   description: string;
-  triggers: { when: string; effect: { type: string; value?: number } }[];
+  triggers: { when: string; effect: { type: string; value?: number; firstTurnOnly?: boolean } }[];
   /** Optional act numbers where this relic can appear in shop; when absent, all acts. */
   acts?: number[];
 }
@@ -76,6 +76,8 @@ export interface CharacterDef {
   cardPoolIds: string[] | null;
   /** When true, combat view advances idle animation every frame (e.g. chibi, gungirl). Default true if omitted. */
   animatedIdle?: boolean;
+  /** Relic ID given at run start (e.g. Reactor Heart for Gungirl). */
+  starterRelicId?: string;
 }
 
 export function loadPotions(data: PotionDef[]): Map<string, PotionDef> {

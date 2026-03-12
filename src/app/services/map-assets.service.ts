@@ -9,6 +9,7 @@ const NODE_ICON_PATHS: Record<MapNodeType, string> = {
   rest: '/assets/map/nodes/rest.svg',
   shop: '/assets/map/nodes/shop.svg',
   event: '/assets/map/nodes/event.svg',
+  treasure: '/assets/map/nodes/treasure.svg',
   boss: '/assets/map/nodes/boss.svg',
 };
 
@@ -37,7 +38,7 @@ export class MapAssetsService {
     } catch {
       this.mapBgTexture = null;
     }
-    const types: MapNodeType[] = ['combat', 'elite', 'rest', 'shop', 'event', 'boss'];
+    const types: MapNodeType[] = ['combat', 'elite', 'rest', 'shop', 'event', 'treasure', 'boss'];
     for (const type of types) {
       try {
         const tex = (await PIXI.Assets.load(this.resolveUrl(NODE_ICON_PATHS[type]))) as PIXI.Texture;

@@ -1,42 +1,922 @@
 [
   {
-    "id": "test_relic",
-    "name": "Reactor Core",
-    "description": "At the start of each combat, gain 1 max HP.",
+    "id": "reactor_heart",
+    "name": "Reactor Heart",
+    "description": "At the end of combat, heal 6 HP.",
     "triggers": [
-      { "when": "onCombatStart", "effect": { "type": "maxHp", "value": 1 } }
+      { "when": "onCombatEnd", "effect": { "type": "heal", "value": 6 } }
     ]
   },
   {
-    "id": "energy_relic",
-    "name": "Power Cell",
-    "description": "At the start of each turn, gain 1 additional energy.",
+    "id": "charge_amplifier",
+    "name": "Charge Amplifier",
+    "description": "Your first Attack each combat deals 8 additional damage.",
+    "triggers": []
+  },
+  {
+    "id": "mag_lock",
+    "name": "Mag-Lock",
+    "description": "Start each combat with 10 Block.",
+    "triggers": [
+      { "when": "onCombatStart", "effect": { "type": "block", "value": 10 } }
+    ]
+  },
+  {
+    "id": "restore_module",
+    "name": "Restore Module",
+    "description": "Whenever you enter a Rest Site, start the next combat with 2 extra Energy.",
+    "triggers": []
+  },
+  {
+    "id": "tactical_core",
+    "name": "Tactical Core",
+    "description": "If you do not play any Attacks during your turn, gain an additional Energy next turn.",
+    "triggers": []
+  },
+  {
+    "id": "disorient_grenade",
+    "name": "Disorient Grenade",
+    "description": "At the start of each combat, apply 1 Vulnerable to ALL enemies.",
+    "triggers": []
+  },
+  {
+    "id": "tactical_rig",
+    "name": "Tactical Rig",
+    "description": "At the start of each combat, draw 2 additional cards.",
+    "triggers": []
+  },
+  {
+    "id": "plasma_vial",
+    "name": "Plasma Vial",
+    "description": "At the start of each combat, heal 2 HP.",
+    "triggers": [
+      { "when": "onCombatStart", "effect": { "type": "heal", "value": 2 } }
+    ]
+  },
+  {
+    "id": "reactive_spikes",
+    "name": "Reactive Spikes",
+    "description": "Start each combat with 3 Thorns.",
+    "triggers": []
+  },
+  {
+    "id": "sync_crystal",
+    "name": "Sync Crystal",
+    "description": "The first time you lose HP each combat, draw 3 cards.",
+    "triggers": []
+  },
+  {
+    "id": "data_cache",
+    "name": "Data Cache",
+    "description": "Whenever you add a card to your deck, gain 9 Gold.",
+    "triggers": []
+  },
+  {
+    "id": "memory_lens",
+    "name": "Memory Lens",
+    "description": "Whenever you Rest, you may add a card to your deck.",
+    "triggers": []
+  },
+  {
+    "id": "pulse_bloom",
+    "name": "Pulse Bloom",
+    "description": "Every 3 turns, gain 1 Energy.",
+    "triggers": []
+  },
+  {
+    "id": "ward_chip",
+    "name": "Ward Chip",
+    "description": "Regular enemy combats are no longer encountered in ? rooms.",
+    "triggers": []
+  },
+  {
+    "id": "glow_rod",
+    "name": "Glow Rod",
+    "description": "Gain 1 Energy on the first turn of each combat.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1, "firstTurnOnly": true } }
+    ]
+  },
+  {
+    "id": "credit_accumulator",
+    "name": "Credit Accumulator",
+    "description": "Whenever you climb a floor, gain 12 Gold. No longer works when you spend Gold at a shop.",
+    "triggers": []
+  },
+  {
+    "id": "med_bay_pass",
+    "name": "Med Bay Pass",
+    "description": "Whenever you enter a shop, heal 15 HP.",
+    "triggers": []
+  },
+  {
+    "id": "combo_cell",
+    "name": "Combo Cell",
+    "description": "Every time you play 10 Attacks, gain 1 Energy.",
+    "triggers": []
+  },
+  {
+    "id": "polish_module",
+    "name": "Polish Module",
+    "description": "At the start of each combat, gain 1 Dexterity.",
+    "triggers": []
+  },
+  {
+    "id": "ward_token",
+    "name": "Ward Token",
+    "description": "Negate the next 2 Curses you obtain.",
+    "triggers": []
+  },
+  {
+    "id": "adaptive_barrier",
+    "name": "Adaptive Barrier",
+    "description": "If you end your turn without Block, gain 6 Block.",
+    "triggers": []
+  },
+  {
+    "id": "precision_core",
+    "name": "Precision Core",
+    "description": "Every 10th Attack you play deals double damage.",
+    "triggers": []
+  },
+  {
+    "id": "injector_harness",
+    "name": "Injector Harness",
+    "description": "Upon pickup, gain 2 Potion slots.",
+    "triggers": []
+  },
+  {
+    "id": "shrink_agent",
+    "name": "Shrink Agent",
+    "description": "Enemies in Elite combats have 25% less HP.",
+    "triggers": []
+  },
+  {
+    "id": "recovery_pad",
+    "name": "Recovery Pad",
+    "description": "Whenever you Rest, heal an additional 15 HP.",
+    "triggers": []
+  },
+  {
+    "id": "vendor_protocol",
+    "name": "Vendor Protocol",
+    "description": "The merchant's card removal service now always costs 50 Gold.",
+    "triggers": []
+  },
+  {
+    "id": "bio_enhance",
+    "name": "Bio Enhance",
+    "description": "Upon pickup, raise your Max HP by 7.",
+    "triggers": []
+  },
+  {
+    "id": "impact_amplifier",
+    "name": "Impact Amplifier",
+    "description": "Whenever you would deal 4 or less unblocked Attack damage, increase it to 5.",
+    "triggers": []
+  },
+  {
+    "id": "compact_cache",
+    "name": "Compact Cache",
+    "description": "Every 4th ? room is a Treasure room.",
+    "triggers": []
+  },
+  {
+    "id": "nanite_drone",
+    "name": "Nanite Drone",
+    "description": "Whenever you use a potion, heal 5 HP.",
+    "triggers": []
+  },
+  {
+    "id": "combat_stim",
+    "name": "Combat Stim",
+    "description": "At the start of each combat, gain 1 Strength.",
+    "triggers": [
+      { "when": "onCombatStart", "effect": { "type": "strength", "value": 1 } }
+    ]
+  },
+  {
+    "id": "skill_upgrade_kit",
+    "name": "Skill Upgrade Kit",
+    "description": "Upon pickup, Upgrade 2 random Skills.",
+    "triggers": []
+  },
+  {
+    "id": "strike_upgrade_kit",
+    "name": "Strike Upgrade Kit",
+    "description": "Upon pickup, Upgrade 2 random Attacks.",
+    "triggers": []
+  },
+  {
+    "id": "crimson_node",
+    "name": "Crimson Node",
+    "description": "While your HP is at or below 50%, you have 3 additional Strength.",
+    "triggers": []
+  },
+  {
+    "id": "flux_discharger",
+    "name": "Flux Discharger",
+    "description": "Unplayable Curse cards can now be played. Whenever you play a Curse, lose 1 HP and Exhaust it.",
+    "triggers": []
+  },
+  {
+    "id": "bottled_flame",
+    "name": "Bottled Flame",
+    "description": "Upon pickup, choose an Attack. At the start of each combat, it will be in your hand.",
+    "triggers": []
+  },
+  {
+    "id": "bottled_lightning",
+    "name": "Bottled Lightning",
+    "description": "Upon pickup, choose a Skill. At the start of each combat, it will be in your hand.",
+    "triggers": []
+  },
+  {
+    "id": "bottled_tornado",
+    "name": "Bottled Tornado",
+    "description": "Upon pickup, choose a Power. At the start of each combat, it will be in your hand.",
+    "triggers": []
+  },
+  {
+    "id": "darkstone_periapt",
+    "name": "Darkstone Periapt",
+    "description": "Whenever you obtain a Curse, increase your Max HP by 6.",
+    "triggers": []
+  },
+  {
+    "id": "eternal_feather",
+    "name": "Eternal Feather",
+    "description": "For every 5 cards in your deck, heal 3 HP whenever you enter a Rest Site.",
+    "triggers": []
+  },
+  {
+    "id": "frozen_egg",
+    "name": "Frozen Egg",
+    "description": "Whenever you add a Power to your deck, Upgrade it.",
+    "triggers": []
+  },
+  {
+    "id": "salvage_horn",
+    "name": "Salvage Horn",
+    "description": "Whenever an enemy dies, gain 1 Energy and draw 1 card.",
+    "triggers": []
+  },
+  {
+    "id": "docking_cleat",
+    "name": "Docking Cleat",
+    "description": "At the start of your 2nd turn, gain 14 Block.",
+    "triggers": []
+  },
+  {
+    "id": "ink_bottle",
+    "name": "Ink Bottle",
+    "description": "Whenever you play 10 cards, draw 1 card.",
+    "triggers": []
+  },
+  {
+    "id": "kunai",
+    "name": "Kunai",
+    "description": "Every time you play 3 Attacks in a single turn, gain 1 Dexterity.",
+    "triggers": []
+  },
+  {
+    "id": "letter_opener",
+    "name": "Letter Opener",
+    "description": "Every time you play 3 Skills in a single turn, deal 5 damage to ALL enemies.",
+    "triggers": []
+  },
+  {
+    "id": "matryoshka",
+    "name": "Matryoshka",
+    "description": "The next 2 non-boss chests you open contain 2 Relics.",
+    "triggers": []
+  },
+  {
+    "id": "survival_rations",
+    "name": "Survival Rations",
+    "description": "If your HP is at or below 50% at the end of combat, heal 12 HP.",
+    "triggers": []
+  },
+  {
+    "id": "mercury_hourglass",
+    "name": "Mercury Hourglass",
+    "description": "At the start of your turn, deal 3 damage to ALL enemies.",
+    "triggers": []
+  },
+  {
+    "id": "molten_egg",
+    "name": "Molten Egg",
+    "description": "Whenever you add an Attack to your deck, Upgrade it.",
+    "triggers": []
+  },
+  {
+    "id": "mummified_hand",
+    "name": "Mummified Hand",
+    "description": "Whenever you play a Power, a random card in your hand costs 0 that turn.",
+    "triggers": []
+  },
+  {
+    "id": "ornamental_fan",
+    "name": "Ornamental Fan",
+    "description": "Every time you play 3 Attacks in a single turn, gain 4 Block.",
+    "triggers": []
+  },
+  {
+    "id": "pantograph",
+    "name": "Pantograph",
+    "description": "At the start of Boss combats, heal 25 HP.",
+    "triggers": []
+  },
+  {
+    "id": "pear",
+    "name": "Pear",
+    "description": "Upon pickup, raise your Max HP by 10.",
+    "triggers": []
+  },
+  {
+    "id": "question_card",
+    "name": "Question Card",
+    "description": "Future card rewards have 1 additional card to choose from.",
+    "triggers": []
+  },
+  {
+    "id": "shuriken",
+    "name": "Shuriken",
+    "description": "Every time you play 3 Attacks in a single turn, gain 1 Strength.",
+    "triggers": []
+  },
+  {
+    "id": "singing_bowl",
+    "name": "Singing Bowl",
+    "description": "When adding cards to your deck, you may raise your Max HP by 2 instead.",
+    "triggers": []
+  },
+  {
+    "id": "strike_dummy",
+    "name": "Strike Dummy",
+    "description": "Cards containing \"Strike\" deal 3 additional damage.",
+    "triggers": []
+  },
+  {
+    "id": "sundial",
+    "name": "Sundial",
+    "description": "Every 3 times you shuffle your draw pile, gain 2 Energy.",
+    "triggers": []
+  },
+  {
+    "id": "the_courier",
+    "name": "The Courier",
+    "description": "The Merchant restocks cards, relics, and potions. All prices reduced by 20%.",
+    "triggers": []
+  },
+  {
+    "id": "toxic_egg",
+    "name": "Toxic Egg",
+    "description": "Whenever you add a Skill to your deck, Upgrade it.",
+    "triggers": []
+  },
+  {
+    "id": "white_beast_statue",
+    "name": "White Beast Statue",
+    "description": "Potions always appear in combat rewards.",
+    "triggers": []
+  },
+  {
+    "id": "amplifier",
+    "name": "Amplifier",
+    "description": "Enemies with Vulnerable take 75% more damage rather than 50%.",
+    "triggers": []
+  },
+  {
+    "id": "adaptive_plating",
+    "name": "Adaptive Plating",
+    "description": "Whenever you lose HP, gain 3 Block next turn.",
+    "triggers": []
+  },
+  {
+    "id": "repair_module",
+    "name": "Repair Module",
+    "description": "Whenever you play a Power, heal 2 HP.",
+    "triggers": []
+  },
+  {
+    "id": "calipers",
+    "name": "Calipers",
+    "description": "At the start of your turn, lose 15 Block rather than all of your Block.",
+    "triggers": []
+  },
+  {
+    "id": "captains_wheel",
+    "name": "Captain's Wheel",
+    "description": "At the start of your 3rd turn, gain 18 Block.",
+    "triggers": []
+  },
+  {
+    "id": "dead_branch",
+    "name": "Dead Branch",
+    "description": "Whenever you Exhaust a card, add a random card to your hand.",
+    "triggers": []
+  },
+  {
+    "id": "du_vu_doll",
+    "name": "Du-Vu Doll",
+    "description": "For each Curse in your deck, start each combat with 1 Strength.",
+    "triggers": []
+  },
+  {
+    "id": "fossilized_helix",
+    "name": "Fossilized Helix",
+    "description": "Prevent the first time you would lose HP in combat.",
+    "triggers": []
+  },
+  {
+    "id": "gambling_chip",
+    "name": "Gambling Chip",
+    "description": "At the start of each combat, discard any number of cards, then draw that many.",
+    "triggers": []
+  },
+  {
+    "id": "ginger",
+    "name": "Ginger",
+    "description": "You can no longer become Weakened.",
+    "triggers": []
+  },
+  {
+    "id": "girya",
+    "name": "Girya",
+    "description": "You can now gain Strength at Rest Sites (up to 3 times).",
+    "triggers": []
+  },
+  {
+    "id": "ice_cream",
+    "name": "Ice Cream",
+    "description": "Energy is now conserved between turns.",
+    "triggers": []
+  },
+  {
+    "id": "incense_burner",
+    "name": "Incense Burner",
+    "description": "Every 6 turns, gain 1 Intangible.",
+    "triggers": []
+  },
+  {
+    "id": "lizard_tail",
+    "name": "Lizard Tail",
+    "description": "When you would die, heal to 50% of your Max HP instead (works once).",
+    "triggers": []
+  },
+  {
+    "id": "mango",
+    "name": "Mango",
+    "description": "Upon pickup, raise your Max HP by 14.",
+    "triggers": []
+  },
+  {
+    "id": "old_coin",
+    "name": "Old Coin",
+    "description": "Upon pickup, gain 300 Gold.",
+    "triggers": []
+  },
+  {
+    "id": "peace_pipe",
+    "name": "Peace Pipe",
+    "description": "You can now remove cards from your deck at Rest Sites.",
+    "triggers": []
+  },
+  {
+    "id": "pocketwatch",
+    "name": "Pocketwatch",
+    "description": "Whenever you play 3 or less cards during your turn, draw 3 additional cards at the start of your next turn.",
+    "triggers": []
+  },
+  {
+    "id": "prayer_wheel",
+    "name": "Prayer Wheel",
+    "description": "Normal enemies drop an additional card reward.",
+    "triggers": []
+  },
+  {
+    "id": "shovel",
+    "name": "Shovel",
+    "description": "You can now Dig for relics at Rest Sites.",
+    "triggers": []
+  },
+  {
+    "id": "stone_calendar",
+    "name": "Stone Calendar",
+    "description": "At the end of turn 7, deal 52 damage to ALL enemies.",
+    "triggers": []
+  },
+  {
+    "id": "the_abacus",
+    "name": "The Abacus",
+    "description": "Whenever you shuffle your draw pile, gain 6 Block.",
+    "triggers": []
+  },
+  {
+    "id": "thread_and_needle",
+    "name": "Thread and Needle",
+    "description": "At the start of each combat, gain 4 Plated Armor.",
+    "triggers": []
+  },
+  {
+    "id": "torii",
+    "name": "Torii",
+    "description": "Whenever you would receive 5 or less unblocked Attack damage, reduce it to 1.",
+    "triggers": []
+  },
+  {
+    "id": "tungsten_rod",
+    "name": "Tungsten Rod",
+    "description": "Whenever you would lose HP, lose 1 less.",
+    "triggers": []
+  },
+  {
+    "id": "turnip",
+    "name": "Turnip",
+    "description": "You can no longer become Frail.",
+    "triggers": []
+  },
+  {
+    "id": "unceasing_top",
+    "name": "Unceasing Top",
+    "description": "Whenever you have no cards in hand during your turn, draw a card.",
+    "triggers": []
+  },
+  {
+    "id": "wing_boots",
+    "name": "Wing Boots",
+    "description": "You may ignore paths when choosing the next room 3 times.",
+    "triggers": []
+  },
+  {
+    "id": "champion_belt",
+    "name": "Champion Belt",
+    "description": "Whenever you apply Vulnerable, also apply 1 Weak.",
+    "triggers": []
+  },
+  {
+    "id": "plasma_emitter",
+    "name": "Plasma Emitter",
+    "description": "Whenever you Exhaust a card, deal 3 damage to ALL enemies.",
+    "triggers": []
+  },
+  {
+    "id": "reactor_bloom",
+    "name": "Reactor Bloom",
+    "description": "Healing is 50% more effective during combat.",
+    "triggers": []
+  },
+  {
+    "id": "astrolabe",
+    "name": "Astrolabe",
+    "description": "Upon pickup, Transform 3 cards, then Upgrade them.",
+    "triggers": []
+  },
+  {
+    "id": "black_star",
+    "name": "Black Star",
+    "description": "Elites now drop an additional relic when defeated.",
+    "triggers": []
+  },
+  {
+    "id": "dark_reactor",
+    "name": "Dark Reactor",
+    "description": "Replaces Reactor Heart. At the end of combat, heal 12 HP.",
+    "triggers": [
+      { "when": "onCombatEnd", "effect": { "type": "heal", "value": 12 } }
+    ]
+  },
+  {
+    "id": "busted_crown",
+    "name": "Busted Crown",
+    "description": "Gain 1 Energy at the start of your turn. Future card rewards have 2 less cards to choose from.",
     "triggers": [
       { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
     ]
   },
   {
-    "id": "plating_fragment",
-    "name": "Plating Fragment",
-    "description": "At the start of each combat, gain 5 Block.",
-    "triggers": [
-      { "when": "onCombatStart", "effect": { "type": "block", "value": 5 } }
-    ]
+    "id": "calling_bell",
+    "name": "Calling Bell",
+    "description": "Upon pickup, obtain a Curse and 3 relics.",
+    "triggers": []
   },
   {
-    "id": "data_chip",
-    "name": "Data Chip",
-    "description": "At the start of each combat, gain 2 max HP.",
-    "triggers": [
-      { "when": "onCombatStart", "effect": { "type": "maxHp", "value": 2 } }
-    ]
-  },
-  {
-    "id": "turbo_injector",
-    "name": "Turbo Injector",
-    "description": "At the start of each turn, gain 1 additional energy.",
+    "id": "coffee_dripper",
+    "name": "Coffee Dripper",
+    "description": "Gain 1 Energy at the start of your turn. You can no longer Rest at Rest Sites.",
     "triggers": [
       { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
     ]
+  },
+  {
+    "id": "cursed_key",
+    "name": "Cursed Key",
+    "description": "Gain 1 Energy at the start of your turn. Whenever you open a non-Boss chest, obtain a Curse.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "ectoplasm",
+    "name": "Ectoplasm",
+    "description": "Gain 1 Energy at the start of your turn. You can no longer gain Gold.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "empty_cage",
+    "name": "Empty Cage",
+    "description": "Upon pickup, remove 2 cards from your deck.",
+    "triggers": []
+  },
+  {
+    "id": "fusion_hammer",
+    "name": "Fusion Hammer",
+    "description": "Gain 1 Energy at the start of your turn. You can no longer Smith at Rest Sites.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "philosophers_stone",
+    "name": "Philosopher's Stone",
+    "description": "Gain 1 Energy at the start of your turn. ALL enemies start combat with 1 Strength.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "runic_dome",
+    "name": "Runic Dome",
+    "description": "Gain 1 Energy at the start of your turn. You can no longer see enemy intents.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "runic_pyramid",
+    "name": "Runic Pyramid",
+    "description": "At the end of your turn, you no longer discard your hand.",
+    "triggers": []
+  },
+  {
+    "id": "sacred_bark",
+    "name": "Sacred Bark",
+    "description": "Double the effectiveness of potions.",
+    "triggers": []
+  },
+  {
+    "id": "slavers_collar",
+    "name": "Slaver's Collar",
+    "description": "During Boss and Elite combats, gain 1 Energy at the start of your turn.",
+    "triggers": []
+  },
+  {
+    "id": "snecko_eye",
+    "name": "Snecko Eye",
+    "description": "At the start of your turn, draw 2 additional cards. Start each combat Confused.",
+    "triggers": []
+  },
+  {
+    "id": "sozu",
+    "name": "Sozu",
+    "description": "Gain 1 Energy at the start of your turn. You can no longer obtain potions.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "tiny_house",
+    "name": "Tiny House",
+    "description": "Upon pickup, obtain 1 Potion, gain 50 Gold, raise Max HP by 5, obtain 1 card, Upgrade 1 random card.",
+    "triggers": []
+  },
+  {
+    "id": "velvet_choker",
+    "name": "Velvet Choker",
+    "description": "Gain 1 Energy at the start of your turn. You cannot play more than 6 cards per turn.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "pain_circuit",
+    "name": "Pain Circuit",
+    "description": "Gain 1 Energy at the start of your turn. At the start of combat, shuffle 2 Wounds into your draw pile.",
+    "triggers": [
+      { "when": "onTurnStart", "effect": { "type": "energy", "value": 1 } }
+    ]
+  },
+  {
+    "id": "runic_cube",
+    "name": "Runic Cube",
+    "description": "Whenever you lose HP, draw 1 card.",
+    "triggers": []
+  },
+  {
+    "id": "cauldron",
+    "name": "Cauldron",
+    "description": "When obtained, brew 5 random potions.",
+    "triggers": []
+  },
+  {
+    "id": "chemical_x",
+    "name": "Chemical X",
+    "description": "The effects of your cost X cards are increased by 2.",
+    "triggers": []
+  },
+  {
+    "id": "clockwork_souvenir",
+    "name": "Clockwork Souvenir",
+    "description": "Start each combat with 1 Artifact.",
+    "triggers": []
+  },
+  {
+    "id": "dollys_mirror",
+    "name": "Dolly's Mirror",
+    "description": "Upon pickup, obtain an additional copy of a card in your deck.",
+    "triggers": []
+  },
+  {
+    "id": "frozen_eye",
+    "name": "Frozen Eye",
+    "description": "When viewing your Draw Pile, the cards are now shown in order.",
+    "triggers": []
+  },
+  {
+    "id": "hand_drill",
+    "name": "Hand Drill",
+    "description": "Whenever you break an enemy's Block, apply 2 Vulnerable.",
+    "triggers": []
+  },
+  {
+    "id": "lees_waffle",
+    "name": "Lee's Waffle",
+    "description": "Upon pickup, raise your Max HP by 7 and heal to full.",
+    "triggers": []
+  },
+  {
+    "id": "medical_kit",
+    "name": "Medical Kit",
+    "description": "Unplayable Status cards can now be played. Whenever you play a Status card, Exhaust it.",
+    "triggers": []
+  },
+  {
+    "id": "membership_card",
+    "name": "Membership Card",
+    "description": "50% discount on all products.",
+    "triggers": []
+  },
+  {
+    "id": "orange_pellets",
+    "name": "Orange Pellets",
+    "description": "Whenever you play a Power, Attack, and Skill in the same turn, remove all debuffs.",
+    "triggers": []
+  },
+  {
+    "id": "orrery",
+    "name": "Orrery",
+    "description": "Upon pickup, choose and add 5 cards to your deck.",
+    "triggers": []
+  },
+  {
+    "id": "prismatic_shard",
+    "name": "Prismatic Shard",
+    "description": "Combat rewards now contain Colorless and other characters' cards.",
+    "triggers": []
+  },
+  {
+    "id": "sling_of_courage",
+    "name": "Sling of Courage",
+    "description": "Start each Elite combat with 2 Strength.",
+    "triggers": []
+  },
+  {
+    "id": "strange_spoon",
+    "name": "Strange Spoon",
+    "description": "Cards which Exhaust when played will instead discard 50% of the time.",
+    "triggers": []
+  },
+  {
+    "id": "toolbox",
+    "name": "Toolbox",
+    "description": "At the start of each combat, choose 1 of 3 random Colorless cards and add it to your hand.",
+    "triggers": []
+  },
+  {
+    "id": "brimstone",
+    "name": "Brimstone",
+    "description": "At the start of your turn, gain 2 Strength and ALL enemies gain 1 Strength.",
+    "triggers": []
+  },
+  {
+    "id": "bloody_idol",
+    "name": "Bloody Idol",
+    "description": "Whenever you gain Gold, heal 5 HP.",
+    "triggers": []
+  },
+  {
+    "id": "cultist_headpiece",
+    "name": "Cultist Headpiece",
+    "description": "You feel more talkative.",
+    "triggers": []
+  },
+  {
+    "id": "enchiridion",
+    "name": "Enchiridion",
+    "description": "At the start of each combat, add a random Power to your hand. It costs 0 for that turn.",
+    "triggers": []
+  },
+  {
+    "id": "face_of_cleric",
+    "name": "Face of Cleric",
+    "description": "At the end of combat, raise your Max HP by 1.",
+    "triggers": []
+  },
+  {
+    "id": "golden_idol",
+    "name": "Golden Idol",
+    "description": "Enemies drop 25% more Gold.",
+    "triggers": []
+  },
+  {
+    "id": "gremlin_visage",
+    "name": "Gremlin Visage",
+    "description": "Start each combat with 1 Weak.",
+    "triggers": []
+  },
+  {
+    "id": "mark_of_the_bloom",
+    "name": "Mark of the Bloom",
+    "description": "You can no longer heal.",
+    "triggers": []
+  },
+  {
+    "id": "mutagenic_strength",
+    "name": "Mutagenic Strength",
+    "description": "Start each combat with 3 Strength. At the end of your first turn, lose 3 Strength.",
+    "triggers": []
+  },
+  {
+    "id": "nloths_gift",
+    "name": "N'loth's Gift",
+    "description": "Triples the chance of finding Rare cards from combat rewards.",
+    "triggers": []
+  },
+  {
+    "id": "nloths_hungry_face",
+    "name": "N'loth's Hungry Face",
+    "description": "The next non-Boss chest you open is empty.",
+    "triggers": []
+  },
+  {
+    "id": "necronomicon",
+    "name": "Necronomicon",
+    "description": "The first Attack played each turn that costs 2 or more is played twice. Upon pickup, obtain a special Curse.",
+    "triggers": []
+  },
+  {
+    "id": "neows_lament",
+    "name": "Neow's Lament",
+    "description": "Enemies in your first 3 combats will have 1 HP.",
+    "triggers": []
+  },
+  {
+    "id": "nilrys_codex",
+    "name": "Nilry's Codex",
+    "description": "At the end of each turn, you may shuffle 1 of 3 random cards into your draw pile.",
+    "triggers": []
+  },
+  {
+    "id": "odd_mushroom",
+    "name": "Odd Mushroom",
+    "description": "When Vulnerable, take 25% more attack damage rather than 50%.",
+    "triggers": []
+  },
+  {
+    "id": "red_mask",
+    "name": "Red Mask",
+    "description": "At the start of each combat, apply 1 Weak to ALL enemies.",
+    "triggers": []
+  },
+  {
+    "id": "spirit_poop",
+    "name": "Spirit Poop",
+    "description": "It's unpleasant.",
+    "triggers": []
+  },
+  {
+    "id": "ssserpent_head",
+    "name": "Ssserpent Head",
+    "description": "Whenever you enter a ? room, gain 50 Gold.",
+    "triggers": []
+  },
+  {
+    "id": "warped_tongs",
+    "name": "Warped Tongs",
+    "description": "At the start of your turn, Upgrade a random card in your hand for the rest of combat.",
+    "triggers": []
   }
 ]

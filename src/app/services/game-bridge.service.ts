@@ -39,6 +39,12 @@ export interface MapConfigAct extends ActConfig {
   bossEncounter?: string;
   encounterWeights?: Record<string, number>;
   eliteEncounterWeights?: Record<string, number>;
+  /** Act 1: pool for first 3 monster fights (Cultist, Jaw Worm, 2 Louses, Small Slimes). */
+  firstThreeEncounterPool?: string[];
+  firstThreeEncounterWeights?: Record<string, number>;
+  /** Act 2/3: pool for first 2 monster fights. */
+  firstTwoEncounterPool?: string[];
+  firstTwoEncounterWeights?: Record<string, number>;
 }
 
 // Re-export loadData types
@@ -54,9 +60,9 @@ const META_SAVE_KEY = 'meta.json';
 
 /** Unlocks granted when reaching Act 2 for the first time. */
 const UNLOCK_ON_ACT2_CARDS = ['plasma_shot', 'reactive_plating', 'overclock'];
-const UNLOCK_ON_ACT2_RELICS = ['plating_fragment'];
+const UNLOCK_ON_ACT2_RELICS = ['thread_and_needle'];
 /** Unlock granted on run victory. */
-const UNLOCK_ON_VICTORY_RELIC = 'turbo_injector';
+const UNLOCK_ON_VICTORY_RELIC = 'velvet_choker';
 
 declare const window: Window & { electronAPI?: { readSave: (path: string) => Promise<unknown>; writeSave: (path: string, data: unknown) => Promise<void> } };
 
@@ -249,6 +255,7 @@ export class GameBridgeService {
     this.setState(engineStartRun(runSeed, actConfig, {
       starterDeck: starterDeck?.length ? starterDeck : undefined,
       characterId: character ? characterId : undefined,
+      starterRelicId: character?.starterRelicId,
     }));
   }
 
@@ -521,6 +528,18 @@ export class GameBridgeService {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
+  /** Get pool and weights for next monster (combat) encounter: first-N vs remaining by act and encounter index. */
+  private getMonsterEncounterPoolAndWeights(actConfig: MapConfigAct, encounterIndex: number): { pool: string[]; weights?: Record<string, number> } {
+    const act = this.state?.act ?? 1;
+    if (act === 1 && actConfig.firstThreeEncounterPool?.length && encounterIndex <= 3) {
+      return { pool: actConfig.firstThreeEncounterPool, weights: actConfig.firstThreeEncounterWeights };
+    }
+    if ((act === 2 || act === 3) && actConfig.firstTwoEncounterPool?.length && encounterIndex <= 2) {
+      return { pool: actConfig.firstTwoEncounterPool, weights: actConfig.firstTwoEncounterWeights };
+    }
+    return { pool: actConfig.encounterPool ?? [], weights: actConfig.encounterWeights };
+  }
+
   chooseNode(nodeId: string): void {
     if (!this.state || !this.cardsMap || !this.enemyDefs || !this.encountersMap || !this.mapConfig) return;
     const actKey = `act${this.state.act ?? 1}`;
@@ -535,15 +554,18 @@ export class GameBridgeService {
           actConfig.eliteEncounterPool,
           actConfig.eliteEncounterWeights
         );
-      } else if ((node?.type === 'combat' || node?.type === 'elite') && actConfig?.encounterPool?.length) {
-        encounterId = this.pickEncounter(
-          actConfig.encounterPool,
-          actConfig.encounterWeights
-        );
+      } else if (node?.type === 'combat' && actConfig?.encounterPool?.length) {
+        const encounterIndex = (this.state.monsterEncountersCompletedThisAct ?? 0) + 1;
+        const { pool, weights } = this.getMonsterEncounterPoolAndWeights(actConfig, encounterIndex);
+        const exclude = new Set(this.state.lastMonsterEncounterIds ?? []);
+        const filtered = pool.filter((id) => !exclude.has(id));
+        const usePool = filtered.length > 0 ? filtered : pool;
+        encounterId = this.pickEncounter(usePool, weights);
       }
     }
     const shopPool = this.getMergedShopPool(actKey);
     const eventPool = this.getEventPoolForAct(this.state.act ?? 1);
+    const rewardCardPool = this.getRewardCardPoolForAct(actKey);
     let next = engineChooseNode(
       this.state,
       nodeId,
@@ -552,7 +574,8 @@ export class GameBridgeService {
       this.enemyDefs,
       this.encountersMap,
       eventPool,
-      shopPool
+      shopPool,
+      rewardCardPool
     );
     if (next.runPhase === 'combat' && this.relicDefs) {
       next = runRelics(next, 'onCombatStart', this.relicDefs);
@@ -666,8 +689,23 @@ export class GameBridgeService {
       }
     } else {
       const actKey = `act${this.state.act ?? 1}`;
+      const actConfig = this.mapConfig?.[actKey];
       const rewardPool = this.getRewardCardPoolForAct(actKey);
-      this.setState(engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!));
+      let next = engineAfterCombatWin(this.state, rewardPool.length > 0 ? rewardPool : (this.rewardCardPool ?? []), this.cardsMap!);
+      const wasMonster =
+        this.state.currentEncounter != null &&
+        actConfig &&
+        actConfig.bossEncounter !== this.state.currentEncounter &&
+        !actConfig.eliteEncounterPool?.includes(this.state.currentEncounter);
+      if (wasMonster) {
+        next = {
+          ...next,
+          monsterEncountersCompletedThisAct: (next.monsterEncountersCompletedThisAct ?? 0) + 1,
+          lastMonsterEncounterIds: [...(next.lastMonsterEncounterIds ?? []), this.state.currentEncounter!].slice(-2),
+        };
+      }
+      if (this.relicDefs) next = runRelics(next, 'onCombatEnd', this.relicDefs);
+      this.setState(next);
       if (this.state.potions && this.state.potions.length < GAME_BALANCE.maxPotions && Math.random() < GAME_BALANCE.potionDropChance) {
         const potionId = enginePickRandomPotionByRarity(this.potionDefs);
         if (potionId) this.setState({ ...this.state, potions: [...this.state.potions, potionId] });
