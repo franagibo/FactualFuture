@@ -923,7 +923,7 @@ function drawDragCardPreview(ctx: CombatViewContext): void {
   stage.addChild(container);
 }
 
-/** Draws the returning card animating back into the hand (ease-in), with full UI (cost, name, text). */
+/** Draws the returning card animating back into the hand (ease-out), with full UI (cost, name, text). */
 function drawReturningCard(ctx: CombatViewContext): void {
   const { state, stage } = ctx;
   if (ctx.cardInteractionState !== 'returning' || ctx.returnProgress == null || ctx.getHandLayout == null) return;

@@ -405,8 +405,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           : 0
       );
       const dt = (ticker.deltaTime ?? 1) / 60;
-      const factor = 1 - Math.exp(-14 * dt);
-      const spreadFactor = 1 - Math.exp(-12 * dt);
+      const factor = 1 - Math.exp(-COMBAT_TIMING.hoverLerpSpeed * dt);
+      const spreadFactor = 1 - Math.exp(-COMBAT_TIMING.spreadLerpSpeed * dt);
       let changed = false;
       const now = performance.now();
       // Drive redraw every frame when character or enemies have idle animations so they advance
@@ -417,7 +417,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (this.combatController.cardInteractionState === 'returning') {
         const elapsed = performance.now() - this.combatController.returnStartTime;
         const raw = Math.min(1, elapsed / this.returnDurationMs);
-        this.combatController.returnProgress = 1 - (1 - raw) * (1 - raw);
+        // Cubic ease-out: smooth deceleration at the end for a polished snap-in
+        this.combatController.returnProgress = 1 - (1 - raw) ** 3;
         if (raw >= 1) {
           this.combatController.cardInteractionState = 'idle';
           this.combatController.cardInteractionCardIndex = null;
@@ -1038,14 +1039,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (this.combatController.hoveredCardIndex === null) return;
 
     this.combatController.hoveredCardIndex = null;
-    // Snap all cards back to default position immediately.
+    // Animate cards back: set target to 0 and let the ticker smoothly lerp hoverLerp/spreadLerp
     this.combatController.targetLerp = hand.map(() => 0);
-    this.combatController.hoverLerp = [...this.combatController.targetLerp];
-    const layout = getHandLayout(hand.length, this.app.screen.width, this.app.screen.height, null, {
-      handLayout: this.gameSettings.handLayout(),
-      reducedMotion: this.gameSettings.reducedMotion(),
-    });
-    this.combatController.spreadLerp = layout.positions.map((p) => p.spreadOffsetX ?? 0);
 
     this.redraw();
     this.requestTemplateUpdate();

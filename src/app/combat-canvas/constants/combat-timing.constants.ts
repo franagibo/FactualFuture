@@ -6,7 +6,11 @@ export const COMBAT_TIMING = {
   /** Floating number (damage/block) display duration before removal. */
   floatingNumberTtlMs: 700,
   /** Card return-to-hand animation duration. */
-  returnDurationMs: 200,
+  returnDurationMs: 260,
+  /** Hover lift/scale lerp: exponential decay coefficient (higher = snappier). ~10 gives a fluid ~6–8 frame settle. */
+  hoverLerpSpeed: 10,
+  /** Neighbor spread lerp: exponential decay coefficient. Slightly slower than hover for a staggered feel. */
+  spreadLerpSpeed: 8,
   /** Delay before calling endTurn() after "Enemy turn" banner. */
   enemyTurnBannerDelayMs: 1200,
   /** Delay before transitioning after reward selection feedback. */
