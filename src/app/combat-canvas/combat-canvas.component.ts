@@ -603,7 +603,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
 
     const stage = this.app.stage;
-    stage.removeChildren();
+    const removed = stage.removeChildren();
+    for (const child of removed) {
+      child.destroy({ children: true, texture: false });
+    }
 
     const padding = COMBAT_LAYOUT.padding;
 
@@ -1048,6 +1051,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Card pointer down: enter Pressed; Dragging after threshold; play or Returning on release. */
   onCardPointerDown(cardId: string, handIndex: number, stageX: number, stageY: number): void {
+    this.clearDragListeners();
     const state = this.bridge.getState();
     if (!state || state.phase !== 'player' || state.combatResult || this._runPhase !== 'combat') return;
     const cost = this.getCardCost(cardId);
@@ -1261,56 +1265,62 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       ? 0
       : Math.max(120, 280 / speedMult); // ms; clamp so it never gets too fast
     const startTime = performance.now();
+    const completePlay = (): void => {
+      this.app!.ticker.remove(tick);
+      if (flyCard.parent) flyCard.destroy({ children: true });
+      const oldState = state;
+      this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
+      this.triggerShieldAnimationIfBlock(cardId);
+      this.triggerShootingAnimationIfStrike(cardId);
+      this.sound.playCardPlay();
+      const vfxId = this.cardVfx.getVfxIdForCard(cardId);
+      if (vfxId && this.gameSettings.vfxIntensity() !== 'off' && this.cardVfx.getVfxFrames(vfxId).length > 0) {
+        this.combatController.activeCardVfx.push({ vfxId, x: toX, y: toY, startTime: performance.now() });
+      }
+      const newState = this.bridge.getState()!;
+      this.combatController.cardInteractionState = 'idle';
+      this.combatController.cardInteractionCardIndex = null;
+      this.combatController.cardInteractionCardId = null;
+      this.combatController.hoveredEnemyIndex = null;
+      const now = performance.now();
+      const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt: number }[] = [];
+      if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
+        const hpLost = oldState.enemies[enemyIndex].hp - newState.enemies[enemyIndex].hp;
+        if (hpLost > 0) {
+          toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
+          this.sound.playHit();
+          this.combatController.enemyHurtStartMs[enemyIndex] = now;
+          if (newState.enemies[enemyIndex].hp <= 0) {
+            this.combatController.enemyDyingStartMs[enemyIndex] = now;
+          }
+        }
+      }
+      const blockGain = newState.playerBlock - oldState.playerBlock;
+      if (blockGain > 0) {
+        const playerCenter = getPlayerCenter(w, h);
+        toAdd.push({ type: 'block', value: blockGain, x: playerCenter.x, y: playerCenter.y, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
+        this.sound.playBlock();
+      }
+      this.combatController.floatingNumbers = [...this.combatController.floatingNumbers, ...toAdd];
+      this.redraw();
+      this.requestTemplateUpdate();
+      if (toAdd.length > 0) {
+        const delay = this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.redrawAfterFloatMs;
+        setTimeout(() => this.redraw(), delay);
+      }
+    };
+
     const tick = () => {
+      if (!flyCard.parent) {
+        completePlay();
+        return;
+      }
       const elapsed = performance.now() - startTime;
       const t = Math.min(1, elapsed / duration);
       const ease = 1 - (1 - t) * (1 - t); // ease-out
       flyCard.x = fromX + (toX - fromX) * ease;
       flyCard.y = fromY + (toY - fromY) * ease;
-      if (t >= 1) {
-        this.app!.ticker.remove(tick);
-        flyCard.destroy({ children: true });
-        const oldState = state;
-        this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
-        this.triggerShieldAnimationIfBlock(cardId);
-        this.triggerShootingAnimationIfStrike(cardId);
-        this.sound.playCardPlay();
-        const vfxId = this.cardVfx.getVfxIdForCard(cardId);
-        if (vfxId && this.gameSettings.vfxIntensity() !== 'off' && this.cardVfx.getVfxFrames(vfxId).length > 0) {
-          this.combatController.activeCardVfx.push({ vfxId, x: toX, y: toY, startTime: performance.now() });
-        }
-        const newState = this.bridge.getState()!;
-        this.combatController.cardInteractionState = 'idle';
-        this.combatController.cardInteractionCardIndex = null;
-        this.combatController.cardInteractionCardId = null;
-        this.combatController.hoveredEnemyIndex = null;
-        const now = performance.now();
-        const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt: number }[] = [];
-        if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
-          const hpLost = oldState.enemies[enemyIndex].hp - newState.enemies[enemyIndex].hp;
-          if (hpLost > 0) {
-            toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
-            this.sound.playHit();
-            this.combatController.enemyHurtStartMs[enemyIndex] = now;
-            if (newState.enemies[enemyIndex].hp <= 0) {
-              this.combatController.enemyDyingStartMs[enemyIndex] = now;
-            }
-          }
-        }
-        const blockGain = newState.playerBlock - oldState.playerBlock;
-        if (blockGain > 0) {
-          const playerCenter = getPlayerCenter(w, h);
-          toAdd.push({ type: 'block', value: blockGain, x: playerCenter.x, y: playerCenter.y, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
-          this.sound.playBlock();
-        }
-        this.combatController.floatingNumbers = [...this.combatController.floatingNumbers, ...toAdd];
-        this.redraw();
-        this.requestTemplateUpdate();
-        if (toAdd.length > 0) {
-          const delay = this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.redrawAfterFloatMs;
-          setTimeout(() => this.redraw(), delay);
-        }
-      }
+      if (t >= 1) completePlay();
     };
     this.app.ticker.add(tick);
   }
