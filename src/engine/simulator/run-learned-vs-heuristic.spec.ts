@@ -33,7 +33,7 @@ function loadJson<T>(file: string): T {
 }
 
 function loadSeedList(): number[] | null {
-  const seedFile = process.env.SIM_SEED_FILE;
+  const seedFile = process.env['SIM_SEED_FILE'];
   if (!seedFile || !seedFile.trim()) return null;
   const filePath = path.isAbsolute(seedFile) ? seedFile : path.join(process.cwd(), seedFile);
   if (!fs.existsSync(filePath)) return null;
@@ -58,7 +58,7 @@ describe('run-learned-vs-heuristic (script)', () => {
     const policyJsonPath =
       env['POLICY_JSON'] && env['POLICY_JSON'].trim().length > 0
         ? path.resolve(process.cwd(), env['POLICY_JSON'])
-        : path.resolve(process.cwd(), 'bot-training', 'learned-policy-gungirl.json');
+        : path.resolve(process.cwd(), 'bot-training', `learned-policy-${characterId}.json`);
 
     if (!fs.existsSync(policyJsonPath)) {
       throw new Error(
@@ -98,9 +98,9 @@ describe('run-learned-vs-heuristic (script)', () => {
     const rewardCardPool = poolIds?.length ? poolIds : Array.from(cardsMap.keys()).slice(0, 30);
 
     const mapConfig = {
-      act1: mapConfigData.act1 as SimulatorOptions['mapConfig']['act1'],
-      act2: mapConfigData.act2 as SimulatorOptions['mapConfig']['act2'],
-      act3: mapConfigData.act3 as SimulatorOptions['mapConfig']['act3'],
+      act1: mapConfigData['act1'] as SimulatorOptions['mapConfig']['act1'],
+      act2: mapConfigData['act2'] as SimulatorOptions['mapConfig']['act2'],
+      act3: mapConfigData['act3'] as SimulatorOptions['mapConfig']['act3'],
     };
 
     console.log(

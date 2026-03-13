@@ -67,6 +67,10 @@ export interface SimulatorOptions {
   useLearnedPolicyBot?: boolean;
   /** Optional policy config to set for this run (overrides any globally cached one). */
   learnedPolicyConfig?: LearnedPolicyConfig | null;
+  /** When true, only keep first combat metrics per run (saves memory during large data collection). */
+  minimalRunMetrics?: boolean;
+  /** Max turns per combat before forcing a loss (avoids infinite loops e.g. VM plants tanking). Default 99. */
+  maxCombatTurns?: number;
 }
 
 export interface CombatMetrics {
@@ -135,6 +139,9 @@ export type CombatEndHook = (combatWon: boolean) => void;
 /** Called when a full run ends (win or lose). Use to tag samples with run-level outcome. */
 export type RunEndHook = (runWon: boolean) => void;
 
+/** Default cap on combat length so simulation cannot hang (e.g. VM with plants tanking indefinitely). */
+const DEFAULT_MAX_COMBAT_TURNS = 99;
+
 export function runCombatToConclusion(
   state: GameState,
   cardsMap: Map<string, CardDef>,
@@ -149,11 +156,13 @@ export function runCombatToConclusion(
     archetypeContext: ArchetypeContext
   ) => BotAction = pickAction,
   onDecision?: DecisionSampleHook,
-  onCombatEnd?: CombatEndHook
+  onCombatEnd?: CombatEndHook,
+  opts?: { maxCombatTurns?: number }
 ): { state: GameState; combatMetrics: CombatMetrics } {
   const encounterId = state.currentEncounter ?? '';
   const hpStart = state.playerHp;
   let turns = state.turnNumber ?? 1;
+  const maxTurns = opts?.maxCombatTurns ?? DEFAULT_MAX_COMBAT_TURNS;
 
   let next = state;
   if (relicDefs) {
@@ -162,6 +171,10 @@ export function runCombatToConclusion(
   }
 
   while (next.runPhase === 'combat' && next.combatResult !== 'win' && next.combatResult !== 'lose') {
+    if ((next.turnNumber ?? 1) > maxTurns) {
+      next = { ...next, combatResult: 'lose' };
+      break;
+    }
     if (next.phase !== 'player') {
       next = endTurn(next, cardsMap, enemyDefs);
       if (relicDefs) next = runRelics(next, 'onTurnStart', relicDefs);
@@ -286,6 +299,35 @@ function scoreRewardCard(
     if (hasAoe) score += 20;
   }
 
+  // Verdant Machinist: archetype-aware reward scoring.
+  if (state.characterId === 'verdant_machinist') {
+    const hasSummonPlant = effects.some((e) => e.type === 'summon_plant');
+    const hasGrowPlant = effects.some((e) => e.type === 'grow_plant');
+    const hasEvolvePlant = effects.some((e) => e.type === 'evolve_plant');
+    const hasSacrificePlant = effects.some((e) => e.type === 'sacrifice_plant');
+    const hasBlockToPlant = effects.some((e) => e.type === 'blockToPlant');
+    const hasPlantModeDefense = effects.some(
+      (e) => e.type === 'plant_mode' && (e as { mode?: string }).mode === 'defense'
+    );
+    if (archetype.primary === 'plant_swarm' || archetype.secondary === 'plant_swarm') {
+      if (hasSummonPlant) score += 18;
+      if (hasAoe) score += 12;
+    }
+    if (archetype.primary === 'plant_evolution' || archetype.secondary === 'plant_evolution') {
+      if (hasGrowPlant) score += 14;
+      if (hasEvolvePlant) score += 20;
+    }
+    if (archetype.primary === 'plant_sacrifice' || archetype.secondary === 'plant_sacrifice') {
+      if (hasSacrificePlant) score += 18;
+      if (hasDamage && hasSacrificePlant) score += 10;
+    }
+    if (archetype.primary === 'plant_defense' || archetype.secondary === 'plant_defense') {
+      if (hasBlock) score += 10;
+      if (hasBlockToPlant) score += 16;
+      if (hasPlantModeDefense) score += 12;
+    }
+  }
+
   return score;
 }
 
@@ -373,10 +415,15 @@ export function singleRun(
           archetypeContext,
           combatBot,
           hooks?.onDecision,
-          hooks?.onCombatEnd
+          hooks?.onCombatEnd,
+          { maxCombatTurns: opts.maxCombatTurns }
         );
         state = afterCombat;
-        combats.push(combatMetrics);
+        if (opts.minimalRunMetrics) {
+          if (combats.length === 0) combats.push(combatMetrics);
+        } else {
+          combats.push(combatMetrics);
+        }
 
         if (state.combatResult === 'lose') {
           hooks?.onRunEnd?.(false);

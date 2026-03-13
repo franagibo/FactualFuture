@@ -2,6 +2,7 @@ import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, HostList
 import { Router } from '@angular/router';
 import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
+import { SoundService } from '../services/sound.service';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
 
 @Component({
@@ -288,12 +289,14 @@ export class MainMenuComponent implements OnInit {
   constructor(
     private router: Router,
     private bridge: GameBridgeService,
+    private sound: SoundService,
     private cdr: ChangeDetectorRef
   ) {}
 
   showDataLoadError = false;
 
   async ngOnInit(): Promise<void> {
+    this.sound.startMainMenuSoundtrack();
     this.loadBackgroundImage();
     try {
       await this.bridge.ensureDataLoaded();
@@ -351,7 +354,7 @@ export class MainMenuComponent implements OnInit {
   onPlay(): void {
     this.bridge.clearState();
     this.bridge.clearSavedRun();
-    this.router.navigate(['/game']);
+    this.router.navigate(['/select-character']);
   }
 
   async onContinue(): Promise<void> {

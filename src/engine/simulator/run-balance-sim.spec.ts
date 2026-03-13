@@ -90,10 +90,11 @@ describe('run-balance-sim (script)', () => {
     let learnedPolicyConfig: SimulatorOptions['learnedPolicyConfig'];
 
     if (useLearnedBotForBaseline) {
+      const characterIdForPolicy = process.env['SIM_CHARACTER'] ?? 'gungirl';
       const policyJsonPath =
         process.env['POLICY_JSON'] && process.env['POLICY_JSON'].trim().length > 0
           ? path.resolve(process.cwd(), process.env['POLICY_JSON'])
-          : path.resolve(process.cwd(), 'bot-training', 'learned-policy-gungirl.json');
+          : path.resolve(process.cwd(), 'bot-training', `learned-policy-${characterIdForPolicy}.json`);
       if (!fs.existsSync(policyJsonPath)) {
         throw new Error(
           `Learned policy not found at ${policyJsonPath}. Run "npm run bot:full" first to train and export the policy, then run balance:baseline.`

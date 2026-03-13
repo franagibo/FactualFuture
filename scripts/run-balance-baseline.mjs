@@ -11,8 +11,14 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
+const characterId = process.env.SIM_CHARACTER ?? 'gungirl';
 process.env.SIM_SEED_FILE = path.join(repoRoot, 'scripts', 'balance-seeds.json');
-process.env.BALANCE_BASELINE_OUT = path.join(repoRoot, 'data', 'balance-baseline.json');
+process.env.BALANCE_BASELINE_OUT =
+  process.env.BALANCE_BASELINE_OUT ??
+  path.join(repoRoot, 'data', characterId === 'gungirl' ? 'balance-baseline.json' : `balance-baseline-${characterId}.json`);
+process.env.POLICY_JSON =
+  process.env.POLICY_JSON ??
+  path.join('bot-training', characterId === 'gungirl' ? 'learned-policy-gungirl.json' : `learned-policy-${characterId}.json`);
 
 const child = spawn(
   'npx',
@@ -21,7 +27,13 @@ const child = spawn(
     cwd: repoRoot,
     stdio: 'inherit',
     shell: true,
-    env: { ...process.env, SIM_SEED_FILE: process.env.SIM_SEED_FILE, BALANCE_BASELINE_OUT: process.env.BALANCE_BASELINE_OUT },
+    env: {
+      ...process.env,
+      SIM_CHARACTER: characterId,
+      SIM_SEED_FILE: process.env.SIM_SEED_FILE,
+      BALANCE_BASELINE_OUT: process.env.BALANCE_BASELINE_OUT,
+      POLICY_JSON: process.env.POLICY_JSON,
+    },
   }
 );
 child.on('exit', (code) => process.exit(code ?? 0));

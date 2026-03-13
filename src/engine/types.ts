@@ -55,6 +55,23 @@ export interface EnemyState {
   size?: 'small' | 'medium' | 'large';
 }
 
+/** Plant mode: determines end-of-turn action (Verdant Machinist). */
+export type PlantMode = 'defense' | 'attack' | 'support';
+
+/** Plant minion state (Verdant Machinist). Max 3 plants. 3 Growth → evolve. */
+export interface PlantState {
+  id: string;
+  hp: number;
+  maxHp: number;
+  block: number;
+  /** 0–3; at 3 Growth the plant evolves (advance stage, reset growth). */
+  growth: number;
+  /** 1=Seedling, 2=Sprout, 3=Mature. */
+  growthStage: 1 | 2 | 3;
+  mode: PlantMode;
+  turnsAlive: number;
+}
+
 export interface GameState {
   playerHp: number;
   playerMaxHp: number;
@@ -129,6 +146,8 @@ export interface GameState {
   playerNextCardPlayedTwice?: boolean;
   /** Optional RNG for simulator; same seed => reproducible run. Do not set in normal play. */
   _simRng?: () => number;
+  /** Verdant Machinist: up to 3 plant minions. Present only when character uses plant mechanic. */
+  plants?: PlantState[];
 }
 
 /** Meta progression (unlocks) and run statistics, stored separately from run. */

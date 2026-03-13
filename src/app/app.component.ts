@@ -18,7 +18,6 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.sound.loadSoundPreferences();
-    this.sound.startSoundtrack();
     this.mapAssets.loadMapAssets().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[App] Map assets preload failed', err); });
     this.preloadMainMenuBackground();
   }

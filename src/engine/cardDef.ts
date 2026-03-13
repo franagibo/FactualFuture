@@ -1,3 +1,9 @@
+/** Plant mode for plant_mode effect (Verdant Machinist). */
+export type PlantModeEffect = 'defense' | 'attack' | 'support';
+
+/** Target for plant effects: which plant(s) to apply to. */
+export type PlantEffectTarget = 'all' | 'first' | 'random';
+
 export interface CardEffect {
   type:
     | 'damage'
@@ -23,7 +29,13 @@ export interface CardEffect {
     | 'addCardToDiscard'
     | 'loseHp'
     | 'multiHit'
-    | 'doubleBlock';
+    | 'doubleBlock'
+    | 'summon_plant'
+    | 'grow_plant'
+    | 'plant_mode'
+    | 'sacrifice_plant'
+    | 'evolve_plant'
+    | 'blockToPlant';
   value: number;
   /** For multiHit: number of hits (each hit = value damage). */
   times?: number;
@@ -31,7 +43,11 @@ export interface CardEffect {
   strengthScale?: number;
   /** For addCardToDiscard: card id to add (e.g. injury). */
   cardId?: string;
-  target?: 'player' | 'enemy';
+  target?: 'player' | 'enemy' | 'plant';
+  /** For grow_plant / plant_mode: 'all' | 'first' | 'random'. */
+  plantTarget?: PlantEffectTarget;
+  /** For plant_mode: which mode to set. */
+  mode?: PlantModeEffect;
 }
 
 /** Rarity for reward/shop weighting (e.g. common 70%, uncommon 25%, rare 5%). Optional; when absent, card is treated as common. */

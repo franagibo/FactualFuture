@@ -81,6 +81,10 @@ export const COMBAT_LAYOUT = {
   intentLabelOffset: 4,
   /** Card name/description horizontal padding for word wrap width. */
   cardTextPadding: 48,
+  /** Plants (Verdant Machinist): width/height per plant slot. */
+  plantSlotW: 90,
+  plantSlotH: 70,
+  plantGap: 12,
 } as const;
 
 /** Named slots used by the combat renderer for placement and z-order. */
@@ -172,6 +176,28 @@ export function getEnemyLayout(w: number, h: number, enemyCount: number): EnemyL
 /** Center point for an enemy at the given index (0-based) given the number of enemies. */
 export function getEnemyCenter(index: number, enemyCount: number, w: number, h: number): { x: number; y: number } {
   return getEnemyLayout(w, h, enemyCount).getCenter(index);
+}
+
+/** Layout for plant slots (Verdant Machinist): between player and enemies, horizontal row. */
+export function getPlantsLayout(w: number, h: number, plantCount: number): { startX: number; startY: number; slotW: number; slotH: number; gap: number; getCenter: (index: number) => { x: number; y: number } } {
+  const L = COMBAT_LAYOUT;
+  const baselineBottom = h * L.baselineBottomRatio;
+  const totalWidth = plantCount * L.plantSlotW + (plantCount - 1) * L.plantGap;
+  const startX = w * 0.36 - totalWidth / 2;
+  const startY = baselineBottom - L.playerPlaceholderH * 0.35 - L.plantSlotH;
+  return {
+    startX,
+    startY,
+    slotW: L.plantSlotW,
+    slotH: L.plantSlotH,
+    gap: L.plantGap,
+    getCenter(index: number) {
+      return {
+        x: startX + index * (L.plantSlotW + L.plantGap) + L.plantSlotW / 2,
+        y: startY + L.plantSlotH / 2,
+      };
+    },
+  };
 }
 
 /** Index of the enemy under stage point (x,y), or null. Uses same layout as renderer for hit-test during drag. */

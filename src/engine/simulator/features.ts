@@ -101,32 +101,38 @@ function encodePlayer(state: GameState): number[] {
   ];
 }
 
+/** Ordered list of all archetypes used for encoding (Gungirl + Verdant Machinist). Same size for both characters. */
+const ARCHETYPE_ENCODING_ORDER: ArchetypeContext['primary'][] = [
+  'strength',
+  'block_barricade',
+  'exhaust',
+  'vulnerable_loop',
+  'aoe_finisher',
+  'plant_swarm',
+  'plant_evolution',
+  'plant_sacrifice',
+  'plant_defense',
+  'generic',
+];
+
+const ARCHETYPE_FEATURE_LEN =
+  ARCHETYPE_ENCODING_ORDER.length * 2 + ARCHETYPE_ENCODING_ORDER.length; // primary one-hot + secondary one-hot + scores
+
 function encodeArchetype(archetype: ArchetypeContext | null | undefined): number[] {
   if (!archetype) {
-    // primary/secondary one-hot (6 options) + raw scores (6).
-    return [
-      ...new Array(6).fill(0),
-      ...new Array(6).fill(0),
-    ];
+    return new Array(ARCHETYPE_FEATURE_LEN).fill(0);
   }
 
-  const archetypes: ArchetypeContext['primary'][] = [
-    'strength',
-    'block_barricade',
-    'exhaust',
-    'vulnerable_loop',
-    'aoe_finisher',
-    'generic',
-  ];
-
-  const primaryIndex = archetypes.indexOf(archetype.primary);
+  const primaryIndex = ARCHETYPE_ENCODING_ORDER.indexOf(archetype.primary);
   const secondaryIndex =
-    archetype.secondary != null ? archetypes.indexOf(archetype.secondary) : -1;
+    archetype.secondary != null
+      ? ARCHETYPE_ENCODING_ORDER.indexOf(archetype.secondary)
+      : -1;
 
-  const primaryOneHot = oneHot(primaryIndex, archetypes.length);
-  const secondaryOneHot = oneHot(secondaryIndex, archetypes.length);
+  const primaryOneHot = oneHot(primaryIndex, ARCHETYPE_ENCODING_ORDER.length);
+  const secondaryOneHot = oneHot(secondaryIndex, ARCHETYPE_ENCODING_ORDER.length);
 
-  const scoreValues = archetypes.map((id) =>
+  const scoreValues = ARCHETYPE_ENCODING_ORDER.map((id) =>
     clamp((archetype.scores[id] ?? 0) / 10, 0, 1)
   );
 
@@ -167,8 +173,7 @@ function encodeCardSummary(card: CardDef | undefined): number[] {
       e.type === 'exhaustHandNonAttackGainBlock'
   );
   const isPower =
-    card.type === 'power' ||
-    (!hasDamage && !hasBlock && effects.length > 0 && card.type !== 'status');
+    (!hasDamage && !hasBlock && effects.length > 0 && !card.isStatus);
 
   const costNorm = clamp((card.cost ?? 0) / 3, 0, 1);
 
@@ -219,12 +224,7 @@ function encodeCardSummary(card: CardDef | undefined): number[] {
     ) {
       hasExhaustSynergy = true;
     }
-    if (
-      e.type === 'draw' ||
-      e.type === 'drawUpTo' ||
-      e.type === 'gainEnergy' ||
-      e.type === 'scry'
-    ) {
+    if (e.type === 'draw' || e.type === 'energy') {
       hasUtility = true;
     }
   }

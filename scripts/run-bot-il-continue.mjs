@@ -35,6 +35,8 @@ function main() {
   const characterId = env.SIM_CHARACTER ?? 'gungirl';
   const simNCompare = env.SIM_N_COMPARE ?? '400';
   const simSeed = env.SIM_SEED ?? '';
+  const policyJsonName = env.IL_MODEL_JSON ?? (characterId === 'gungirl' ? 'learned-policy-gungirl.json' : `learned-policy-${characterId}.json`);
+  const weightsFile = env.IL_WEIGHTS_OUT ?? (characterId === 'gungirl' ? 'policy_best.pt' : `policy_best_${characterId}.pt`);
 
   const imitationDir = path.join(root, 'data', 'imitation');
   const ndjsonPath = env.IL_DATA_FILE
@@ -57,10 +59,9 @@ function main() {
       : path.join(botTrainingDir, '.venv', 'bin', 'python');
   const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python';
 
-  const weightsFile = env.IL_WEIGHTS_OUT ?? 'policy_best.pt';
   const weightsPath = path.join(botTrainingDir, weightsFile);
 
-  // 1) Continue training from existing weights (if present).
+  // 1) Continue training from existing weights (if present). Use full path so output is in bot-training/.
   runStep(
     pythonCmd,
     [
@@ -72,7 +73,7 @@ function main() {
       '--batch-size',
       env.IL_BATCH_SIZE ?? '64',
       '--out',
-      weightsFile,
+      weightsPath,
       '--init-weights',
       weightsPath,
       '--win-weight',
@@ -83,7 +84,7 @@ function main() {
     {}
   );
 
-  // 2) Export weights to JSON for the engine.
+  // 2) Export weights to JSON for the engine. Use full path so output is in bot-training/.
   runStep(
     pythonCmd,
     [
@@ -93,7 +94,7 @@ function main() {
       '--weights',
       weightsPath,
       '--out',
-      env.IL_MODEL_JSON ?? 'learned-policy-gungirl.json',
+      path.join(botTrainingDir, policyJsonName),
     ],
     {}
   );
@@ -104,7 +105,7 @@ function main() {
       SIM_CHARACTER: characterId,
       SIM_N: simNCompare,
       SIM_SEED: simSeed,
-      POLICY_JSON: path.join('bot-training', env.IL_MODEL_JSON ?? 'learned-policy-gungirl.json'),
+      POLICY_JSON: path.join('bot-training', policyJsonName),
     },
   });
 

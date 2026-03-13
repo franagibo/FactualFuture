@@ -149,7 +149,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   /** Update overlay signals from bridge state so template does not call bridge on every CD. When state is provided, also sync _runPhase/_combatResult. */
   private syncOverlaySignals(state: GameState | null): void {
     if (state) {
-      this._runPhase = this.bridge.getRunPhase();
+      const nextPhase = this.bridge.getRunPhase();
+      if (nextPhase !== this._runPhase) {
+        if (nextPhase === 'map') this.sound.startMapSoundtrack();
+        if (nextPhase === 'combat') this.sound.startCombatSoundtrack();
+      }
+      this._runPhase = nextPhase;
       this._combatResult = state.combatResult ?? null;
     }
     this.runPhaseSignal.set(this._runPhase);
@@ -339,11 +344,15 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private async initPixi(): Promise<void> {
     await this.bridge.ensureDataLoaded();
     if (!this.bridge.getState()) {
-      this.bridge.startRun();
+      const characterId = this.bridge.getPendingCharacter() ?? 'gungirl';
+      this.bridge.startRun(characterId);
+      this.bridge.clearPendingCharacter();
     }
     const state = this.bridge.getState();
     this._combatResult = state?.combatResult ?? null;
     this._runPhase = this.bridge.getRunPhase();
+    if (this._runPhase === 'map') this.sound.startMapSoundtrack();
+    if (this._runPhase === 'combat') this.sound.startCombatSoundtrack();
     this.syncOverlaySignals(state);
     this.requestTemplateUpdate();
 
@@ -615,7 +624,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.syncOverlaySignals(state);
     if (state.combatResult === 'win' && prevResult !== 'win') this.sound.playVictory();
     if (state.combatResult === 'lose' && prevResult !== 'lose') this.sound.playDefeat();
-    if (this._runPhase === 'combat' && prevPhase !== 'combat') this.sound.playCombatStart();
+    if (this._runPhase === 'map' && prevPhase !== 'map') this.sound.startMapSoundtrack();
+    if (this._runPhase === 'combat' && prevPhase !== 'combat') {
+      this.sound.startCombatSoundtrack();
+      this.sound.playCombatStart();
+    }
     if (this._runPhase === 'combat' && prevPhase !== 'combat' && this.app) {
       this.cdr.detectChanges();
       this.app.resize();
@@ -1404,7 +1417,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   onRestart(): void {
-    this.bridge.startRun();
+    this.bridge.startRun(this.bridge.getCurrentCharacterId() ?? 'gungirl');
     this.redraw();
     this.requestTemplateUpdate();
     this.scheduleCanvasLayoutFix({ scrollToBottom: true });

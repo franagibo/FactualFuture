@@ -395,6 +395,38 @@ export function pickAction(
     }
 
     if (card.exhaust) c.score -= 2;
+
+    // Verdant Machinist: archetype-aware plant scoring.
+    const plantCount = state.plants?.filter((p) => p.hp > 0).length ?? 0;
+    const totalPlantBlock = state.plants?.reduce((s, p) => s + (p.block ?? 0), 0) ?? 0;
+    if (state.characterId === 'verdant_machinist') {
+      const swarmBonus = primaryArchetype === 'plant_swarm' ? 1.5 : 1;
+      if (plantCount < 3 && cardHasEffectType(card, 'summon_plant')) {
+        c.score += Math.round(15 * (3 - plantCount) * swarmBonus);
+      }
+      if (plantCount > 0 && cardHasEffectType(card, 'grow_plant')) {
+        const evolutionBonus = primaryArchetype === 'plant_evolution' ? 1.6 : 1;
+        c.score += Math.round(8 * evolutionBonus);
+      }
+      if (cardHasEffectType(card, 'evolve_plant') && plantCount > 0) {
+        c.score += primaryArchetype === 'plant_evolution' ? 25 : 12;
+      }
+      if (plantCount > 0 && cardHasEffectType(card, 'sacrifice_plant')) {
+        const sacrificeBonus = primaryArchetype === 'plant_sacrifice' ? 1.5 : 1;
+        c.score += Math.round(10 * sacrificeBonus);
+      }
+      if (
+        (cardHasEffectType(card, 'block') || cardHasEffectType(card, 'blockToPlant')) &&
+        (incoming > 0 || totalPlantBlock > 0)
+      ) {
+        const defenseBonus = primaryArchetype === 'plant_defense' ? 1.4 : 1;
+        if (cardHasEffectType(card, 'blockToPlant')) c.score += Math.round(6 * defenseBonus);
+        if (cardHasEffectType(card, 'plant_mode')) {
+          const mode = (card.effects.find((e) => e.type === 'plant_mode') as { mode?: string })?.mode;
+          if (mode === 'defense') c.score += Math.round(5 * defenseBonus);
+        }
+      }
+    }
   }
 
   // One-turn lookahead: simulate each candidate and add a lookahead term to the score.

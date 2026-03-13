@@ -73,6 +73,8 @@ declare const window: Window & { electronAPI?: { readSave: (path: string) => Pro
 @Injectable({ providedIn: 'root' })
 export class GameBridgeService {
   private state: GameState | null = null;
+  /** When set, next startRun() should use this character (e.g. from character select screen). Cleared after use. */
+  private pendingCharacterId: string | null = null;
   /** Exposed so components can read state without calling getState() on every CD. */
   readonly stateSignal = signal<GameState | null>(null);
   private cardsMap: CardsMap | null = null;
@@ -284,8 +286,22 @@ export class GameBridgeService {
     return this.state?.characterId;
   }
 
+  /** Set character to use when starting the next run (e.g. from character select). */
+  setPendingCharacter(characterId: string): void {
+    this.pendingCharacterId = characterId;
+  }
+
+  getPendingCharacter(): string | null {
+    return this.pendingCharacterId;
+  }
+
+  clearPendingCharacter(): void {
+    this.pendingCharacterId = null;
+  }
+
   clearState(): void {
     this.setState(null);
+    this.pendingCharacterId = null;
   }
 
   /** Save current run to disk (Electron) or localStorage (browser). Call when quitting to menu. */

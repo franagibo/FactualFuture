@@ -1,10 +1,23 @@
-import type { GameState, EnemyState, EnemyIntent } from './types';
+import type { GameState, EnemyState, EnemyIntent, PlantState } from './types';
 import type { CardDef } from './cardDef';
 import type { EnemyDef, EncounterDef, EnemyTrigger } from './loadData';
 import { runEffects, discardHandAndDraw } from './effectRunner';
 import { rngShuffle } from './rng';
 import type { Rng } from './rng';
 import { defaultRng } from './rng';
+import {
+  isPlantCharacter,
+  getAlivePlants,
+  createSeedling,
+  SEEDLING_DEFAULT_HP,
+  PLANT_ATTACK_DAMAGE,
+  PLANT_ATTACK_HITS_MATURE,
+  PLANT_DEFENSE_PLAYER_BLOCK,
+  PLANT_DEFENSE_PLANT_BLOCK,
+  PLANT_SUPPORT_WEAK,
+  PLANT_SUPPORT_PLAYER_BLOCK,
+  PLANT_SUPPORT_ENERGY_EVERY_N_TURNS,
+} from './plantConfig';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -50,6 +63,86 @@ function setEnemyIntents(
     if (!def) return e;
     return { ...e, intent: pickIntent(def, rng) };
   });
+}
+
+/** Get attack target for enemy intent: Defense plants first, then any plant, then player. */
+function getAttackTarget(
+  state: GameState,
+  rng: Rng = defaultRng
+): { target: 'player' } | { target: 'plant'; plantIndex: number } {
+  if (!isPlantCharacter(state.characterId) || !state.plants?.length) return { target: 'player' };
+  const alive = getAlivePlants(state.plants);
+  if (alive.length === 0) return { target: 'player' };
+  const defensePlants = alive.filter((p) => p.mode === 'defense');
+  const pool = defensePlants.length > 0 ? defensePlants : alive;
+  const pick = pool[Math.floor(rng() * pool.length)];
+  const plantIndex = state.plants!.findIndex((p) => p.id === pick.id);
+  return { target: 'plant', plantIndex };
+}
+
+/**
+ * Run plant end-of-turn actions (Verdant Machinist): Attack/Defense/Support effects, then increment turnsAlive.
+ * Call at start of enemy phase before resolving intents.
+ */
+export function runPlantTurnActions(state: GameState, rng: Rng = defaultRng): GameState {
+  if (!isPlantCharacter(state.characterId) || !state.plants?.length) return state;
+  let next = { ...state, plants: state.plants.map((p) => ({ ...p })) };
+  const plants = next.plants!;
+  const enemies = next.enemies.map((e) => ({ ...e }));
+
+  for (let i = 0; i < plants.length; i++) {
+    const p = plants[i];
+    if (p.hp <= 0) continue;
+    if (p.growthStage >= 2) {
+      if (p.mode === 'attack') {
+        const dmg = PLANT_ATTACK_DAMAGE[p.growthStage as 2 | 3];
+        const hits = p.growthStage === 3 ? PLANT_ATTACK_HITS_MATURE : 1;
+        const aliveEnemies = enemies.filter((e) => e.hp > 0);
+        for (let h = 0; h < hits && aliveEnemies.length > 0; h++) {
+          const idx = Math.floor(rng() * aliveEnemies.length);
+          const target = aliveEnemies[idx];
+          const ei = next.enemies.findIndex((e) => e.id === target.id);
+          if (ei >= 0) {
+            let remain = dmg;
+            if (target.block > 0) {
+              const blockReduce = Math.min(target.block, remain);
+              target.block -= blockReduce;
+              remain -= blockReduce;
+            }
+            if (remain > 0) target.hp = Math.max(0, target.hp - remain);
+            next = { ...next, enemies };
+          }
+          // refresh alive list for next hit
+          aliveEnemies.length = 0;
+          enemies.forEach((e) => e.hp > 0 && aliveEnemies.push(e));
+        }
+      }
+      if (p.mode === 'defense') {
+        next = { ...next, playerBlock: next.playerBlock + PLANT_DEFENSE_PLAYER_BLOCK[p.growthStage as 2 | 3] };
+        const plantBlock = PLANT_DEFENSE_PLANT_BLOCK[p.growthStage as 2 | 3];
+        if (plantBlock > 0) plants[i] = { ...p, block: (p.block ?? 0) + plantBlock };
+      }
+      if (p.mode === 'support') {
+        if (p.growthStage === 2) {
+          next = { ...next, playerBlock: next.playerBlock + PLANT_SUPPORT_PLAYER_BLOCK };
+          const aliveEnemies = enemies.filter((e) => e.hp > 0);
+          if (aliveEnemies.length > 0) {
+            const target = aliveEnemies[Math.floor(rng() * aliveEnemies.length)];
+            target.weakStacks = (target.weakStacks ?? 0) + PLANT_SUPPORT_WEAK;
+            next = { ...next, enemies };
+          }
+        } else {
+          if (p.turnsAlive > 0 && (p.turnsAlive + 1) % PLANT_SUPPORT_ENERGY_EVERY_N_TURNS === 0) {
+            next = { ...next, energy: next.energy + 1 };
+          }
+        }
+      }
+    }
+    plants[i] = { ...plants[i], turnsAlive: (plants[i].turnsAlive ?? 0) + 1 };
+  }
+
+  next = { ...next, plants: plants.filter((p) => p.hp > 0) };
+  return next;
 }
 
 /**
@@ -215,6 +308,15 @@ export function startCombatFromRunState(
     };
   });
 
+  let plants: PlantState[] | undefined;
+  if (state.characterId === 'verdant_machinist') {
+    plants = [];
+    const hasCoreSeed = state.relics?.includes('core_seed_reactor');
+    if (hasCoreSeed) {
+      plants.push(createSeedling('plant_0', SEEDLING_DEFAULT_HP, 'defense'));
+    }
+  }
+
   return {
     ...state,
     deck: restDeck,
@@ -230,6 +332,7 @@ export function startCombatFromRunState(
     enemies,
     combatResult: null,
     runPhase: 'combat',
+    ...(plants !== undefined && { plants }),
   };
 }
 
@@ -239,7 +342,8 @@ export function playCard(
   targetEnemyIndex: number | null,
   cardsMap: Map<string, CardDef>,
   enemyDefs: Map<string, EnemyDef>,
-  handIndexOverride?: number
+  handIndexOverride?: number,
+  targetPlantIndex?: number | null
 ): GameState {
   if (state.phase !== 'player' || state.combatResult) return state;
   const card = cardsMap.get(cardId);
@@ -262,10 +366,10 @@ export function playCard(
     exhaustPile: newExhaustPile,
     energy: state.energy - card.cost,
   };
-  next = runEffects(card, next, targetEnemyIndex, cardsMap);
+  next = runEffects(card, next, targetEnemyIndex, cardsMap, targetPlantIndex ?? null);
   if (next.playerNextCardPlayedTwice) {
     next = { ...next, playerNextCardPlayedTwice: false };
-    next = runEffects(card, next, targetEnemyIndex, cardsMap);
+    next = runEffects(card, next, targetEnemyIndex, cardsMap, targetPlantIndex ?? null);
   }
   next = processHpThresholdTriggers(next, enemyDefs);
 
@@ -284,8 +388,10 @@ export function endTurn(
 ): GameState {
   if (state.phase !== 'player' || state.combatResult) return state;
 
-  // Resolve enemy intents
+  // Plant turn actions (Verdant Machinist) then resolve enemy intents
   let next: GameState = { ...state, playerBlock: state.playerBlock, phase: 'enemy' };
+  next = runPlantTurnActions(next, next._simRng ?? defaultRng);
+
   for (const enemy of next.enemies) {
     if (enemy.hp <= 0) continue;
     const intent = enemy.intent;
@@ -296,22 +402,57 @@ export function endTurn(
       const weak = (next.playerWeakStacks ?? 0) > 0 ? 1 + 0.25 * (next.playerWeakStacks ?? 0) : 1;
       const vuln = (next.playerVulnerableStacks ?? 0) > 0 ? 1.5 : 1;
       dmg = Math.ceil(dmg * frail * weak * vuln);
-      if (next.playerBlock > 0) {
-        const blockReduce = Math.min(next.playerBlock, dmg);
-        next = { ...next, playerBlock: next.playerBlock - blockReduce };
-        dmg -= blockReduce;
+      const attackTarget = getAttackTarget(next, next._simRng ?? defaultRng);
+      let applyDamageToPlayer = attackTarget.target === 'player';
+      if (attackTarget.target === 'plant') {
+        const plants = (next.plants ?? []).map((p) => ({ ...p }));
+        const aliveIndices = plants.map((p, i) => (p.hp > 0 ? i : -1)).filter((i) => i >= 0);
+        if (aliveIndices.length === 0) {
+          applyDamageToPlayer = true;
+        } else {
+          // Phase 1: combined plant shield — drain damage from total plant block (order: by array index)
+          let remain = dmg;
+          for (let i = 0; i < plants.length && remain > 0; i++) {
+            if (plants[i].hp <= 0) continue;
+            const blockHere = Math.min(plants[i].block ?? 0, remain);
+            if (blockHere > 0) {
+              plants[i].block = (plants[i].block ?? 0) - blockHere;
+              remain -= blockHere;
+            }
+          }
+          next = { ...next, plants };
+          // Phase 2: remaining damage to plant HP using same targeting (defense first, then any plant)
+          if (remain > 0) {
+            const hpTarget = getAttackTarget(next, next._simRng ?? defaultRng);
+            if (hpTarget.target === 'plant' && next.plants?.[hpTarget.plantIndex] && next.plants[hpTarget.plantIndex].hp > 0) {
+              const updated = next.plants.map((p, i) =>
+                i === hpTarget.plantIndex ? { ...p, hp: Math.max(0, p.hp - remain) } : p
+              );
+              next = { ...next, plants: updated.filter((x) => x.hp > 0) };
+            }
+          } else {
+            next = { ...next, plants: plants.filter((x) => x.hp > 0) };
+          }
+        }
       }
-      if (dmg > 0) {
-        next = { ...next, playerHp: Math.max(0, next.playerHp - dmg) };
-        const thorns = next.playerThorns ?? 0;
-        if (thorns > 0) {
-          const ei = next.enemies.findIndex((e) => e.id === enemy.id);
-          if (ei >= 0 && next.enemies[ei].hp > 0) {
-            const en = [...next.enemies];
-            const targetEn = en[ei];
-            const blockReduce = Math.min(targetEn.block, thorns);
-            en[ei] = { ...targetEn, block: targetEn.block - blockReduce, hp: Math.max(0, targetEn.hp - (thorns - blockReduce)) };
-            next = { ...next, enemies: en };
+      if (applyDamageToPlayer) {
+        if (next.playerBlock > 0) {
+          const blockReduce = Math.min(next.playerBlock, dmg);
+          next = { ...next, playerBlock: next.playerBlock - blockReduce };
+          dmg -= blockReduce;
+        }
+        if (dmg > 0) {
+          next = { ...next, playerHp: Math.max(0, next.playerHp - dmg) };
+          const thorns = next.playerThorns ?? 0;
+          if (thorns > 0) {
+            const ei = next.enemies.findIndex((e) => e.id === enemy.id);
+            if (ei >= 0 && next.enemies[ei].hp > 0) {
+              const en = [...next.enemies];
+              const targetEn = en[ei];
+              const blockReduce = Math.min(targetEn.block, thorns);
+              en[ei] = { ...targetEn, block: targetEn.block - blockReduce, hp: Math.max(0, targetEn.hp - (thorns - blockReduce)) };
+              next = { ...next, enemies: en };
+            }
           }
         }
       }

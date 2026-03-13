@@ -33,6 +33,22 @@ export function formatEffect(e: CardEffect): string {
     case 'loseHp': return `Lose ${e.value} HP`;
     case 'multiHit': return `Deal ${e.value} damage ${e.times ?? 2} times`;
     case 'doubleBlock': return 'Double your block';
+    case 'summon_plant': return e.value > 0 ? `Summon a Seedling (${e.value} HP)` : 'Summon a Seedling';
+    case 'grow_plant': {
+      const n = e.value || 1;
+      const target = (e as CardEffect & { plantTarget?: string }).plantTarget;
+      const targetStr = target === 'all' ? ' all plants' : target === 'first' ? ' the first plant' : '';
+      return n === 1 ? `Grow${targetStr} 1` : `Grow${targetStr} ${n}`;
+    }
+    case 'plant_mode': {
+      const mode = (e as CardEffect & { mode?: string }).mode ?? 'defense';
+      const target = (e as CardEffect & { plantTarget?: string }).plantTarget;
+      const targetStr = target === 'all' ? ' all plants' : target === 'first' ? ' first plant' : ' plant(s)';
+      return `Set${targetStr} to ${mode} mode`;
+    }
+    case 'blockToPlant': return `Plants gain ${e.value} block`;
+    case 'sacrifice_plant': return e.value <= 1 ? 'Sacrifice a plant' : `Sacrifice ${e.value} plant(s)`;
+    case 'evolve_plant': return e.value <= 1 ? 'Evolve a plant' : `Evolve ${e.value} plant(s)`;
     default: return '';
   }
 }

@@ -1,7 +1,17 @@
-import type { GameState, EnemyState } from './types';
+import type { GameState, EnemyState, PlantState } from './types';
 import type { CardDef } from './cardDef';
 import { rngRandomInt, rngShuffle } from './rng';
 import { defaultRng } from './rng';
+import {
+  MAX_PLANTS,
+  GROWTH_TO_EVOLVE,
+  PLANT_HP_BY_STAGE,
+  SEEDLING_DEFAULT_HP,
+  isPlantCharacter,
+  createSeedling,
+  evolvePlant,
+  getAlivePlants,
+} from './plantConfig';
 
 function isAttackCard(cardId: string, cardsMap: Map<string, CardDef>): boolean {
   const def = cardsMap.get(cardId);
@@ -28,11 +38,14 @@ export function runEffects(
   card: CardDef,
   state: GameState,
   targetEnemyIndex: number | null,
-  cardsMap?: Map<string, CardDef>
+  cardsMap?: Map<string, CardDef>,
+  targetPlantIndex?: number | null
 ): GameState {
   const map = cardsMap ?? new Map<string, CardDef>();
   let next = { ...state };
   const enemies = next.enemies.map((e) => ({ ...e }));
+  const plants = next.plants ? next.plants.map((p) => ({ ...p })) : [];
+  next = { ...next, plants };
   const exhaustPile = () => next.exhaustPile ?? [];
 
   const applyDamageToEnemy = (enemy: EnemyState, dmg: number, addStrength = true): void => {
@@ -85,6 +98,27 @@ export function runEffects(
       }
       case 'block':
         if (effect.target === 'player') {
+          // Verdant Machinist "Barrier" (defend): add block to lowest-HP plant if any, else to player
+          if (card.id === 'defend' && isPlantCharacter(next.characterId) && next.plants?.length) {
+            const alive = next.plants.filter((p) => p.hp > 0);
+            if (alive.length > 0) {
+              let minHp = Infinity;
+              let lowestIdx = -1;
+              next.plants.forEach((p, i) => {
+                if (p.hp > 0 && p.hp < minHp) {
+                  minHp = p.hp;
+                  lowestIdx = i;
+                }
+              });
+              if (lowestIdx >= 0) {
+                const newPlants = next.plants.map((p, i) =>
+                  i === lowestIdx ? { ...p, block: (p.block ?? 0) + effect.value } : p
+                );
+                next = { ...next, plants: newPlants };
+                break;
+              }
+            }
+          }
           next = { ...next, playerBlock: next.playerBlock + effect.value };
         }
         break;
@@ -200,10 +234,118 @@ export function runEffects(
       case 'addCardToDiscard':
         if (effect.cardId) next = { ...next, discard: [...next.discard, effect.cardId] };
         break;
+      case 'summon_plant': {
+        if (!isPlantCharacter(next.characterId) || (next.plants?.length ?? 0) >= MAX_PLANTS) break;
+        const hp = effect.value > 0 ? effect.value : SEEDLING_DEFAULT_HP;
+        const plantId = `plant_${next.plants?.length ?? 0}`;
+        const seedling = createSeedling(plantId, hp, (effect as { mode?: 'defense' | 'attack' | 'support' }).mode ?? 'defense');
+        next = { ...next, plants: [...(next.plants ?? []), seedling] };
+        break;
+      }
+      case 'grow_plant': {
+        if (!isPlantCharacter(next.characterId) || !next.plants?.length) break;
+        const amount = effect.value || 1;
+        const plantTarget = (effect as { plantTarget?: 'all' | 'first' | 'random' }).plantTarget ?? 'first';
+        const rng = next._simRng ?? defaultRng;
+        let indices: number[] = [];
+        if (plantTarget === 'all') indices = next.plants!.map((_, i) => i);
+        else if (plantTarget === 'first') indices = next.plants!.length > 0 ? [0] : [];
+        else {
+          if (targetPlantIndex != null && targetPlantIndex >= 0 && targetPlantIndex < next.plants!.length) indices = [targetPlantIndex];
+          else if (next.plants!.length > 0) indices = [rngRandomInt(0, next.plants!.length - 1, rng)];
+        }
+        for (const i of indices) {
+          const p = next.plants![i];
+          if (p.hp <= 0) continue;
+          let growth = p.growth + amount;
+          let stage = p.growthStage;
+          let maxHp = p.maxHp;
+          while (growth >= GROWTH_TO_EVOLVE && stage < 3) {
+            growth -= GROWTH_TO_EVOLVE;
+            stage = (stage + 1) as 1 | 2 | 3;
+            maxHp = PLANT_HP_BY_STAGE[stage];
+          }
+          const updated = { ...p, growth, growthStage: stage, maxHp, hp: Math.min(p.hp, maxHp) };
+          const newPlants = [...next.plants!];
+          newPlants[i] = updated;
+          next = { ...next, plants: newPlants };
+        }
+        break;
+      }
+      case 'plant_mode': {
+        if (!isPlantCharacter(next.characterId) || !next.plants?.length) break;
+        const mode = (effect as { mode?: 'defense' | 'attack' | 'support' }).mode;
+        if (!mode) break;
+        const plantTarget = (effect as { plantTarget?: 'all' | 'first' | 'random' }).plantTarget ?? 'first';
+        const rng = next._simRng ?? defaultRng;
+        let indices: number[] = [];
+        if (plantTarget === 'all') indices = next.plants.map((_, i) => i);
+        else if (plantTarget === 'first') indices = next.plants.length > 0 ? [0] : [];
+        else {
+          if (targetPlantIndex != null && targetPlantIndex >= 0 && targetPlantIndex < next.plants.length) indices = [targetPlantIndex];
+          else if (next.plants.length > 0) indices = [rngRandomInt(0, next.plants.length - 1, rng)];
+        }
+        const newPlants = next.plants.map((p, i) => (indices.includes(i) && p.hp > 0 ? { ...p, mode } : p));
+        next = { ...next, plants: newPlants };
+        break;
+      }
+      case 'sacrifice_plant': {
+        if (!isPlantCharacter(next.characterId) || !next.plants?.length) break;
+        const alive = getAlivePlants(next.plants);
+        if (alive.length === 0) break;
+        let idx: number;
+        if (targetPlantIndex != null && targetPlantIndex >= 0 && targetPlantIndex < next.plants.length && next.plants[targetPlantIndex].hp > 0) {
+          idx = targetPlantIndex;
+        } else {
+          idx = next.plants.findIndex((p) => p.hp > 0);
+        }
+        if (idx < 0) break;
+        const newPlants = next.plants.filter((_, i) => i !== idx);
+        next = { ...next, plants: newPlants.length ? newPlants : undefined };
+        break;
+      }
+      case 'evolve_plant': {
+        if (!isPlantCharacter(next.characterId) || !next.plants?.length) break;
+        let idx: number;
+        if (targetPlantIndex != null && targetPlantIndex >= 0 && targetPlantIndex < next.plants.length && next.plants[targetPlantIndex].hp > 0) {
+          idx = targetPlantIndex;
+        } else {
+          idx = next.plants.findIndex((p) => p.hp > 0);
+        }
+        if (idx < 0) break;
+        const p = next.plants[idx];
+        if (p.growthStage >= 3) break;
+        const evolved = evolvePlant(p);
+        const newPlants = [...next.plants];
+        newPlants[idx] = evolved;
+        next = { ...next, plants: newPlants };
+        break;
+      }
+      case 'blockToPlant': {
+        if (!isPlantCharacter(next.characterId) || !next.plants?.length) break;
+        const plantTarget = (effect as { plantTarget?: 'all' | 'first' | 'random' }).plantTarget ?? 'first';
+        const indices: number[] = [];
+        if (plantTarget === 'all') {
+          next.plants!.forEach((p, i) => p.hp > 0 && indices.push(i));
+        } else if (plantTarget === 'first') {
+          const idx = next.plants!.findIndex((p) => p.hp > 0);
+          if (idx >= 0) indices.push(idx);
+        } else {
+          const idx = targetPlantIndex != null && targetPlantIndex >= 0 && targetPlantIndex < next.plants!.length && next.plants![targetPlantIndex].hp > 0
+            ? targetPlantIndex
+            : next.plants!.findIndex((p) => p.hp > 0);
+          if (idx >= 0) indices.push(idx);
+        }
+        const newPlants = next.plants!.map((p, i) =>
+          indices.includes(i) ? { ...p, block: (p.block ?? 0) + effect.value } : p
+        );
+        next = { ...next, plants: newPlants };
+        break;
+      }
     }
   }
 
-  return { ...next, enemies };
+  return { ...next, enemies, plants: next.plants };
 }
 
 export function drawCards(state: GameState, count: number): GameState {

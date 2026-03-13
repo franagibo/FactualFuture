@@ -35,6 +35,8 @@ describe('collect-imitation-data (script)', () => {
 
     const characterId = env['SIM_CHARACTER'] ?? 'gungirl';
     const N = Math.max(1, parseInt(env['SIM_N'] ?? '50', 10));
+    const maxCombatTurnsEnv = env['SIM_MAX_COMBAT_TURNS'];
+    const maxCombatTurns = maxCombatTurnsEnv != null ? Math.max(1, parseInt(String(maxCombatTurnsEnv), 10)) : undefined;
     const seedBase =
       env['SIM_SEED'] !== undefined && env['SIM_SEED'] !== ''
         ? parseInt(env['SIM_SEED'] as string, 10)
@@ -89,6 +91,7 @@ describe('collect-imitation-data (script)', () => {
     };
 
     let sampleCount = 0;
+    let totalCombatsCount = 0;
     const combatBuffer: ImitationSample[] = [];
     const runBuffer: (ImitationSample & { combatWon: boolean })[] = [];
 
@@ -119,6 +122,7 @@ describe('collect-imitation-data (script)', () => {
     };
 
     const onCombatEnd: CombatEndHook = (combatWon) => {
+      totalCombatsCount += 1;
       for (const s of combatBuffer) {
         runBuffer.push({ ...s, combatWon });
       }
@@ -151,6 +155,8 @@ describe('collect-imitation-data (script)', () => {
         relicDefs: relicDefs.size ? relicDefs : undefined,
         eventPool,
         rewardCardPool,
+        minimalRunMetrics: true,
+        ...(maxCombatTurns != null && { maxCombatTurns }),
       },
       N,
       seedBase,
@@ -160,11 +166,9 @@ describe('collect-imitation-data (script)', () => {
 
     stream.end();
 
-    const totalCombats = runs.reduce((s, r) => s + r.combats.length, 0);
-
     console.log('--- Imitation data collection ---');
     console.log(`Runs simulated:         ${runs.length}`);
-    console.log(`Total combats:          ${totalCombats}`);
+    console.log(`Total combats:          ${totalCombatsCount}`);
     console.log(`Total decision samples: ${sampleCount}`);
     console.log(`Output file:            ${outFile}`);
     console.log(`Completed in ${elapsed}s\n`);

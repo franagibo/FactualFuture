@@ -7,8 +7,8 @@
  * Floating numbers & banner | drawCombatView (entry).
  */
 import * as PIXI from 'pixi.js';
-import type { GameState, EnemyIntent } from '../../../engine/types';
-import { COMBAT_LAYOUT, getCombatSlotBounds, getEnemyLayout } from '../constants/combat-layout.constants';
+import type { GameState, EnemyIntent, PlantState } from '../../../engine/types';
+import { COMBAT_LAYOUT, getCombatSlotBounds, getEnemyLayout, getPlantsLayout } from '../constants/combat-layout.constants';
 import { ENEMY_ANIMATION_TIMING } from '../constants/combat-timing.constants';
 import type { FloatingNumber } from '../constants/combat-types';
 import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
@@ -385,6 +385,92 @@ function drawPlayerArea(ctx: CombatViewContext): void {
     playerContainer.addChild(blockOverlay);
   }
   stage.addChild(playerContainer);
+}
+
+// ---------------------------------------------------------------------------
+// Plants (Verdant Machinist)
+// ---------------------------------------------------------------------------
+
+const PLANT_GROWTH_TO_EVOLVE = 3;
+
+/** Draws plant minions between player and enemies: summary (combined shield), then per-plant HP, block, mode, growth, stage. */
+function drawPlants(ctx: CombatViewContext): void {
+  const { state, stage, w, h } = ctx;
+  const plants = state.plants?.filter((p) => p.hp > 0) ?? [];
+  if (plants.length === 0) return;
+  const layout = getPlantsLayout(w, h, plants.length);
+  const totalShield = plants.reduce((s, p) => s + (p.block ?? 0), 0);
+  const fontSize = scaledFontSize(11, ctx);
+  const smallFont = Math.max(9, fontSize - 2);
+
+  // Summary line above plants: combined shield + targeting hint
+  const summaryY = layout.startY - 14;
+  const summaryContainer = c(ctx);
+  summaryContainer.zIndex = 12;
+  const summaryText = t(ctx);
+  summaryText.text = totalShield > 0
+    ? `Plants: ${plants.length}  •  Combined shield: ${totalShield}  •  Enemies hit plants first`
+    : `Plants: ${plants.length}  •  Enemies hit plants first`;
+  summaryText.style = { fontFamily: 'system-ui', fontSize: smallFont, fill: 0xa0ddbb };
+  summaryText.anchor.set(0.5, 0);
+  const plantsCenterX = layout.startX + (plants.length * (layout.slotW + layout.gap) - layout.gap) / 2;
+  summaryText.x = plantsCenterX;
+  summaryText.y = summaryY;
+  summaryContainer.addChild(summaryText);
+  stage.addChild(summaryContainer);
+
+  for (let i = 0; i < plants.length; i++) {
+    const plant = plants[i];
+    const center = layout.getCenter(i);
+    const container = c(ctx);
+    container.x = center.x - layout.slotW / 2;
+    container.y = layout.startY;
+    container.zIndex = 12;
+    const bg = g(ctx);
+    bg.roundRect(0, 0, layout.slotW, layout.slotH, 8).fill({ color: 0x1a3a2a, alpha: 0.9 }).stroke({ width: 2, color: 0x4a7a5a });
+    container.addChild(bg);
+    const hpText = t(ctx);
+    hpText.text = `HP ${plant.hp}/${plant.maxHp}`;
+    hpText.style = { fontFamily: 'system-ui', fontSize, fill: 0xccffcc, fontWeight: 'bold' };
+    hpText.anchor.set(0.5, 0);
+    hpText.x = layout.slotW / 2;
+    hpText.y = 2;
+    container.addChild(hpText);
+    const blockVal = plant.block ?? 0;
+    if (blockVal > 0) {
+      const blockText = t(ctx);
+      blockText.text = `Block: ${blockVal}`;
+      blockText.style = { fontFamily: 'system-ui', fontSize: smallFont, fill: 0x88ddff };
+      blockText.anchor.set(0.5, 0);
+      blockText.x = layout.slotW / 2;
+      blockText.y = 16;
+      container.addChild(blockText);
+    }
+    const modeText = t(ctx);
+    const modeLabel = plant.mode === 'attack' ? 'ATK' : plant.mode === 'defense' ? 'DEF' : 'SUP';
+    modeText.text = modeLabel;
+    modeText.style = { fontFamily: 'system-ui', fontSize: fontSize - 1, fill: 0xaaddaa };
+    modeText.anchor.set(0.5, 0);
+    modeText.x = layout.slotW / 2;
+    modeText.y = blockVal > 0 ? 28 : 20;
+    container.addChild(modeText);
+    const growthText = t(ctx);
+    growthText.text = `Growth ${plant.growth}/${PLANT_GROWTH_TO_EVOLVE}`;
+    growthText.style = { fontFamily: 'system-ui', fontSize: smallFont, fill: 0x88bb88 };
+    growthText.anchor.set(0.5, 0);
+    growthText.x = layout.slotW / 2;
+    growthText.y = blockVal > 0 ? 42 : 34;
+    container.addChild(growthText);
+    const stageLabel = plant.growthStage === 1 ? 'Seedling' : plant.growthStage === 2 ? 'Sprout' : 'Mature';
+    const stageText = t(ctx);
+    stageText.text = stageLabel;
+    stageText.style = { fontFamily: 'system-ui', fontSize: smallFont, fill: 0x66aa66 };
+    stageText.anchor.set(0.5, 0);
+    stageText.x = layout.slotW / 2;
+    stageText.y = blockVal > 0 ? 56 : 48;
+    container.addChild(stageText);
+    stage.addChild(container);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1096,6 +1182,7 @@ function drawEnemyTurnBanner(ctx: CombatViewContext): void {
 export function drawCombatView(context: CombatViewContext): void {
   drawCombatBackground(context);
   drawPlayerArea(context);
+  drawPlants(context);
   drawHpBlockEnergyIcons(context);
   const handContainer = drawHand(context);
   const layout = drawEnemies(context, handContainer);

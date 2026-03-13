@@ -66,5 +66,62 @@ describe('archetypes', () => {
     const ctx = detectArchetypes(['light_attack', 'light_block'], map);
     expect(ctx.primary === 'generic' || ctx.scores[ctx.primary] < 4).toBe(true);
   });
+
+  it('detects plant_swarm for Verdant Machinist with multiple summon cards', () => {
+    const cards: CardDef[] = [
+      { id: 'seed_pod', name: 'Seed Pod', cost: 1, effects: [{ type: 'summon_plant', value: 9 }] },
+      {
+        id: 'rapid_germination',
+        name: 'Rapid Germination',
+        cost: 2,
+        effects: [{ type: 'summon_plant', value: 9 }, { type: 'summon_plant', value: 9 }],
+      },
+      { id: 'thorn_volley', name: 'Thorn Volley', cost: 2, effects: [{ type: 'damageAll', value: 6 }] },
+    ];
+    const map = makeCards(cards);
+    const ctx = detectArchetypes(['seed_pod', 'rapid_germination', 'thorn_volley'], map, [], 'verdant_machinist');
+    expect(ctx.primary).toBe('plant_swarm');
+  });
+
+  it('detects plant_evolution for Verdant Machinist with grow/evolve cards', () => {
+    const cards: CardDef[] = [
+      {
+        id: 'accelerated_evolution',
+        name: 'Accelerated Evolution',
+        cost: 2,
+        effects: [{ type: 'grow_plant', value: 2, plantTarget: 'all' }],
+      },
+      { id: 'genetic_rewrite', name: 'Genetic Rewrite', cost: 1, effects: [{ type: 'evolve_plant', value: 1 }] },
+    ];
+    const map = makeCards(cards);
+    const ctx = detectArchetypes(['accelerated_evolution', 'genetic_rewrite'], map, [], 'verdant_machinist');
+    expect(ctx.primary).toBe('plant_evolution');
+  });
+
+  it('detects plant_defense for Verdant Machinist with Root Guard and block', () => {
+    const cards: CardDef[] = [
+      {
+        id: 'root_guard',
+        name: 'Root Guard',
+        cost: 1,
+        effects: [
+          { type: 'plant_mode', value: 0, mode: 'defense', plantTarget: 'first' },
+          { type: 'block', value: 6, target: 'player' },
+        ],
+      },
+      {
+        id: 'living_fortress',
+        name: 'Living Fortress',
+        cost: 2,
+        effects: [
+          { type: 'plant_mode', value: 0, mode: 'defense', plantTarget: 'all' },
+          { type: 'block', value: 12, target: 'player' },
+        ],
+      },
+    ];
+    const map = makeCards(cards);
+    const ctx = detectArchetypes(['root_guard', 'living_fortress'], map, [], 'verdant_machinist');
+    expect(ctx.primary).toBe('plant_defense');
+  });
 });
 

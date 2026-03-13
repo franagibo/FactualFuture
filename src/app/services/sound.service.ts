@@ -13,8 +13,23 @@ const PATHS = {
   defeat: `${AUDIO_BASE}defeat.mp3`,
   combatStart: `${AUDIO_BASE}combat-start.mp3`,
   click: `${VFX_BASE}click_sound.ogg`,
-  soundtrack: `${SOUNDTRACK_BASE}song1.mp3`,
 };
+
+/** Track filenames per context (under SOUNDTRACK_BASE/<context>/). Playlist is shuffled and looped. */
+const SOUNDTRACK_PLAYLISTS: Record<string, string[]> = {
+  main_menu: ['main.mp3'],
+  map: ['node_selection.mp3', 'node_selection2.mp3'],
+  combat: ['combat1.mp3', 'combat2.mp3', 'combat3.mp3'],
+};
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 const STORAGE_KEY = 'game-sound-preferences';
 
@@ -36,6 +51,8 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
+export type SoundtrackContext = 'main_menu' | 'map' | 'combat';
+
 @Injectable({ providedIn: 'root' })
 export class SoundService {
   private muted = DEFAULT_PREFS.muted;
@@ -43,6 +60,10 @@ export class SoundService {
   private effectsVolume = DEFAULT_PREFS.effectsVolume;
   private clickSoundEnabled = DEFAULT_PREFS.clickSoundEnabled;
   private soundtrackEl: HTMLAudioElement | null = null;
+  private currentContext: SoundtrackContext | null = null;
+  private currentPlaylist: string[] = [];
+  private playlistIndex = 0;
+  private playlistBasePath = '';
 
   setMuted(m: boolean): void {
     this.muted = m;
@@ -127,18 +148,58 @@ export class SoundService {
     }
   }
 
-  startSoundtrack(): void {
+  private bindSoundtrackEnded(): void {
+    if (!this.soundtrackEl) return;
+    this.soundtrackEl.onended = () => {
+      if (this.currentPlaylist.length === 0) return;
+      this.playlistIndex = (this.playlistIndex + 1) % this.currentPlaylist.length;
+      const path = `${this.playlistBasePath}/${this.currentPlaylist[this.playlistIndex]}`;
+      const url = path.startsWith('/') ? window.location.origin + path : path;
+      this.soundtrackEl!.src = url;
+      this.soundtrackEl!.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[Sound] Next track failed', err); });
+    };
+  }
+
+  private startPlaylist(context: SoundtrackContext): void {
     if (typeof window === 'undefined') return;
+    const files = SOUNDTRACK_PLAYLISTS[context];
+    if (!files?.length) return;
     try {
+      this.currentContext = context;
+      this.currentPlaylist = shuffleArray(files);
+      this.playlistIndex = 0;
+      this.playlistBasePath = `${SOUNDTRACK_BASE}${context}`;
       if (!this.soundtrackEl) {
         this.soundtrackEl = new Audio();
-        this.soundtrackEl.loop = true;
-        const url = PATHS.soundtrack.startsWith('/') ? window.location.origin + PATHS.soundtrack : PATHS.soundtrack;
-        this.soundtrackEl.src = url;
+        this.soundtrackEl.loop = false;
+        this.bindSoundtrackEnded();
       }
+      const path = `${this.playlistBasePath}/${this.currentPlaylist[0]}`;
+      const url = path.startsWith('/') ? window.location.origin + path : path;
+      this.soundtrackEl.src = url;
       this.applySoundtrackVolume();
-      this.soundtrackEl.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[App] Soundtrack play failed', err); });
+      this.soundtrackEl.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[Sound] Soundtrack play failed', err); });
     } catch {}
+  }
+
+  /** Start main menu playlist (shuffled, full playlist on loop). */
+  startMainMenuSoundtrack(): void {
+    this.startPlaylist('main_menu');
+  }
+
+  /** Start map screen playlist (shuffled, full playlist on loop). */
+  startMapSoundtrack(): void {
+    this.startPlaylist('map');
+  }
+
+  /** Start combat playlist (shuffled, full playlist on loop). */
+  startCombatSoundtrack(): void {
+    this.startPlaylist('combat');
+  }
+
+  /** @deprecated Use startMainMenuSoundtrack() for main menu. Kept for compatibility. */
+  startSoundtrack(): void {
+    this.startMainMenuSoundtrack();
   }
 
   stopSoundtrack(): void {
@@ -146,7 +207,10 @@ export class SoundService {
       if (this.soundtrackEl) {
         this.soundtrackEl.pause();
         this.soundtrackEl.currentTime = 0;
+        this.soundtrackEl.onended = null;
       }
+      this.currentContext = null;
+      this.currentPlaylist = [];
     } catch {}
   }
 
