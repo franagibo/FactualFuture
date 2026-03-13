@@ -3,7 +3,10 @@
  *   npx vitest run src/engine/simulator/run-balance-sim.spec.ts
  * Or: npm run sim
  *
- * Optional env or args: SIM_CHARACTER, SIM_N, SIM_SEED (via env), or pass no args for defaults.
+ * Optional env: SIM_CHARACTER, SIM_N, SIM_SEED, SIM_SEED_FILE, BALANCE_BASELINE_OUT.
+ * If SIM_SEED_FILE is set (path to JSON array of seeds), use those seeds for reproducible balance runs.
+ * If BALANCE_BASELINE_OUT is set, run with the learned bot (tuned policy) and write results there;
+ *   run "npm run bot:full" first to train and export the learned policy.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -26,14 +29,25 @@ function loadJson<T>(file: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
 }
 
+function loadSeedList(): number[] | null {
+  const seedFile = process.env['SIM_SEED_FILE'];
+  if (!seedFile || !seedFile.trim()) return null;
+  const filePath = path.isAbsolute(seedFile) ? seedFile : path.join(process.cwd(), seedFile);
+  if (!fs.existsSync(filePath)) return null;
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  return Array.isArray(data) ? (data as number[]) : null;
+}
+
 describe('run-balance-sim (script)', () => {
   it('runs simulation with real data and logs metrics', () => {
-    const characterId = process.env.SIM_CHARACTER ?? 'gungirl';
-    const N = Math.max(1, parseInt(process.env.SIM_N ?? '100', 10));
-    // Use random seed base when SIM_SEED not set so each script run gets different results
+    const seedList = loadSeedList();
+    const characterId = process.env['SIM_CHARACTER'] ?? 'gungirl';
+    const N = seedList
+      ? seedList.length
+      : Math.max(1, parseInt(process.env['SIM_N'] ?? '100', 10));
     const seedBase =
-      process.env.SIM_SEED !== undefined && process.env.SIM_SEED !== ''
-        ? parseInt(process.env.SIM_SEED, 10)
+      process.env['SIM_SEED'] !== undefined && process.env['SIM_SEED'] !== ''
+        ? parseInt(process.env['SIM_SEED'], 10)
         : Math.floor(Math.random() * 0x7fffffff);
 
     const cardsData = loadJson<CardDef[]>('cards.json');
@@ -66,28 +80,57 @@ describe('run-balance-sim (script)', () => {
     const rewardCardPool = poolIds?.length ? poolIds : Array.from(cardsMap.keys()).slice(0, 30);
 
     const mapConfig = {
-      act1: mapConfigData.act1 as SimulatorOptions['mapConfig']['act1'],
-      act2: mapConfigData.act2 as SimulatorOptions['mapConfig']['act2'],
-      act3: mapConfigData.act3 as SimulatorOptions['mapConfig']['act3'],
+      act1: mapConfigData['act1'] as SimulatorOptions['mapConfig']['act1'],
+      act2: mapConfigData['act2'] as SimulatorOptions['mapConfig']['act2'],
+      act3: mapConfigData['act3'] as SimulatorOptions['mapConfig']['act3'],
     };
 
-    console.log(`\nRunning ${N} simulations for "${characterId}" (seeds ${seedBase}..${seedBase + N - 1})...\n`);
+    const baselineOut = process.env['BALANCE_BASELINE_OUT'];
+    const useLearnedBotForBaseline = Boolean(baselineOut && baselineOut.trim());
+    let learnedPolicyConfig: SimulatorOptions['learnedPolicyConfig'];
+
+    if (useLearnedBotForBaseline) {
+      const policyJsonPath =
+        process.env['POLICY_JSON'] && process.env['POLICY_JSON'].trim().length > 0
+          ? path.resolve(process.cwd(), process.env['POLICY_JSON'])
+          : path.resolve(process.cwd(), 'bot-training', 'learned-policy-gungirl.json');
+      if (!fs.existsSync(policyJsonPath)) {
+        throw new Error(
+          `Learned policy not found at ${policyJsonPath}. Run "npm run bot:full" first to train and export the policy, then run balance:baseline.`
+        );
+      }
+      learnedPolicyConfig = JSON.parse(fs.readFileSync(policyJsonPath, 'utf-8'));
+      console.log(`\nBaseline will use learned bot (policy: ${path.basename(policyJsonPath)}).\n`);
+    }
+
+    const simOptions: SimulatorOptions = {
+      characterId,
+      charactersMap,
+      mapConfig,
+      cardsMap,
+      enemyDefs,
+      encountersMap,
+      relicDefs: relicDefs.size ? relicDefs : undefined,
+      eventPool,
+      rewardCardPool,
+      ...(useLearnedBotForBaseline && learnedPolicyConfig
+        ? { useLearnedPolicyBot: true, learnedPolicyConfig }
+        : {}),
+    };
+
+    console.log(
+      seedList
+        ? `\nRunning ${N} simulations for "${characterId}" (seeds from ${process.env['SIM_SEED_FILE']})...\n`
+        : `\nRunning ${N} simulations for "${characterId}" (seeds ${seedBase}..${seedBase + N - 1})...\n`
+    );
 
     const start = Date.now();
     const { runs, winRate, avgFloorReached, avgHpAfterFirstCombat } = runSimulation(
-      {
-        characterId,
-        charactersMap,
-        mapConfig,
-        cardsMap,
-        enemyDefs,
-        encountersMap,
-        relicDefs: relicDefs.size ? relicDefs : undefined,
-        eventPool,
-        rewardCardPool,
-      },
+      simOptions,
       N,
-      seedBase
+      seedBase,
+      undefined,
+      seedList ?? undefined
     );
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 
@@ -109,6 +152,26 @@ describe('run-balance-sim (script)', () => {
       console.log('Deaths by floor:', JSON.stringify(deathsByFloor));
     }
     console.log(`\nCompleted in ${elapsed}s\n`);
+
+    if (baselineOut && baselineOut.trim()) {
+      const outPath = path.isAbsolute(baselineOut) ? baselineOut : path.join(process.cwd(), baselineOut);
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+      fs.writeFileSync(
+        outPath,
+        JSON.stringify(
+          {
+            bot: 'learned',
+            winRate,
+            avgFloorReached,
+            avgHpAfterFirstCombat,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        )
+      );
+      console.log(`Baseline snapshot (learned bot) written to ${outPath}\n`);
+    }
 
     expect(winRate).toBeGreaterThanOrEqual(0);
     expect(winRate).toBeLessThanOrEqual(1);

@@ -303,6 +303,100 @@ export function pickAction(
     return { type: 'endTurn' };
   }
 
+  const lowHpThreshold = Math.max(10, Math.floor((state.playerMaxHp ?? 80) * 0.25));
+
+  // Heuristic scoring (survival, block, strength, vulnerable, damage, lethal) before lookahead.
+  for (const c of candidates) {
+    if (c.action.type === 'endTurn') {
+      c.score += 0;
+      continue;
+    }
+    const card = cardsMap.get(c.cardId);
+    if (!card) continue;
+
+    const targetEnemy = state.enemies[c.targetIndex] ?? null;
+    const dmg = cardDamageValue(card, state);
+    const blockVal = cardBlockValue(card);
+    const remainingEnergy = state.energy - card.cost;
+
+    // Prefer playing over ending turn when we have playable cards.
+    c.score += 20;
+
+    // Survival: approximate HP after enemy turn.
+    const totalBlockAfter = currentBlock + blockVal;
+    const missingDamage = Math.max(0, incoming - totalBlockAfter);
+    const projectedHpAfterTurn = state.playerHp - missingDamage;
+    c.score += -missingDamage * 4;
+    if (projectedHpAfterTurn < lowHpThreshold) {
+      c.score -= (lowHpThreshold - projectedHpAfterTurn) * 3;
+    }
+
+    // Block: reward covering ~50% of incoming when enemy attacks; low priority when no incoming.
+    if (cardHasEffectType(card, 'block')) {
+      if (incoming > 0) {
+        const desiredBlock = incoming * 0.5;
+        const beforeBlock = currentBlock;
+        const afterBlock = currentBlock + blockVal;
+        const distBefore = Math.abs(beforeBlock - desiredBlock);
+        const distAfter = Math.abs(afterBlock - desiredBlock);
+        const improvement = distBefore - distAfter;
+        c.score += improvement * 4;
+        if (afterBlock < desiredBlock) {
+          c.score += (afterBlock / Math.max(1, desiredBlock)) * 6;
+        } else {
+          c.score += 5;
+        }
+      } else {
+        c.score += 1;
+      }
+    }
+
+    // Strength before attacks: high priority if we can follow up with an attack.
+    if (cardHasEffectType(card, 'strength')) {
+      const hasFollowupAttack = hasPlayableAttackWithEnergy(state, cardsMap, remainingEnergy, c.cardId);
+      const strengthBase = primaryArchetype === 'strength' ? 90 : 70;
+      if (hasFollowupAttack) {
+        c.score += strengthBase;
+      } else {
+        c.score += primaryArchetype === 'strength' ? 40 : 25;
+      }
+    }
+
+    // Vulnerable before attacks: good if we have damage in hand and enemy isn't already vulnerable.
+    if (cardHasEffectType(card, 'vulnerable') || cardHasEffectType(card, 'vulnerableAll')) {
+      const alreadyVuln = (targetEnemy?.vulnerableStacks ?? 0) > 0;
+      if (!alreadyVuln && hasPlayableAttackWithEnergy(state, cardsMap, remainingEnergy, c.cardId)) {
+        c.score += primaryArchetype === 'vulnerable_loop' ? 80 : 60;
+      } else if (!alreadyVuln) {
+        c.score += primaryArchetype === 'vulnerable_loop' ? 35 : 20;
+      }
+    }
+
+    // Damage: base score, lethal bonus, focus lowest-HP target.
+    if (
+      cardHasEffectType(card, 'damage') ||
+      cardHasEffectType(card, 'multiHit') ||
+      cardHasEffectType(card, 'damageAll') ||
+      cardHasEffectType(card, 'damageEqualToBlock')
+    ) {
+      const targetEffectiveHp = targetEnemy ? targetEnemy.hp + targetEnemy.block : Infinity;
+      const dmgBase = primaryArchetype === 'strength' ? 30 : 20;
+      c.score += dmgBase + dmg;
+      if (targetEnemy && dmg >= targetEffectiveHp) {
+        if (projectedHpAfterTurn >= lowHpThreshold) {
+          c.score += 80;
+        } else {
+          c.score += 30;
+        }
+      }
+      if (c.targetIndex === lowestHpIdx && lowestHpIdx >= 0) {
+        c.score += 25;
+      }
+    }
+
+    if (card.exhaust) c.score -= 2;
+  }
+
   // One-turn lookahead: simulate each candidate and add a lookahead term to the score.
   const baseHp = state.playerHp;
   const lookaheadWeightHp = 3; // impact of preserving HP

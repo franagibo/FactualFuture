@@ -11,6 +11,8 @@ This project includes a lightweight offline imitation-learning pipeline for the 
   - `SIM_SEED` (optional, default `123456`) – base seed for the runs
   - `IL_OUT_DIR` (optional) – output directory for dataset files
 
+- **Recommended scale for better learned bots**: Use **3,000–5,000 runs** (e.g. `SIM_N=5000`) for a single “production” dataset. More runs yield more diverse states and more samples from winning runs, which improves imitation quality.
+
 Running the script will:
 
 - Load the real engine data from `src/engine/data`.

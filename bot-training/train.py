@@ -57,9 +57,21 @@ def main() -> None:
         default="../data/imitation/imitation-gungirl-seed123456-N50.ndjson",
         help="Path to NDJSON dataset produced by collect-imitation-data script.",
     )
-    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=50,
+        help="Number of training epochs. Use 50–60 for large datasets (>50k samples).",
+    )
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument(
+        "--lr-schedule",
+        type=str,
+        default="cosine",
+        choices=["none", "cosine"],
+        help="Learning rate schedule: 'cosine' decays lr to eta_min over epochs; 'none' keeps constant lr.",
+    )
     parser.add_argument("--val-frac", type=float, default=0.1)
     parser.add_argument("--out", type=str, default="policy_best.pt")
     parser.add_argument(
@@ -71,12 +83,18 @@ def main() -> None:
     parser.add_argument(
         "--win-weight",
         type=float,
-        default=0.5,
+        default=0.6,
         help="Extra weight for samples from winning combats (sample weight = 1 + win_weight if combatWon else 1).",
+    )
+    parser.add_argument(
+        "--run-weight",
+        type=float,
+        default=0.4,
+        help="Extra weight for samples from runs that won (sample weight += run_weight if runWon).",
     )
     args = parser.parse_args()
 
-    dataset = ImitationDataset(args.data, win_weight=args.win_weight)
+    dataset = ImitationDataset(args.data, win_weight=args.win_weight, run_weight=args.run_weight)
 
     val_size = int(len(dataset) * args.val_frac)
     train_size = len(dataset) - val_size
@@ -98,6 +116,13 @@ def main() -> None:
             print(f"Loaded initial weights from {init_path}")
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = torch.nn.CrossEntropyLoss(reduction="none")  # per-sample loss for outcome weighting
+
+    eta_min = args.lr * 0.01
+    scheduler = (
+        torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=eta_min)
+        if args.lr_schedule == "cosine"
+        else None
+    )
 
     best_val_acc = 0.0
     out_path = Path(args.out)
@@ -156,6 +181,9 @@ def main() -> None:
             best_val_acc = val_acc
             torch.save(model.state_dict(), out_path)
             print(f"  Saved new best model to {out_path}")
+
+        if scheduler is not None:
+            scheduler.step()
 
     print(f"Training complete. Best val_acc={best_val_acc:.3f}, weights at {out_path}")
 

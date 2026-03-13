@@ -22,6 +22,8 @@ This will create a file like:
 
 - `data/imitation/imitation-gungirl-seed123456-N50.ndjson`
 
+**Recommended**: For a stronger learned policy, collect **3,000–5,000 runs** (e.g. `SIM_N=5000`) so the dataset has enough diversity and winning-run samples.
+
 Each line is one decision:
 
 ```json

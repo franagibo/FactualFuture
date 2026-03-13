@@ -86,6 +86,31 @@ const metrics = singleRun(seed, options);
 2. Run the simulator with `characterId: 'new_char'` and `charactersMap` loaded from `characters.json`.
 3. Compare win rate and HP curve to a baseline (e.g. gungirl). Adjust starter deck, HP, or encounter data until metrics sit in the desired range.
 
+## Balance testing (before/after build comparison)
+
+To compare balance **before and after** card or encounter changes, use a **fixed seed list** so both runs use the same seeds.
+
+1. **Reproducible baseline**
+   - Use the provided seed file: `scripts/balance-seeds.json` (500 seeds).
+   - Run the sim with that file and record metrics:
+     ```bash
+     SIM_SEED_FILE=scripts/balance-seeds.json npm run sim
+     ```
+   - With `SIM_SEED_FILE` set, `SIM_N` is ignored and the number of runs equals the length of the seed array (e.g. 500). Record **win rate** and **avg floor** (and optionally avg HP after first combat).
+
+2. **After a change**
+   - Make your card/balance changes, then run the **same** command:
+     ```bash
+     SIM_SEED_FILE=scripts/balance-seeds.json npm run sim
+     ```
+   - Compare win rate and avg floor to the baseline. Same seeds → comparable stats.
+
+3. **Learned bot for balance**
+   - If you use the learned policy bot for balance testing (`npm run sim:learned` or `useLearnedPolicyBot: true`), **retrain** the model after card or balance changes so the policy matches the new game. For before/after comparison, use either the same heuristic bot for both runs or the same trained policy for both.
+
+4. **Optional baseline snapshot (learned bot)**
+   - Run `npm run balance:baseline` to run the sim with the **learned bot** on the fixed seed file and write results to `data/balance-baseline.json` (win rate, avg floor, timestamp). This reflects how the tuned policy performs on the build. Run `npm run bot:full` first to train and export the learned policy. After card/balance changes, retrain if needed, then run `balance:baseline` again and compare the file.
+
 ## Seeded RNG
 
 The simulator uses `createSeededRng(seed)` from `engine/rng`. When you pass `rng` in `startRun` options (or rely on `state._simRng`), all randomness in that run (deck shuffle, encounter pick, enemy intents, draw order) is deterministic. Normal play does not set `_simRng`, so the live game is unchanged.

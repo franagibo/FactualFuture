@@ -8,6 +8,7 @@
  *   SIM_CHARACTER  (default "gungirl")
  *   SIM_N          (default 100)
  *   SIM_SEED       (default random)
+ *   SIM_SEED_FILE  (path to JSON array of seeds for reproducible comparison)
  *   POLICY_JSON    (default "bot-training/learned-policy-gungirl.json")
  */
 
@@ -31,12 +32,24 @@ function loadJson<T>(file: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
 }
 
+function loadSeedList(): number[] | null {
+  const seedFile = process.env.SIM_SEED_FILE;
+  if (!seedFile || !seedFile.trim()) return null;
+  const filePath = path.isAbsolute(seedFile) ? seedFile : path.join(process.cwd(), seedFile);
+  if (!fs.existsSync(filePath)) return null;
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  return Array.isArray(data) ? (data as number[]) : null;
+}
+
 describe('run-learned-vs-heuristic (script)', () => {
   it('runs heuristic vs learned policy and logs metrics', () => {
     const env = process.env as Record<string, string | undefined>;
+    const seedList = loadSeedList();
 
     const characterId = env['SIM_CHARACTER'] ?? 'gungirl';
-    const N = Math.max(1, parseInt(env['SIM_N'] ?? '100', 10));
+    const N = seedList
+      ? seedList.length
+      : Math.max(1, parseInt(env['SIM_N'] ?? '100', 10));
     const seedBase =
       env['SIM_SEED'] !== undefined && env['SIM_SEED'] !== ''
         ? parseInt(env['SIM_SEED'], 10)
@@ -91,9 +104,9 @@ describe('run-learned-vs-heuristic (script)', () => {
     };
 
     console.log(
-      `\nRunning ${N} simulations for "${characterId}" (seeds ${seedBase}..${
-        seedBase + N - 1
-      }) with heuristic vs learned bots...\n`
+      seedList
+        ? `\nRunning ${N} simulations for "${characterId}" (seeds from ${env['SIM_SEED_FILE']}) with heuristic vs learned bots...\n`
+        : `\nRunning ${N} simulations for "${characterId}" (seeds ${seedBase}..${seedBase + N - 1}) with heuristic vs learned bots...\n`
     );
 
     const baseOptions: SimulatorOptions = {
@@ -109,7 +122,13 @@ describe('run-learned-vs-heuristic (script)', () => {
     };
 
     const startHeuristic = Date.now();
-    const heuristicResult = runSimulation(baseOptions, N, seedBase);
+    const heuristicResult = runSimulation(
+      baseOptions,
+      N,
+      seedBase,
+      undefined,
+      seedList ?? undefined
+    );
     const heuristicElapsed = ((Date.now() - startHeuristic) / 1000).toFixed(1);
 
     const startLearned = Date.now();
@@ -120,7 +139,9 @@ describe('run-learned-vs-heuristic (script)', () => {
         learnedPolicyConfig,
       },
       N,
-      seedBase
+      seedBase,
+      undefined,
+      seedList ?? undefined
     );
     const learnedElapsed = ((Date.now() - startLearned) / 1000).toFixed(1);
 

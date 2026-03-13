@@ -132,6 +132,9 @@ export type DecisionSampleHook = (args: {
 /** Called once when a combat ends with the win/loss result. Used to tag decision samples with outcome. */
 export type CombatEndHook = (combatWon: boolean) => void;
 
+/** Called when a full run ends (win or lose). Use to tag samples with run-level outcome. */
+export type RunEndHook = (runWon: boolean) => void;
+
 export function runCombatToConclusion(
   state: GameState,
   cardsMap: Map<string, CardDef>,
@@ -292,12 +295,14 @@ export function singleRun(
   hooks?: {
     onDecision?: DecisionSampleHook;
     onCombatEnd?: CombatEndHook;
+    onRunEnd?: RunEndHook;
   }
 ): RunMetrics {
   const resolved = resolveOptions(opts);
   const rng = createSeededRng(seed);
   const actConfig = opts.mapConfig['act1'];
   if (!actConfig) {
+    hooks?.onRunEnd?.(false);
     return { seed, result: 'lose', floorReached: 0, combats: [], finalHp: resolved.startingMaxHp };
   }
 
@@ -374,6 +379,7 @@ export function singleRun(
         combats.push(combatMetrics);
 
         if (state.combatResult === 'lose') {
+          hooks?.onRunEnd?.(false);
           return {
             seed,
             result: 'lose',
@@ -387,6 +393,7 @@ export function singleRun(
           const runPhase = getRunPhaseAfterBossWin(state);
           state = { ...state, runPhase, currentEncounter: null, enemies: [], combatResult: null, rewardCardChoices: undefined };
           if (runPhase === 'victory') {
+            hooks?.onRunEnd?.(true);
             return { seed, result: 'win', floorReached: state.floor ?? 0, combats, finalHp: state.playerHp };
           }
           if (runPhase === 'actComplete') {
@@ -499,9 +506,11 @@ export function singleRun(
     break;
   }
 
+  const runWon = state.runPhase === 'victory';
+  hooks?.onRunEnd?.(runWon);
   return {
     seed,
-    result: state.runPhase === 'victory' ? 'win' : 'lose',
+    result: runWon ? 'win' : 'lose',
     floorReached: state.floor ?? 0,
     combats,
     finalHp: state.playerHp,
@@ -510,6 +519,7 @@ export function singleRun(
 
 /**
  * Run N simulated runs and return metrics for each plus aggregates.
+ * When seedList is provided, N is seedList.length and each run uses seedList[i]; otherwise seeds are seedBase + i.
  */
 export function runSimulation(
   options: SimulatorOptions,
@@ -518,11 +528,14 @@ export function runSimulation(
   hooks?: {
     onDecision?: DecisionSampleHook;
     onCombatEnd?: CombatEndHook;
-  }
+    onRunEnd?: RunEndHook;
+  },
+  seedList?: number[]
 ): { runs: RunMetrics[]; winRate: number; avgFloorReached: number; avgHpAfterFirstCombat: number } {
+  const seeds = seedList ?? Array.from({ length: N }, (_, i) => seedBase + i);
   const runs: RunMetrics[] = [];
-  for (let i = 0; i < N; i++) {
-    runs.push(singleRun(seedBase + i, options, hooks));
+  for (let i = 0; i < seeds.length; i++) {
+    runs.push(singleRun(seeds[i], options, hooks));
   }
 
   const wins = runs.filter((r) => r.result === 'win').length;

@@ -44,3 +44,6 @@ learned-policy-*.json
 
 # Large simulation datasets
 data/imitation/*.ndjson
+
+# Balance baseline snapshot (regeneratable via npm run balance:baseline)
+data/balance-baseline.json

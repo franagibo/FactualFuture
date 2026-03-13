@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { runSimulation, type DecisionSampleHook, type CombatEndHook } from './runSimulator';
+import { runSimulation, type DecisionSampleHook, type CombatEndHook, type RunEndHook } from './runSimulator';
 import type { SimulatorOptions } from './runSimulator';
 import { loadCards, loadEnemies, loadEncounters, loadCharacters, loadRelics, loadEvents } from '../loadData';
 import type { CardDef } from '../cardDef';
@@ -25,6 +25,8 @@ interface ImitationSample {
   chosenIndex: number;
   /** True if this decision was in a combat that the player won. Used to weight training toward winning play. */
   combatWon?: boolean;
+  /** True if the run containing this decision was won. Used for run-level outcome weighting. */
+  runWon?: boolean;
 }
 
 describe('collect-imitation-data (script)', () => {
@@ -88,6 +90,7 @@ describe('collect-imitation-data (script)', () => {
 
     let sampleCount = 0;
     const combatBuffer: ImitationSample[] = [];
+    const runBuffer: (ImitationSample & { combatWon: boolean })[] = [];
 
     const onDecision: DecisionSampleHook = ({
       state,
@@ -117,10 +120,17 @@ describe('collect-imitation-data (script)', () => {
 
     const onCombatEnd: CombatEndHook = (combatWon) => {
       for (const s of combatBuffer) {
-        stream.write(`${JSON.stringify({ ...s, combatWon })}\n`);
-        sampleCount += 1;
+        runBuffer.push({ ...s, combatWon });
       }
       combatBuffer.length = 0;
+    };
+
+    const onRunEnd: RunEndHook = (runWon) => {
+      for (const s of runBuffer) {
+        stream.write(`${JSON.stringify({ ...s, runWon })}\n`);
+        sampleCount += 1;
+      }
+      runBuffer.length = 0;
     };
 
     console.log(
@@ -144,7 +154,7 @@ describe('collect-imitation-data (script)', () => {
       },
       N,
       seedBase,
-      { onDecision, onCombatEnd }
+      { onDecision, onCombatEnd, onRunEnd }
     );
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 

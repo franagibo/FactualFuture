@@ -81,6 +81,8 @@ function main() {
       env.IL_WEIGHTS_OUT ?? 'policy_best.pt',
       '--win-weight',
       env.IL_WIN_WEIGHT ?? '0.5',
+      '--run-weight',
+      env.IL_RUN_WEIGHT ?? '0.3',
     ],
     {}
   );

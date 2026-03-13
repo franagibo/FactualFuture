@@ -16,17 +16,20 @@ class ImitationDataset(Dataset):
         "actions": [[float...]],    # shape [A, A_dim]
         "chosenIndex": int,         # in [0, A)
         "combatWon": bool (optional)  # if present, used to weight samples (winning combats upweighted)
+        "runWon": bool (optional)   # if present, extra weight for samples from runs that won
       }
-    Returns (state, actions, chosen, weight). weight is higher for combatWon=True when win_weight > 0.
+    Returns (state, actions, chosen, weight). weight is 1 + win_weight if combatWon + run_weight if runWon.
     """
 
-    def __init__(self, path: str, win_weight: float = 0.5):
+    def __init__(self, path: str, win_weight: float = 0.5, run_weight: float = 0.0):
         """
-        win_weight: extra weight for samples from winning combats. Sample weight = 1.0 + (win_weight if combatWon else 0).
-        Default 0.5 -> winning decisions get weight 1.5, losing get 1.0.
+        win_weight: extra weight for samples from winning combats.
+        run_weight: extra weight for samples from runs that won (full run victory).
+        Sample weight = 1.0 + (win_weight if combatWon else 0) + (run_weight if runWon else 0).
         """
         self.samples: List[Tuple[torch.Tensor, torch.Tensor, int, float]] = []
         self.win_weight = win_weight
+        self.run_weight = run_weight
 
         p = Path(path)
         if not p.is_file():
@@ -42,7 +45,12 @@ class ImitationDataset(Dataset):
                 actions = torch.tensor(obj["actions"], dtype=torch.float32)
                 chosen = int(obj["chosenIndex"])
                 combat_won = obj.get("combatWon", True)  # backward compat: treat missing as win
-                weight = 1.0 + (win_weight if combat_won else 0.0)
+                run_won = obj.get("runWon", False)  # backward compat: treat missing as False
+                weight = 1.0
+                if combat_won:
+                    weight += win_weight
+                if run_won:
+                    weight += run_weight
                 self.samples.append((state, actions, chosen, weight))
 
         if not self.samples:
@@ -50,10 +58,10 @@ class ImitationDataset(Dataset):
 
         s_dim = self.samples[0][0].shape[0]
         a_dim = self.samples[0][1].shape[1]
-        n_win = sum(1 for s in self.samples if s[3] > 1.0)
+        n_combat_win = sum(1 for s in self.samples if s[3] > 1.0)
         print(f"Loaded {len(self.samples)} samples from {p}")
         print(f"  state_dim = {s_dim}, action_dim = {a_dim}")
-        print(f"  samples from winning combats (weighted up): {n_win}")
+        print(f"  samples with elevated weight (combat/run win): {n_combat_win}")
 
     def __len__(self) -> int:
         return len(self.samples)

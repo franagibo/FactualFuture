@@ -77,6 +77,8 @@ function main() {
       weightsPath,
       '--win-weight',
       env.IL_WIN_WEIGHT ?? '0.5',
+      '--run-weight',
+      env.IL_RUN_WEIGHT ?? '0.3',
     ],
     {}
   );
