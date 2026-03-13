@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { runSimulation, type DecisionSampleHook } from './runSimulator';
+import { runSimulation, type DecisionSampleHook, type CombatEndHook } from './runSimulator';
 import type { SimulatorOptions } from './runSimulator';
 import { loadCards, loadEnemies, loadEncounters, loadCharacters, loadRelics, loadEvents } from '../loadData';
 import type { CardDef } from '../cardDef';
@@ -23,6 +23,8 @@ interface ImitationSample {
   state: number[];
   actions: number[][];
   chosenIndex: number;
+  /** True if this decision was in a combat that the player won. Used to weight training toward winning play. */
+  combatWon?: boolean;
 }
 
 describe('collect-imitation-data (script)', () => {
@@ -85,6 +87,7 @@ describe('collect-imitation-data (script)', () => {
     };
 
     let sampleCount = 0;
+    const combatBuffer: ImitationSample[] = [];
 
     const onDecision: DecisionSampleHook = ({
       state,
@@ -105,14 +108,19 @@ describe('collect-imitation-data (script)', () => {
         )
       );
 
-      const sample: ImitationSample = {
+      combatBuffer.push({
         state: stateFeatures,
         actions: actionFeatures,
         chosenIndex,
-      };
+      });
+    };
 
-      stream.write(`${JSON.stringify(sample)}\n`);
-      sampleCount += 1;
+    const onCombatEnd: CombatEndHook = (combatWon) => {
+      for (const s of combatBuffer) {
+        stream.write(`${JSON.stringify({ ...s, combatWon })}\n`);
+        sampleCount += 1;
+      }
+      combatBuffer.length = 0;
     };
 
     console.log(
@@ -136,7 +144,7 @@ describe('collect-imitation-data (script)', () => {
       },
       N,
       seedBase,
-      { onDecision }
+      { onDecision, onCombatEnd }
     );
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 

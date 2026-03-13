@@ -129,6 +129,9 @@ export type DecisionSampleHook = (args: {
   chosenIndex: number;
 }) => void;
 
+/** Called once when a combat ends with the win/loss result. Used to tag decision samples with outcome. */
+export type CombatEndHook = (combatWon: boolean) => void;
+
 export function runCombatToConclusion(
   state: GameState,
   cardsMap: Map<string, CardDef>,
@@ -142,7 +145,8 @@ export function runCombatToConclusion(
     enemyDefs: Map<string, EnemyDef>,
     archetypeContext: ArchetypeContext
   ) => BotAction = pickAction,
-  onDecision?: DecisionSampleHook
+  onDecision?: DecisionSampleHook,
+  onCombatEnd?: CombatEndHook
 ): { state: GameState; combatMetrics: CombatMetrics } {
   const encounterId = state.currentEncounter ?? '';
   const hpStart = state.playerHp;
@@ -208,6 +212,10 @@ export function runCombatToConclusion(
     hpEnd,
     damageTaken,
   };
+
+  if (onCombatEnd) {
+    onCombatEnd(next.combatResult === 'win');
+  }
 
   return { state: next, combatMetrics };
 }
@@ -283,6 +291,7 @@ export function singleRun(
   opts: SimulatorOptions,
   hooks?: {
     onDecision?: DecisionSampleHook;
+    onCombatEnd?: CombatEndHook;
   }
 ): RunMetrics {
   const resolved = resolveOptions(opts);
@@ -358,7 +367,8 @@ export function singleRun(
           opts.relicDefs,
           archetypeContext,
           combatBot,
-          hooks?.onDecision
+          hooks?.onDecision,
+          hooks?.onCombatEnd
         );
         state = afterCombat;
         combats.push(combatMetrics);
@@ -507,6 +517,7 @@ export function runSimulation(
   seedBase: number = 0,
   hooks?: {
     onDecision?: DecisionSampleHook;
+    onCombatEnd?: CombatEndHook;
   }
 ): { runs: RunMetrics[]; winRate: number; avgFloorReached: number; avgHpAfterFirstCombat: number } {
   const runs: RunMetrics[] = [];

@@ -17,6 +17,7 @@ def collate(batch):
       state:   [S]
       actions: [A_i, A_dim]   (A_i varies per sample)
       chosen:  scalar in [0, A_i)
+      weight:  float (for outcome-weighted loss)
 
     We pad all actions to [max_A, A_dim] within the batch.
     The chosen index always refers to a real (unpadded) action.
@@ -25,6 +26,7 @@ def collate(batch):
 
     action_tensors = [b[1] for b in batch]
     chosen = torch.tensor([b[2] for b in batch], dtype=torch.long)  # [B]
+    weights = torch.tensor([b[3] for b in batch], dtype=torch.float32)  # [B]
 
     # Number of real actions per sample (before padding).
     counts = torch.tensor([a.shape[0] for a in action_tensors], dtype=torch.long)  # [B]
@@ -43,7 +45,7 @@ def collate(batch):
         padded_actions.append(padded)
 
     actions = torch.stack(padded_actions, dim=0)  # [B, max_A, A_dim]
-    return states, actions, chosen, counts
+    return states, actions, chosen, counts, weights
 
 
 def main() -> None:
@@ -66,9 +68,15 @@ def main() -> None:
         default="",
         help="Optional path to an existing weights .pt file to continue training from.",
     )
+    parser.add_argument(
+        "--win-weight",
+        type=float,
+        default=0.5,
+        help="Extra weight for samples from winning combats (sample weight = 1 + win_weight if combatWon else 1).",
+    )
     args = parser.parse_args()
 
-    dataset = ImitationDataset(args.data)
+    dataset = ImitationDataset(args.data, win_weight=args.win_weight)
 
     val_size = int(len(dataset) * args.val_frac)
     train_size = len(dataset) - val_size
@@ -89,7 +97,7 @@ def main() -> None:
             model.load_state_dict(state_dict)
             print(f"Loaded initial weights from {init_path}")
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(reduction="none")  # per-sample loss for outcome weighting
 
     best_val_acc = 0.0
     out_path = Path(args.out)
@@ -100,7 +108,7 @@ def main() -> None:
         total = 0
         correct = 0
 
-        for states, actions, chosen, counts in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
+        for states, actions, chosen, counts, weights in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
             optimizer.zero_grad()
             logits = model(states, actions)               # [B, A]
             # Mask out padded actions so they don't affect the loss.
@@ -110,7 +118,9 @@ def main() -> None:
             valid_mask = idx < counts.to(device).unsqueeze(1)  # [B, A] True where real
             logits = logits.masked_fill(~valid_mask, -1e9)
 
-            loss = criterion(logits, chosen)
+            per_sample_loss = criterion(logits, chosen)   # [B]
+            weights = weights.to(device)
+            loss = (per_sample_loss * weights).mean()
             loss.backward()
             optimizer.step()
 
@@ -127,7 +137,7 @@ def main() -> None:
         val_total = 0
         val_correct = 0
         with torch.no_grad():
-            for states, actions, chosen, counts in val_loader:
+            for states, actions, chosen, counts, _ in val_loader:
                 logits = model(states, actions)
                 b, a = logits.shape
                 device = logits.device

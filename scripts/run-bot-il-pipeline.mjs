@@ -79,6 +79,8 @@ function main() {
       env.IL_BATCH_SIZE ?? '64',
       '--out',
       env.IL_WEIGHTS_OUT ?? 'policy_best.pt',
+      '--win-weight',
+      env.IL_WIN_WEIGHT ?? '0.5',
     ],
     {}
   );

@@ -75,6 +75,8 @@ function main() {
       weightsFile,
       '--init-weights',
       weightsPath,
+      '--win-weight',
+      env.IL_WIN_WEIGHT ?? '0.5',
     ],
     {}
   );
