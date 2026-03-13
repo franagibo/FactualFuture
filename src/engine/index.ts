@@ -3,3 +3,7 @@ export * from './cardDef';
 export * from './loadData';
 export * from './effectRunner';
 export * from './combat';
+export * from './rng';
+export * from './encounterPicker';
+export * from './simulator/strategyBot';
+export * from './simulator/runSimulator';

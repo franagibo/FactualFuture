@@ -1,6 +1,7 @@
 import type { GameState, EnemyState } from './types';
 import type { CardDef } from './cardDef';
 import { rngRandomInt, rngShuffle } from './rng';
+import { defaultRng } from './rng';
 
 function isAttackCard(cardId: string, cardsMap: Map<string, CardDef>): boolean {
   const def = cardsMap.get(cardId);
@@ -10,10 +11,11 @@ function isAttackCard(cardId: string, cardsMap: Map<string, CardDef>): boolean {
 
 export function drawOne(state: GameState): GameState {
   if (state.hand.length >= 10) return state; // max hand size
+  const rng = state._simRng ?? defaultRng;
   let deck = [...state.deck];
   let discard = [...state.discard];
   if (deck.length === 0) {
-    deck = rngShuffle(discard);
+    deck = rngShuffle(discard, rng);
     discard = [];
   }
   if (deck.length === 0) return { ...state, deck, discard };
@@ -140,9 +142,10 @@ export function runEffects(
       case 'exhaustRandom': {
         const count = Math.min(effect.value, next.hand.length);
         if (count <= 0) break;
+        const rng = next._simRng ?? defaultRng;
         const indices = new Set<number>();
         while (indices.size < count) {
-          indices.add(rngRandomInt(0, next.hand.length - 1));
+          indices.add(rngRandomInt(0, next.hand.length - 1, rng));
         }
         const toExhaust = [...indices].map((i) => next.hand[i]);
         const newHand = next.hand.filter((_, i) => !indices.has(i));

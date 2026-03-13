@@ -4,6 +4,16 @@ export type Rng = () => number;
 /** Default RNG, backed by Math.random(). */
 export const defaultRng: Rng = () => Math.random();
 
+/** Create a deterministic RNG from a seed (mulberry32). Same seed => same sequence. */
+export function createSeededRng(seed: number): Rng {
+  return function seededRng(): number {
+    seed = (seed + 0x6d2b79f5) | 0; // mulberry32
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | (t ^ (t >>> 15)))) ^ t;
+    return ((t >>> 0) / 4294967296);
+  };
+}
+
 /** Fisher–Yates shuffle using the provided RNG (default: Math.random). */
 export function rngShuffle<T>(arr: T[], rng: Rng = defaultRng): T[] {
   const out = [...arr];

@@ -33,3 +33,14 @@ yarn-error.log*
 
 # Test coverage
 coverage/
+
+# Offline bot training artifacts
+bot-training/.venv/
+bot-training/__pycache__/
+bot-training/*.pt
+bot-training/learned-policy-*.json
+policy_best.pt
+learned-policy-*.json
+
+# Large simulation datasets
+data/imitation/*.ndjson

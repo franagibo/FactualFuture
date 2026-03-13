@@ -25,6 +25,8 @@ export interface StartRunOptions {
   starterRelicId?: string;
   /** Max HP at run start (e.g. 80 for Gungirl). If omitted, INITIAL_PLAYER_HP (70) is used. */
   startingMaxHp?: number;
+  /** Optional RNG for reproducible simulator runs. When set, stored on state as _simRng. */
+  rng?: () => number;
 }
 
 /**
@@ -39,10 +41,12 @@ export function startRun(
 ): GameState {
   const map = generateMap(seed, actConfig);
   const starterDeck = options?.starterDeck?.length ? options.starterDeck : DEFAULT_STARTER_DECK;
-  const deck = rngShuffle([...starterDeck]);
+  const rng = options?.rng ?? (() => Math.random());
+  const deck = rngShuffle([...starterDeck], rng);
   const maxHp = options?.startingMaxHp ?? INITIAL_PLAYER_HP;
 
   return {
+    _simRng: options?.rng,
     playerHp: maxHp,
     playerMaxHp: maxHp,
     playerBlock: 0,
@@ -114,12 +118,13 @@ export interface ShopPoolConfig {
   relicCount: number;
 }
 
-function randomInRange(min: number, max: number): number {
-  return rngRandomInt(min, max);
+function randomInRange(min: number, max: number, rng: () => number = () => Math.random()): number {
+  return rngRandomInt(min, max, rng);
 }
 
 /** Enter shop: set runPhase to 'shop'. If pool provided, fill shopState with random cards/relics and prices. */
 export function enterShop(state: GameState, pool?: ShopPoolConfig): GameState {
+  const rng = state._simRng ?? (() => Math.random());
   const shopState: GameState['shopState'] = {
     cardIds: [],
     relicIds: [],
@@ -127,15 +132,15 @@ export function enterShop(state: GameState, pool?: ShopPoolConfig): GameState {
     relicPrices: {},
   };
   if (pool) {
-    const cards = rngPickRandom(pool.cards, Math.min(pool.cardCount, pool.cards.length));
-    const relics = rngPickRandom(pool.relics, Math.min(pool.relicCount, pool.relics.length));
+    const cards = rngPickRandom(pool.cards, Math.min(pool.cardCount, pool.cards.length), rng);
+    const relics = rngPickRandom(pool.relics, Math.min(pool.relicCount, pool.relics.length), rng);
     for (const id of cards) {
       shopState.cardIds.push(id);
-      shopState.cardPrices[id] = randomInRange(pool.cardPriceMin, pool.cardPriceMax);
+      shopState.cardPrices[id] = randomInRange(pool.cardPriceMin, pool.cardPriceMax, rng);
     }
     for (const id of relics) {
       shopState.relicIds.push(id);
-      shopState.relicPrices[id] = randomInRange(pool.relicPriceMin, pool.relicPriceMax);
+      shopState.relicPrices[id] = randomInRange(pool.relicPriceMin, pool.relicPriceMax, rng);
     }
   }
   return {
@@ -207,8 +212,9 @@ const STUB_EVENT: EventDef = {
 
 /** Enter event: pick one event from pool (or stub), set runPhase and eventState. */
 export function enterEvent(state: GameState, eventPool: EventDef[]): GameState {
+  const rng = state._simRng ?? (() => Math.random());
   const pool = eventPool.length > 0 ? eventPool : [STUB_EVENT];
-  const event = rngPickRandom(pool, 1)[0];
+  const event = rngPickRandom(pool, 1, rng)[0];
   return {
     ...state,
     runPhase: 'event',
@@ -338,7 +344,8 @@ export function advanceToNextAct(
  * Enter treasure node: go to reward phase with 3 card choices (no gold). Uses same card pool as combat rewards.
  */
 function enterTreasure(state: GameState, rewardCardPool: string[]): GameState {
-  const choices = rngPickRandom(rewardCardPool, REWARD_CARD_COUNT);
+  const rng = state._simRng ?? (() => Math.random());
+  const choices = rngPickRandom(rewardCardPool, REWARD_CARD_COUNT, rng);
   return {
     ...state,
     runPhase: 'reward',
@@ -439,8 +446,9 @@ export function afterCombatWin(
   rewardCardPool: string[],
   cardsMap: Map<string, CardDef>
 ): GameState {
+  const rng = state._simRng ?? (() => Math.random());
   const stripped = stripStatusCards(state, cardsMap);
-  const choices = rngPickRandom(rewardCardPool, REWARD_CARD_COUNT);
+  const choices = rngPickRandom(rewardCardPool, REWARD_CARD_COUNT, rng);
   return {
     ...stripped,
     runPhase: 'reward',

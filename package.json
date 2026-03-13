@@ -6,6 +6,11 @@
   "scripts": {
     "build:engine": "tsc -p tsconfig.engine.json",
     "test:engine": "vitest run --config vitest.engine.config.ts",
+    "sim": "vitest run src/engine/simulator/run-balance-sim.spec.ts --reporter=verbose",
+    "sim:learned": "vitest run src/engine/simulator/run-learned-vs-heuristic.spec.ts --reporter=verbose",
+    "collect:bot-data": "vitest run src/engine/simulator/collect-imitation-data.spec.ts --reporter=verbose",
+    "bot:full": "node scripts/run-bot-il-pipeline.mjs",
+    "bot:continue": "node scripts/run-bot-il-continue.mjs",
     "start:ng": "ng serve",
     "build:ng": "ng build",
     "start:electron": "npm run build:engine && electron .",

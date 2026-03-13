@@ -3,6 +3,8 @@ import type { CardDef } from './cardDef';
 import type { EnemyDef, EncounterDef, EnemyTrigger } from './loadData';
 import { runEffects, discardHandAndDraw } from './effectRunner';
 import { rngShuffle } from './rng';
+import type { Rng } from './rng';
+import { defaultRng } from './rng';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -16,9 +18,9 @@ const DEFAULT_STARTER_DECK_IDS = [
   'bash',
 ];
 
-function pickIntent(def: EnemyDef): EnemyIntent {
+function pickIntent(def: EnemyDef, rng: Rng = defaultRng): EnemyIntent {
   const total = def.intents.reduce((s, i) => s + i.weight, 0);
-  let r = Math.random() * total;
+  let r = rng() * total;
   for (const { weight, intent } of def.intents) {
     r -= weight;
     if (r <= 0) {
@@ -40,12 +42,13 @@ function pickIntent(def: EnemyDef): EnemyIntent {
 
 function setEnemyIntents(
   enemies: EnemyState[],
-  enemyDefs: Map<string, EnemyDef>
+  enemyDefs: Map<string, EnemyDef>,
+  rng: Rng = defaultRng
 ): EnemyState[] {
   return enemies.map((e) => {
     const def = enemyDefs.get(e.id);
     if (!def) return e;
-    return { ...e, intent: pickIntent(def) };
+    return { ...e, intent: pickIntent(def, rng) };
   });
 }
 
@@ -102,13 +105,15 @@ export function processHpThresholdTriggers(
 /**
  * Create combat state for an encounter.
  * @param starterDeck - Optional card IDs for initial deck; if omitted, DEFAULT_STARTER_DECK_IDS is used.
+ * @param rng - Optional RNG for reproducible sim; used for deck shuffle and enemy intents.
  */
 export function createInitialState(
   cardsMap: Map<string, CardDef>,
   enemyDefs: Map<string, EnemyDef>,
   encountersMap: Map<string, EncounterDef>,
   encounterId: string,
-  starterDeck?: string[]
+  starterDeck?: string[],
+  rng: Rng = defaultRng
 ): GameState {
   const encounter = encountersMap.get(encounterId);
   if (!encounter) {
@@ -131,7 +136,7 @@ export function createInitialState(
   }
 
   const deckIds = starterDeck?.length ? starterDeck : DEFAULT_STARTER_DECK_IDS;
-  const deck = rngShuffle([...deckIds]);
+  const deck = rngShuffle([...deckIds], rng);
   const hand: string[] = [];
   const restDeck = [...deck];
   for (let i = 0; i < HAND_SIZE_START && restDeck.length > 0; i++) {
@@ -141,7 +146,7 @@ export function createInitialState(
   const enemies: EnemyState[] = encounter.enemies.map((id) => {
     const def = enemyDefs.get(id);
     if (!def) return { id, name: id, hp: 1, maxHp: 1, block: 0, intent: null };
-    const intent = pickIntent(def);
+    const intent = pickIntent(def, rng);
     return {
       id: def.id,
       name: def.name,
@@ -174,18 +179,21 @@ export function createInitialState(
 /**
  * Start combat from run state: merge deck+hand+discard, shuffle, draw 5, set enemies.
  * Sets runPhase to 'combat'. Used when entering a combat/elite/boss node.
+ * @param rng - Optional RNG for reproducible sim; defaults to state._simRng or Math.random.
  */
 export function startCombatFromRunState(
   state: GameState,
   encounterId: string,
   cardsMap: Map<string, CardDef>,
   enemyDefs: Map<string, EnemyDef>,
-  encountersMap: Map<string, EncounterDef>
+  encountersMap: Map<string, EncounterDef>,
+  rng?: Rng
 ): GameState {
   const encounter = encountersMap.get(encounterId);
   if (!encounter) return state;
 
-  const fullDeck = rngShuffle([...state.deck, ...state.discard, ...state.hand]);
+  const simRng = rng ?? state._simRng ?? defaultRng;
+  const fullDeck = rngShuffle([...state.deck, ...state.discard, ...state.hand], simRng);
   const hand: string[] = [];
   const restDeck = [...fullDeck];
   for (let i = 0; i < HAND_SIZE_START && restDeck.length > 0; i++) {
@@ -195,7 +203,7 @@ export function startCombatFromRunState(
   const enemies: EnemyState[] = encounter.enemies.map((id) => {
     const def = enemyDefs.get(id);
     if (!def) return { id, name: id, hp: 1, maxHp: 1, block: 0, intent: null };
-    const intent = pickIntent(def);
+    const intent = pickIntent(def, simRng);
     return {
       id: def.id,
       name: def.name,
@@ -369,7 +377,7 @@ export function endTurn(
     frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
     playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),
     playerVulnerableStacks: Math.max(0, (next.playerVulnerableStacks ?? 0) - 1),
-    enemies: setEnemyIntents(decayedEnemies, enemyDefs),
+    enemies: setEnemyIntents(decayedEnemies, enemyDefs, next._simRng ?? defaultRng),
   };
   return next;
 }

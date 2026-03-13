@@ -127,6 +127,8 @@ export interface GameState {
   playerArtifactStacks?: number;
   /** Next card you play is resolved twice (e.g. Twin Dose). */
   playerNextCardPlayedTwice?: boolean;
+  /** Optional RNG for simulator; same seed => reproducible run. Do not set in normal play. */
+  _simRng?: () => number;
 }
 
 /** Meta progression (unlocks) and run statistics, stored separately from run. */
