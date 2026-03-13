@@ -26,9 +26,10 @@ import { COMBAT_TIMING, ENEMY_ANIMATION_TIMING } from './constants/combat-timing
 import { getHandLayout, type HandLayoutResult } from './constants/hand-layout';
 import { getCardEffectDescription } from './helpers/card-text.helper';
 import { drawMapView } from './renderers/map-view.renderer';
-import { drawCombatView } from './renderers/combat-view.renderer';
+import { drawCombatView, buildCardVisualsContainer } from './renderers/combat-view.renderer';
 import { MapPhaseController, type MapPhaseHost } from './controllers/map-phase.controller';
 import { CombatPhaseController, type CombatPhaseHost } from './controllers/combat-phase.controller';
+import { updateCardAnimations } from './systems/card-animation.system';
 import { CombatPools } from './pools/pixi-pools';
 import type { FloatingNumber } from './constants/combat-types';
 import { logger } from '../util/app-logger';
@@ -473,6 +474,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           if (Math.abs(this.combatController.hoverLerp[i] - prev) > 0.002) changed = true;
         }
       }
+      if (hand.length > 0 && this.combatController.handPresentations.length === hand.length) changed = true;
       if (changed) {
         const enemyAnimPlaying =
           this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs) ||
@@ -508,7 +510,28 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
             this.redraw();
           }
         } else {
-          this.updateHandHoverOnly(layout);
+          if (this.combatController.handPresentations.length === hand.length) {
+            const w = this.app.screen.width;
+            const h = this.app.screen.height;
+            const excludedIndex =
+              this.combatController.cardInteractionState === 'dragging' &&
+              this.combatController.cardInteractionCardIndex != null
+                ? this.combatController.cardInteractionCardIndex
+                : null;
+            this.combatController.applyHandLayoutTargets(
+              hand.length,
+              w,
+              h,
+              { handLayout: this.gameSettings.handLayout(), reducedMotion: this.gameSettings.reducedMotion() },
+              excludedIndex,
+              this.combatController.dragScreenX,
+              this.combatController.dragScreenY
+            );
+            updateCardAnimations(this.combatController.handPresentations, dt);
+            this.updateHandFromPresentation();
+          } else {
+            this.updateHandHoverOnly(layout);
+          }
         }
       }
     };
@@ -778,6 +801,28 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const vfxChildren = vfx.removeChildren();
     for (const child of vfxChildren) child.destroy({ children: true, texture: false });
     this.drawCardImpactVfx(vfx, performance.now());
+  }
+
+  /**
+   * Updates only card transforms from handPresentations (current position/rotation/scale/zPriority).
+   * Used when target-based animation is active (handPresentations.length === hand.length).
+   */
+  private updateHandFromPresentation(): void {
+    const state = this.bridge.getState();
+    if (!state || state.hand.length !== this.combatController.cardSprites.size) return;
+    const hand = state.hand;
+    const presentations = this.combatController.handPresentations;
+    if (presentations.length !== hand.length) return;
+    for (let i = 0; i < hand.length; i++) {
+      const container = this.combatController.cardSprites.get(`${hand[i]}-${i}`);
+      if (!container) continue;
+      const p = presentations[i];
+      container.x = p.currentX;
+      container.y = p.currentY;
+      container.rotation = p.currentRotation;
+      container.scale.set(p.currentScale);
+      container.zIndex = p.zPriority;
+    }
   }
 
   /**
@@ -1312,18 +1357,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const toX = toCenter.x;
     const toY = toCenter.y;
 
-    const flyCard = new PIXI.Container();
-    const cardTex = this.combatAssets.getCardArtTexture(cardId);
-    if (cardTex) {
-      const cardSprite = new PIXI.Sprite(cardTex);
-      cardSprite.width = cardWidth;
-      cardSprite.height = cardHeight;
-      flyCard.addChild(cardSprite);
-    } else {
-      const bg = new PIXI.Graphics();
-      bg.roundRect(0, 0, cardWidth, cardHeight, L.cardCornerRadius).fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0xe8c060 });
-      flyCard.addChild(bg);
-    }
+    const flyCard = buildCardVisualsContainer({
+      cardId,
+      cardWidth,
+      cardHeight,
+      getCardCost: (id) => this.getCardCost(id),
+      getCardName: (id) => this.getCardName(id),
+      getCardEffectDescription: (id) => this.getCardEffectDescriptionText(id),
+      getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
+      textScale: this.gameSettings.textScale(),
+    });
     flyCard.pivot.set(cardWidth / 2, cardHeight);
     flyCard.x = fromX;
     flyCard.y = fromY;

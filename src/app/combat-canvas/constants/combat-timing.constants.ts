@@ -19,6 +19,8 @@ export const COMBAT_TIMING = {
   redrawAfterFloatMs: 750,
   /** Map load timeout; on expiry show error and Retry. */
   mapLoadTimeoutMs: 10_000,
+  /** Card position/rotation/scale lerp per second (exponential decay). Higher = snappier hand relaxation. */
+  cardLerpSpeed: 12,
 } as const;
 
 /** Enemy placeholder (Zombie_Villager) animation timing. Same folder names (Idle, Hurt, Dying) used for future per-enemy folders. */

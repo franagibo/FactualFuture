@@ -85,6 +85,10 @@ export const COMBAT_LAYOUT = {
   plantSlotW: 90,
   plantSlotH: 70,
   plantGap: 12,
+  /** Deck position for draw animation: X ratio (0–1). */
+  deckPositionXRatio: 0.18,
+  /** Deck position: Y offset from bottom (px). */
+  deckPositionYOffsetFromBottom: 28,
 } as const;
 
 /** Named slots used by the combat renderer for placement and z-order. */
@@ -176,6 +180,17 @@ export function getEnemyLayout(w: number, h: number, enemyCount: number): EnemyL
 /** Center point for an enemy at the given index (0-based) given the number of enemies. */
 export function getEnemyCenter(index: number, enemyCount: number, w: number, h: number): { x: number; y: number } {
   return getEnemyLayout(w, h, enemyCount).getCenter(index);
+}
+
+/** Deck pile position (for draw animation: card flies from here into hand). Bottom-center of deck visual. */
+export function getDeckPosition(w: number, h: number): { x: number; y: number } {
+  const L = COMBAT_LAYOUT;
+  const playerY = h - L.playerYOffsetFromBottom;
+  const handY = playerY - L.cardHeight + (L.handYOffset ?? 0);
+  return {
+    x: w * (L.deckPositionXRatio ?? 0.18),
+    y: handY,
+  };
 }
 
 /** Layout for plant slots (Verdant Machinist): between player and enemies, horizontal row. */

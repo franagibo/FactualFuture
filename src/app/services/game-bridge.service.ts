@@ -64,6 +64,13 @@ const UNLOCK_ON_ACT2_RELICS = ['thread_and_needle'];
 /** Unlock granted on run victory. */
 const UNLOCK_ON_VICTORY_RELIC = 'velvet_choker';
 
+/** Fallback starter deck when character data has no/missing/empty starterDeck (ensures we never start with 0 cards). */
+const FALLBACK_STARTER_DECK = [
+  'strike', 'strike', 'strike', 'strike', 'strike',
+  'defend', 'defend', 'defend', 'defend',
+  'bash',
+];
+
 declare const window: Window & { electronAPI?: { readSave: (path: string) => Promise<unknown>; writeSave: (path: string, data: unknown) => Promise<void> } };
 
 /**
@@ -252,10 +259,12 @@ export class GameBridgeService {
       typeWeights: act1.typeWeights,
     };
     const character = this.charactersMap.get(characterId);
-    const starterDeck = character?.starterDeck;
+    const rawStarterDeck = character?.starterDeck;
+    const starterDeck =
+      rawStarterDeck && rawStarterDeck.length > 0 ? rawStarterDeck : (character ? FALLBACK_STARTER_DECK : undefined);
     const runSeed = seed ?? (Date.now() & 0xffffffff);
     this.setState(engineStartRun(runSeed, actConfig, {
-      starterDeck: starterDeck?.length ? starterDeck : undefined,
+      starterDeck,
       characterId: character ? characterId : undefined,
       starterRelicId: character?.starterRelicId,
       startingMaxHp: character?.startingMaxHp,

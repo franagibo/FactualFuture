@@ -8,6 +8,12 @@ import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 import type { CombatViewContext } from '../renderers/combat-view.renderer';
 import type { FloatingNumber } from '../constants/combat-types';
 import type { PixiPools } from '../pools/pixi-pools';
+import type { CardPresentation } from '../models/card-presentation.model';
+import { createCardPresentation, setTargetsFromLayout } from '../models/card-presentation.model';
+import { getHandLayoutTargets } from '../systems/hand-layout.system';
+import { updateZOrder } from '../systems/z-order.system';
+import { getDeckPosition } from '../constants/combat-layout.constants';
+import { ZoneManager } from '../systems/zone-manager';
 
 /** Host provided by the component: callbacks and getters needed to build CombatViewContext. */
 export interface CombatPhaseHost {
@@ -61,6 +67,63 @@ export class CombatPhaseController {
   slashingAnimationPlaying = false;
   activeCardVfx: { vfxId: string; x: number; y: number; startTime: number }[] = [];
 
+  /** Target-based card presentation (current/target position, rotation, scale). Length matches state.hand. */
+  handPresentations: CardPresentation[] = [];
+  /** Indices of cards just drawn (for z-order). Cleared after a short delay. */
+  newDrawIndices: number[] = [];
+  private newDrawClearAt = 0;
+  readonly zoneManager = new ZoneManager();
+
+  /**
+   * Syncs handPresentations length and sets targets from layout (and drag position for dragged card).
+   * Call from buildCombatContext and from the ticker so targets stay current.
+   */
+  applyHandLayoutTargets(
+    handLen: number,
+    w: number,
+    h: number,
+    options: { handLayout: 'default' | 'compact'; reducedMotion: boolean },
+    excludedIndex: number | null,
+    dragX: number,
+    dragY: number
+  ): void {
+    const c = this;
+    const layoutTargets = getHandLayoutTargets(handLen, c.hoveredCardIndex, excludedIndex, w, h, options);
+    const oldLen = c.handPresentations.length;
+    while (c.handPresentations.length > handLen) c.handPresentations.pop();
+    const deckPos = getDeckPosition(w, h);
+    while (c.handPresentations.length < handLen) {
+      const idx = c.handPresentations.length;
+      const t = layoutTargets[idx];
+      c.handPresentations.push(
+        createCardPresentation(deckPos.x, deckPos.y, 0, 1)
+      );
+      if (t) setTargetsFromLayout(c.handPresentations[idx], t.x, t.y, t.rotation, t.scale, t.spreadOffsetX);
+    }
+    if (handLen > oldLen) {
+      c.newDrawIndices = Array.from({ length: handLen - oldLen }, (_, k) => oldLen + k);
+      c.newDrawClearAt = typeof performance !== 'undefined' ? performance.now() + 500 : 0;
+    }
+    if (c.newDrawClearAt > 0 && typeof performance !== 'undefined' && performance.now() >= c.newDrawClearAt) {
+      c.newDrawIndices = [];
+      c.newDrawClearAt = 0;
+    }
+    for (let i = 0; i < handLen; i++) {
+      const p = c.handPresentations[i];
+      if (i === excludedIndex) {
+        p.targetX = dragX;
+        p.targetY = dragY;
+        p.targetRotation = 0;
+        p.targetScale = 1.08;
+      } else {
+        const t = layoutTargets[i];
+        if (t) setTargetsFromLayout(p, t.x, t.y, t.rotation, t.scale, t.spreadOffsetX);
+      }
+    }
+    const isNewByIndex = (i: number) => c.newDrawIndices.includes(i);
+    updateZOrder(c.handPresentations, c.hoveredCardIndex, excludedIndex, isNewByIndex);
+  }
+
   /** Builds the context passed to drawCombatView. */
   buildCombatContext(
     host: CombatPhaseHost,
@@ -73,6 +136,20 @@ export class CombatPhaseController {
     const c = this;
     const assets = host.getCombatAssets();
     const settings = host.getGameSettings();
+    if (state.runPhase !== 'combat') {
+      c.zoneManager.reset();
+    }
+    const hand = state.runPhase === 'combat' ? state.hand : [];
+    const handLen = hand.length;
+    if (state.runPhase === 'combat') {
+      c.zoneManager.onEngineStateChanged(state);
+    }
+    const excludedIndex =
+      c.cardInteractionState === 'dragging' && c.cardInteractionCardIndex != null ? c.cardInteractionCardIndex : null;
+    const layoutOptions = { handLayout: settings.handLayout(), reducedMotion: settings.reducedMotion() };
+    if (state.runPhase === 'combat' && handLen > 0) {
+      c.applyHandLayoutTargets(handLen, w, h, layoutOptions, excludedIndex, c.dragScreenX, c.dragScreenY);
+    }
     if (state.runPhase === 'combat' && state.enemies.length !== c.enemyVariants.length) {
       c.enemyVariants = state.enemies.map(() => 1 + Math.floor(Math.random() * 3));
       c.enemyHurtStartMs = state.enemies.map(() => null);
@@ -98,6 +175,7 @@ export class CombatPhaseController {
         getHandLayout: getHandLayoutFn,
         spreadLerp: c.spreadLerp,
         hoverLerp: c.hoverLerp,
+        handPresentations: c.handPresentations,
         cardSprites: c.cardSprites,
         getCardArtTexture: (id) => assets.getCardArtTexture(id),
         isDraggingCard: c.cardInteractionState === 'dragging',

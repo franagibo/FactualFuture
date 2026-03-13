@@ -13,6 +13,7 @@ import { ENEMY_ANIMATION_TIMING } from '../constants/combat-timing.constants';
 import type { FloatingNumber } from '../constants/combat-types';
 import { getHandLayout, type HandLayoutResult } from '../constants/hand-layout';
 import type { PixiPools } from '../pools/pixi-pools';
+import type { CardPresentation } from '../models/card-presentation.model';
 
 /** Re-export for consumers that import from the renderer. */
 export type { FloatingNumber };
@@ -85,6 +86,8 @@ export interface CombatViewHandContext {
   getHandLayout?: (count: number, hoveredIndex: number | null) => HandLayoutResult;
   spreadLerp?: number[];
   hoverLerp?: number[];
+  /** When set and length matches hand, drawHand uses current position/rotation/scale from these (target-based animation). */
+  handPresentations?: CardPresentation[];
   cardSprites: Map<string, PIXI.Container>;
   getCardArtTexture?: (cardId: string) => PIXI.Texture | null;
   isDraggingCard?: boolean;
@@ -558,7 +561,10 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
   handContainer.zIndex = 20;
   ctx.cardSprites.clear();
 
-  const useHoverLerp = ctx.hoverLerp && ctx.hoverLerp.length === hand.length;
+  const handPresentations = ctx.hand?.handPresentations;
+  const usePresentation =
+    handPresentations != null && handPresentations.length === hand.length;
+  const useHoverLerp = !usePresentation && ctx.hoverLerp && ctx.hoverLerp.length === hand.length;
   const isPressedOrDragging = (idx: number) =>
     ctx.cardInteractionCardIndex === idx &&
     (ctx.cardInteractionState === 'pressed' || ctx.cardInteractionState === 'dragging');
@@ -607,11 +613,14 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
 
     const pos = layout?.positions[i];
     const spreadX = (ctx.spreadLerp && ctx.spreadLerp[i] !== undefined) ? ctx.spreadLerp[i] : (pos?.spreadOffsetX ?? 0);
-    const cardX = pos ? pos.x + spreadX : w / 2 + (i - (hand.length - 1) / 2) * cardWidth * L.overlapRatio;
-    const cardY = pos ? pos.y : 0;
-    const rot = pos?.rotation ?? 0;
+    const pres = usePresentation ? handPresentations![i] : null;
+    const cardX = pres != null ? pres.currentX : pos ? pos.x + spreadX : w / 2 + (i - (hand.length - 1) / 2) * cardWidth * L.overlapRatio;
+    const cardY = pres != null ? pres.currentY : pos ? pos.y : 0;
+    const rot = pres != null ? pres.currentRotation : pos?.rotation ?? 0;
     const baseY = pos?.y ?? 0;
-    const liftY = (isActive ? lerp * hoverLift : 0);
+    const liftY = usePresentation ? 0 : (isActive ? lerp * hoverLift : 0);
+    const cardScale = pres != null ? pres.currentScale : 1 + (isActive ? lerp : 0) * (hoverScale - 1);
+    const cardZIndex = pres != null ? pres.zPriority : (isOnTop ? 100 : i);
 
     const container = c(ctx);
     container.sortableChildren = true;
@@ -686,8 +695,8 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     container.x = cardX;
     container.y = cardY - liftY;
     container.rotation = rot;
-    container.scale.set(1 + (isActive ? lerp : 0) * (hoverScale - 1));
-    container.zIndex = isOnTop ? 100 : i;
+    container.scale.set(cardScale);
+    container.zIndex = cardZIndex;
     container.alpha = playable ? (applyHover ? 1 : 0.92) : 0.6;
 
     container.eventMode = 'static';
@@ -1169,6 +1178,106 @@ function drawEnemyTurnBanner(ctx: CombatViewContext): void {
   turnText.x = w / 2;
   turnText.y = h / 2;
   stage.addChild(turnText);
+}
+
+// ---------------------------------------------------------------------------
+// Full card visuals (for fly-to-enemy and other single-card use)
+// ---------------------------------------------------------------------------
+
+export interface BuildCardVisualsParams {
+  cardId: string;
+  cardWidth: number;
+  cardHeight: number;
+  getCardCost(cardId: string): number;
+  getCardName(cardId: string): string;
+  getCardEffectDescription(cardId: string): string;
+  getCardArtTexture(cardId: string): PIXI.Texture | null;
+  textScale?: number;
+}
+
+/**
+ * Builds a PIXI.Container with the same visual content as a hand card: shadow, art, cost, name, effect.
+ * Use for flying card animation so the card that flies to the enemy shows full content, not just template.
+ */
+export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.Container {
+  const {
+    cardId,
+    cardWidth,
+    cardHeight,
+    getCardCost,
+    getCardName,
+    getCardEffectDescription,
+    getCardArtTexture,
+    textScale = 1,
+  } = params;
+  const container = new PIXI.Container();
+
+  const shadow = new PIXI.Graphics();
+  shadow.roundRect(L.shadowOffset, L.shadowOffset, cardWidth, cardHeight, L.cardCornerRadius)
+    .fill({ color: 0x000000, alpha: 0.35 });
+  container.addChild(shadow);
+
+  const cardTex = getCardArtTexture(cardId);
+  if (cardTex) {
+    const cardSprite = new PIXI.Sprite(cardTex);
+    cardSprite.width = cardWidth;
+    cardSprite.height = cardHeight;
+    cardSprite.roundPixels = true;
+    container.addChild(cardSprite);
+  } else {
+    const bg = new PIXI.Graphics();
+    bg.roundRect(0, 0, cardWidth, cardHeight, L.cardCornerRadius)
+      .fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0xe8c060 });
+    container.addChild(bg);
+  }
+
+  const cost = getCardCost(cardId);
+  const costRadius = L.costRadius;
+  const costCenter = costRadius + L.costCenterOffset;
+  const costColor = 0x88ff88;
+  const costBg = new PIXI.Graphics();
+  costBg.circle(costCenter, costCenter, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
+  container.addChild(costBg);
+  const costFontSize = Math.round(32 * textScale);
+  const costText = new PIXI.Text({
+    text: String(cost),
+    style: { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor },
+  });
+  costText.anchor.set(0.5, 0.5);
+  costText.x = costCenter;
+  costText.y = costCenter;
+  container.addChild(costText);
+
+  const name = getCardName(cardId);
+  const nameDisplay = name.length > 16 ? name.slice(0, 16) + '…' : name;
+  const nameText = new PIXI.Text({
+    text: nameDisplay,
+    style: { fontFamily: 'system-ui', fontSize: Math.round(28 * textScale), fill: 0xeeeeee, fontWeight: 'bold' },
+  });
+  nameText.x = 24;
+  nameText.y = 84;
+  container.addChild(nameText);
+
+  const effectDesc = getCardEffectDescription(cardId);
+  if (effectDesc) {
+    const fs = Math.round(22 * textScale);
+    const effectText = new PIXI.Text({
+      text: effectDesc,
+      style: {
+        fontFamily: 'system-ui',
+        fontSize: fs,
+        fill: 0xcccccc,
+        wordWrap: true,
+        wordWrapWidth: cardWidth - L.cardTextPadding,
+        lineHeight: Math.round(fs * 1.25),
+      },
+    });
+    effectText.x = 24;
+    effectText.y = cardHeight - 120;
+    container.addChild(effectText);
+  }
+
+  return container;
 }
 
 // ---------------------------------------------------------------------------

@@ -25,9 +25,9 @@
     "description": "Biomechanical organism that grows combat plants. Summon, grow, and specialize up to 3 plants.",
     "animatedIdle": false,
     "starterRelicId": "core_seed_reactor",
-    "startingMaxHp": 72,
+    "startingMaxHp": 66,
     "starterDeck": [
-      "strike", "strike", "strike", "strike", "strike", "strike",
+      "strike", "strike", "strike", "strike",
       "defend", "defend", "defend", "defend",
       "seed_pod",
       "growth_pulse"

@@ -47,3 +47,4 @@ data/imitation/*.ndjson
 
 # Balance baseline snapshot (regeneratable via npm run balance:baseline)
 data/balance-baseline.json
+data/balance-baseline-verdant_machinist.json
