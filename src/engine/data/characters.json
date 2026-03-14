@@ -23,7 +23,7 @@
     "id": "verdant_machinist",
     "name": "Verdant Machinist",
     "description": "Biomechanical organism that grows combat plants. Summon, grow, and specialize up to 3 plants.",
-    "animatedIdle": false,
+    "animatedIdle": true,
     "starterRelicId": "core_seed_reactor",
     "startingMaxHp": 66,
     "starterDeck": [

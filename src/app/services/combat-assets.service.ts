@@ -16,10 +16,13 @@ const BLOCK_ICON_PATH = `${EFFECTS_PREFIX}block.svg`;
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
-/** Default static / idle image. Path: /assets/characters/{id}/{id}_static.png. Gungirl uses _idle.png (5x5 sprite sheet for idle animation). */
+/** Default static / idle image. Gungirl: 5x5 idle sheet. Verdant Machinist: 5x5 4500×4500 idle sheet (verdant_machinist_idle.png.png). */
 function getStaticImagePath(characterId: string): string {
   if (characterId === 'gungirl') {
     return `${PLAYER_CHARACTERS_PREFIX}gungirl/gungirl_idle.png`;
+  }
+  if (characterId === 'verdant_machinist') {
+    return `${PLAYER_CHARACTERS_PREFIX}verdant_machinist/verdant_machinist_idle.png`;
   }
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_static.png`;
 }
@@ -77,6 +80,11 @@ const GUNGIRL_SHEET_ROWS = 5;
 /** Idle animation: ms per frame. ~60ms ≈ 25 frames in 1.5s loop. */
 const GUNGIRL_IDLE_FRAME_MS = 60;
 
+/** Verdant Machinist idle: 5×5 sheet, 4500×4500 px (900×900 per frame), 25 frames. */
+const VM_IDLE_SHEET_COLS = 5;
+const VM_IDLE_SHEET_ROWS = 5;
+const VM_IDLE_FRAME_MS = 45;
+
 /** Current player character id (one of many usable characters). Can later come from run state or selection. */
 const DEFAULT_PLAYER_CHARACTER_ID = 'gungirl';
 
@@ -117,6 +125,8 @@ export class CombatAssetsService {
   private slashingResolve: (() => void) | null = null;
   /** Gungirl idle animation (5x5 = 25 frames from gungirl_idle.png). */
   private gungirlIdleTextures: PIXI.Texture[] = [];
+  /** Verdant Machinist idle animation (5×5 = 25 frames, 4500×4500 px sheet). */
+  private verdantMachinistIdleTextures: PIXI.Texture[] = [];
 
   /** Placeholder enemy animations (Idle, Hurt, Dying) per Zombie_Villager variant. Loaded once when combat uses placeholders. */
   private zombiePlaceholderTextures: Record<
@@ -242,7 +252,6 @@ export class CombatAssetsService {
         }
       }
     } else if (!this.playerTextures.has(cid)) {
-      // Gungirl: idle is a 5x5 sprite sheet; slice and store for animation.
       if (cid === 'gungirl') {
         try {
           const idlePath = this.resolveUrl(getStaticImagePath(cid));
@@ -253,6 +262,18 @@ export class CombatAssetsService {
           }
         } catch {
           this.gungirlIdleTextures = [];
+        }
+      }
+      if (cid === 'verdant_machinist') {
+        try {
+          const idlePath = this.resolveUrl(getStaticImagePath(cid));
+          const idleSheet = (await PIXI.Assets.load(idlePath)) as PIXI.Texture;
+          this.verdantMachinistIdleTextures = this.buildSheetFrames(idleSheet, VM_IDLE_SHEET_COLS, VM_IDLE_SHEET_ROWS);
+          if (this.verdantMachinistIdleTextures.length > 0) {
+            this.playerTextures.set(cid, this.verdantMachinistIdleTextures[0]);
+          }
+        } catch {
+          this.verdantMachinistIdleTextures = [];
         }
       }
       if (!this.playerTextures.has(cid)) {
@@ -415,6 +436,11 @@ export class CombatAssetsService {
       const t = animationTimeMs ?? 0;
       const index = Math.floor((t / GUNGIRL_IDLE_FRAME_MS) % this.gungirlIdleTextures.length);
       return this.gungirlIdleTextures[index] ?? this.gungirlIdleTextures[0];
+    }
+    if (cid === 'verdant_machinist' && this.verdantMachinistIdleTextures.length > 0) {
+      const t = animationTimeMs ?? 0;
+      const index = Math.floor((t / VM_IDLE_FRAME_MS) % this.verdantMachinistIdleTextures.length);
+      return this.verdantMachinistIdleTextures[index] ?? this.verdantMachinistIdleTextures[0];
     }
     return this.playerTextures.get(cid) ?? null;
   }
