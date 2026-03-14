@@ -923,28 +923,29 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     const statusW = 28;
     const statusH = 14;
     const statusGap = 2;
+    const buffPillsY = 42;
     let leftOffset = 0;
     if (strengthStacks > 0) {
       const bg = g(ctx);
-      bg.roundRect(statusLeftX + leftOffset, statusY, statusW, statusH, 3).fill({ color: 0xcc4444, alpha: 0.9 }).stroke({ width: 1, color: 0xff6666 });
+      bg.roundRect(statusLeftX + leftOffset, buffPillsY, statusW, statusH, 3).fill({ color: 0xcc4444, alpha: 0.9 }).stroke({ width: 1, color: 0xff6666 });
       container.addChild(bg);
       const label = t(ctx);
       label.text = `Str ${strengthStacks}`;
       label.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' };
       label.x = statusLeftX + leftOffset + 4;
-      label.y = statusY + 1;
+      label.y = buffPillsY + 1;
       container.addChild(label);
       leftOffset += statusW + statusGap;
     }
     if (ritualStacks > 0) {
       const bg = g(ctx);
-      bg.roundRect(statusLeftX + leftOffset, statusY, statusW, statusH, 3).fill({ color: 0x8844aa, alpha: 0.9 }).stroke({ width: 1, color: 0xaa66cc });
+      bg.roundRect(statusLeftX + leftOffset, buffPillsY, statusW, statusH, 3).fill({ color: 0x8844aa, alpha: 0.9 }).stroke({ width: 1, color: 0xaa66cc });
       container.addChild(bg);
       const label = t(ctx);
       label.text = `Rit ${ritualStacks}`;
       label.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' };
       label.x = statusLeftX + leftOffset + 4;
-      label.y = statusY + 1;
+      label.y = buffPillsY + 1;
       container.addChild(label);
       leftOffset += statusW + statusGap;
     }
