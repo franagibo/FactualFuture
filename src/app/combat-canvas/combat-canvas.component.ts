@@ -491,7 +491,29 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           this.combatController.playerSpriteRef != null &&
           this.combatController.enemySpriteRefs.length === state.enemies.length;
         if (useIdleOnlyPath) {
-          if (this.tickerFrameCount % 2 === 0) this.updatePlayerAndEnemyTexturesOnly();
+          // Keep hand positions in sync: presentations drive card layout; without this, cards stay at deck position.
+          if (hand.length > 0 && this.combatController.handPresentations.length === hand.length) {
+            const w = this.app.screen.width;
+            const h = this.app.screen.height;
+            const excludedIndex =
+              this.combatController.cardInteractionState === 'dragging' &&
+              this.combatController.cardInteractionCardIndex != null
+                ? this.combatController.cardInteractionCardIndex
+                : null;
+            this.combatController.applyHandLayoutTargets(
+              hand.length,
+              w,
+              h,
+              { handLayout: this.gameSettings.handLayout(), reducedMotion: this.gameSettings.reducedMotion() },
+              excludedIndex,
+              this.combatController.dragScreenX,
+              this.combatController.dragScreenY
+            );
+            updateCardAnimations(this.combatController.handPresentations, dt);
+            this.updateHandFromPresentation();
+          }
+          // Update every frame so idle animations (character + enemies) stay smooth; throttle was causing static appearance.
+          this.updatePlayerAndEnemyTexturesOnly();
         } else if (
           this.combatController.activeCardVfx.length > 0 ||
           this.combatController.cardSprites.size !== hand.length ||
