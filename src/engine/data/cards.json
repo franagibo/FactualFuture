@@ -81,6 +81,7 @@
   { "id": "living_fortress", "name": "Living Fortress", "cost": 2, "effects": [{ "type": "plant_mode", "value": 0, "mode": "defense", "plantTarget": "all" }, { "type": "block", "value": 12, "target": "player" }], "rarity": "rare" },
   { "id": "apex_bloom", "name": "Apex Bloom", "cost": 2, "effects": [{ "type": "energy", "value": 1, "target": "player" }], "rarity": "rare", "exhaust": true },
   { "id": "injury", "name": "Injury", "cost": 0, "effects": [], "isCurse": true },
+  { "id": "hex", "name": "Hex", "cost": 0, "effects": [], "isCurse": true },
   { "id": "burn", "name": "Burn", "cost": 0, "effects": [], "isStatus": true },
   { "id": "dazed", "name": "Dazed", "cost": 0, "effects": [], "isStatus": true },
   { "id": "wound", "name": "Wound", "cost": 0, "effects": [], "isStatus": true },

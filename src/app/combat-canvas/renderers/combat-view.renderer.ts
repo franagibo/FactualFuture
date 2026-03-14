@@ -22,7 +22,7 @@ export type { FloatingNumber };
 // Intent icon (attack/block/debuff/vulnerable/none)
 // ---------------------------------------------------------------------------
 
-/** B12: Draw a simple intent icon (attack=triangle, block=shield, debuff=diamond, none=?) into container at x,y. Optional addStatus appends to label (e.g. "+ N to draw"). */
+/** B12: Draw intent icon into container at x,y. intentExtras: times, value2, strength, block for labels. */
 function drawIntentIcon(
   ctx: CombatViewContext,
   container: PIXI.Container,
@@ -30,7 +30,8 @@ function drawIntentIcon(
   value: number,
   x: number,
   y: number,
-  addStatus?: { cardId: string; count: number; to: 'draw' | 'discard' }[]
+  addStatus?: { cardId: string; count: number; to: 'draw' | 'discard' }[],
+  intentExtras?: { times?: number; value2?: number; strength?: number; block?: number }
 ): void {
   const gr = g(ctx);
   gr.x = x;
@@ -39,27 +40,59 @@ function drawIntentIcon(
   const fill = { color: c, alpha: 0.9 };
   const stroke = { width: 1.5, color: 0xffcc66 };
   const half = INTENT_ICON_SIZE / 2;
+  const attackShape = () => gr.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, INTENT_ICON_SIZE).lineTo(0, INTENT_ICON_SIZE).closePath().fill(fill).stroke(stroke);
+  const blockShape = () => gr.roundRect(0, 2, INTENT_ICON_SIZE, INTENT_ICON_SIZE - 4, 4).fill(fill).stroke(stroke);
+  const debuffShape = () => gr.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, half).lineTo(half, INTENT_ICON_SIZE).lineTo(0, half).closePath().fill(fill).stroke(stroke);
+  const vulnShape = () => gr.rect(2, 2, INTENT_ICON_SIZE - 4, INTENT_ICON_SIZE - 4).fill(fill).stroke(stroke);
+  const noneShape = () => gr.circle(half, half, half - 2).fill(fill).stroke(stroke);
+
   switch (type) {
     case 'attack':
-      gr.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, INTENT_ICON_SIZE).lineTo(0, INTENT_ICON_SIZE).closePath().fill(fill).stroke(stroke);
+    case 'attack_multi':
+    case 'attack_frail':
+    case 'attack_vulnerable':
+    case 'attack_and_block':
+      attackShape();
       break;
     case 'block':
-      gr.roundRect(0, 2, INTENT_ICON_SIZE, INTENT_ICON_SIZE - 4, 4).fill(fill).stroke(stroke);
+    case 'block_ally':
+      blockShape();
       break;
     case 'debuff':
-      gr.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, half).lineTo(half, INTENT_ICON_SIZE).lineTo(0, half).closePath().fill(fill).stroke(stroke);
+    case 'drain':
+    case 'hex':
+      debuffShape();
       break;
     case 'vulnerable':
-      gr.rect(2, 2, INTENT_ICON_SIZE - 4, INTENT_ICON_SIZE - 4).fill(fill).stroke(stroke);
+      vulnShape();
+      break;
+    case 'ritual':
+    case 'buff':
+      noneShape();
       break;
     case 'none':
     default:
-      gr.circle(half, half, half - 2).fill(fill).stroke(stroke);
+      noneShape();
       break;
   }
   container.addChild(gr);
-  let label =
-    type === 'none' ? '?' : type === 'attack' ? `Attack ${value}` : type === 'block' ? `Block ${value}` : type === 'debuff' ? `Weak ${value}` : type === 'vulnerable' ? `Vuln ${value}` : `? ${value}`;
+
+  let label = '?';
+  if (type === 'attack' || type === 'attack_multi' || type === 'attack_frail' || type === 'attack_vulnerable' || type === 'attack_and_block') {
+    const times = intentExtras?.times ?? 1;
+    label = times > 1 ? `Attack ${value}x${times}` : `Attack ${value}`;
+    if (type === 'attack_frail' && intentExtras?.value2) label += ` +${intentExtras.value2} Frail`;
+    if (type === 'attack_vulnerable' && intentExtras?.value2) label += ` +${intentExtras.value2} Vuln`;
+    if (type === 'attack_and_block' && intentExtras?.value2) label += ` +${intentExtras.value2} Block`;
+  } else if (type === 'block' || type === 'block_ally') {
+    label = `Block ${intentExtras?.strength ?? value}`;
+  } else if (type === 'debuff') label = `Weak ${value}`;
+  else if (type === 'vulnerable') label = `Vuln ${value}`;
+  else if (type === 'ritual') label = `Ritual ${value}`;
+  else if (type === 'buff') label = intentExtras?.strength ? `Str +${intentExtras.strength}` : (intentExtras?.block ? `Block +${intentExtras.block}` : `Buff`);
+  else if (type === 'drain') label = `Drain`;
+  else if (type === 'hex') label = `Hex`;
+  else if (type === 'none') label = '?';
   if (addStatus?.length) {
     const n = addStatus.reduce((s, a) => s + a.count, 0);
     const to = addStatus[0].to === 'draw' ? 'draw' : 'discard';
@@ -537,6 +570,46 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   energyText.y = iconSize / 2;
   energyContainer.addChild(energyText);
   stage.addChild(energyContainer);
+
+  const playerStr = state.strengthStacks ?? 0;
+  const playerWeak = state.playerWeakStacks ?? 0;
+  const playerVuln = state.playerVulnerableStacks ?? 0;
+  const playerFrail = state.frailStacks ?? 0;
+  const playerArtifact = state.playerArtifactStacks ?? 0;
+  const hexInHand = state.hand.filter((id) => id === 'hex').length;
+  const statusPills: { label: string; color: number; stroke: number }[] = [];
+  if (playerStr > 0) statusPills.push({ label: `Str ${playerStr}`, color: 0xcc4444, stroke: 0xff6666 });
+  if (playerWeak > 0) statusPills.push({ label: `Weak ${playerWeak}`, color: 0x6a6a44, stroke: 0x999966 });
+  if (playerVuln > 0) statusPills.push({ label: `Vuln ${playerVuln}`, color: 0x9944aa, stroke: 0xcc66dd });
+  if (playerFrail > 0) statusPills.push({ label: `Frail ${playerFrail}`, color: 0x5a5a6a, stroke: 0x8888aa });
+  if (playerArtifact > 0) statusPills.push({ label: `Art ${playerArtifact}`, color: 0x44aa88, stroke: 0x66ccaa });
+  if (hexInHand > 0) statusPills.push({ label: `Hex ${hexInHand}`, color: 0x663366, stroke: 0x996699 });
+  if (statusPills.length > 0) {
+    const pillH = 16;
+    const pillGap = 4;
+    const pillsY = baseY + iconSize + 6;
+    const totalPillsW = statusPills.length * 44 + (statusPills.length - 1) * pillGap;
+    let pillX = centerX - totalPillsW / 2;
+    const smallFont = Math.max(10, scaledFontSize(12, ctx));
+    for (const pill of statusPills) {
+      const pillContainer = c(ctx);
+      pillContainer.zIndex = 20;
+      pillContainer.x = pillX;
+      pillContainer.y = pillsY;
+      const pillBg = g(ctx);
+      pillBg.roundRect(0, 0, 44, pillH, 4).fill({ color: pill.color, alpha: 0.92 }).stroke({ width: 1, color: pill.stroke });
+      pillContainer.addChild(pillBg);
+      const pillText = t(ctx);
+      pillText.text = pill.label;
+      pillText.style = { fontFamily: 'system-ui', fontSize: smallFont, fill: 0xffffff, fontWeight: 'bold' };
+      pillText.anchor.set(0.5, 0.5);
+      pillText.x = 22;
+      pillText.y = pillH / 2;
+      pillContainer.addChild(pillText);
+      stage.addChild(pillContainer);
+      pillX += 44 + pillGap;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -832,17 +905,53 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     hpT.y = 26;
     container.addChild(hpT);
     if (e.intent) {
-      drawIntentIcon(ctx, container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY, e.intent.addStatus);
+      drawIntentIcon(ctx, container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY, e.intent.addStatus, {
+        times: e.intent.times,
+        value2: e.intent.value2,
+        strength: e.intent.strength,
+        block: e.intent.block,
+      });
     } else {
       drawIntentIcon(ctx, container, 'none', 0, L.intentPosX, L.intentPosY);
     }
     const vulnerableStacks = (e as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
     const weakStacks = (e as { weakStacks?: number }).weakStacks ?? 0;
+    const strengthStacks = (e as { strengthStacks?: number }).strengthStacks ?? 0;
+    const ritualStacks = (e as { ritualStacks?: number }).ritualStacks ?? 0;
     let statusY = 6;
+    const statusLeftX = 4;
+    const statusW = 28;
+    const statusH = 14;
+    const statusGap = 2;
+    let leftOffset = 0;
+    if (strengthStacks > 0) {
+      const bg = g(ctx);
+      bg.roundRect(statusLeftX + leftOffset, statusY, statusW, statusH, 3).fill({ color: 0xcc4444, alpha: 0.9 }).stroke({ width: 1, color: 0xff6666 });
+      container.addChild(bg);
+      const label = t(ctx);
+      label.text = `Str ${strengthStacks}`;
+      label.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' };
+      label.x = statusLeftX + leftOffset + 4;
+      label.y = statusY + 1;
+      container.addChild(label);
+      leftOffset += statusW + statusGap;
+    }
+    if (ritualStacks > 0) {
+      const bg = g(ctx);
+      bg.roundRect(statusLeftX + leftOffset, statusY, statusW, statusH, 3).fill({ color: 0x8844aa, alpha: 0.9 }).stroke({ width: 1, color: 0xaa66cc });
+      container.addChild(bg);
+      const label = t(ctx);
+      label.text = `Rit ${ritualStacks}`;
+      label.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' };
+      label.x = statusLeftX + leftOffset + 4;
+      label.y = statusY + 1;
+      container.addChild(label);
+      leftOffset += statusW + statusGap;
+    }
     if (vulnerableStacks > 0) {
       const vW = 32;
       const vBg = g(ctx);
-      vBg.roundRect(enemyPlaceholderW - vW - 4, statusY, vW, 14, 3).fill({ color: 0x9944aa, alpha: 0.9 }).stroke({ width: 1, color: 0xcc66dd });
+      vBg.roundRect(enemyPlaceholderW - vW - 4, statusY, vW, statusH, 3).fill({ color: 0x9944aa, alpha: 0.9 }).stroke({ width: 1, color: 0xcc66dd });
       container.addChild(vBg);
       const vText = t(ctx);
       vText.text = `Vuln ${vulnerableStacks}`;
@@ -855,7 +964,7 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     if (weakStacks > 0) {
       const wW = 28;
       const wBg = g(ctx);
-      wBg.roundRect(enemyPlaceholderW - wW - 4, statusY, wW, 14, 3).fill({ color: 0x6a6a44, alpha: 0.9 }).stroke({ width: 1, color: 0x999966 });
+      wBg.roundRect(enemyPlaceholderW - wW - 4, statusY, wW, statusH, 3).fill({ color: 0x6a6a44, alpha: 0.9 }).stroke({ width: 1, color: 0x999966 });
       container.addChild(wBg);
       const wText = t(ctx);
       wText.text = `Weak ${weakStacks}`;

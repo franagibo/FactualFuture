@@ -50,9 +50,14 @@ export function cardDamageValue(card: CardDef, state: GameState): number {
 /** Total attack damage incoming this turn from enemy intents. */
 function incomingAttackDamage(state: GameState): number {
   let total = 0;
+  const attackTypes = ['attack', 'attack_multi', 'attack_frail', 'attack_vulnerable', 'attack_and_block'];
   for (const e of state.enemies) {
-    if (e.hp <= 0 || !e.intent || e.intent.type !== 'attack') continue;
-    total += e.intent.value;
+    if (e.hp <= 0 || !e.intent || !attackTypes.includes(e.intent.type)) continue;
+    let dmg = e.intent.value + (e.strengthStacks ?? 0);
+    if (e.id === 'transient') dmg = 30 + (state.turnNumber - 1) * 10;
+    else if (e.biteDamage != null && (e.id === 'red_louse' || e.id === 'green_louse')) dmg = e.biteDamage + (e.strengthStacks ?? 0);
+    const times = e.intent.times ?? 1;
+    total += dmg * times;
   }
   return total;
 }

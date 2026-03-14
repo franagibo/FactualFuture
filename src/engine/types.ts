@@ -33,11 +33,35 @@ export interface IntentAddStatus {
   to: 'draw' | 'discard';
 }
 
+export type EnemyIntentType =
+  | 'attack'
+  | 'block'
+  | 'debuff'
+  | 'vulnerable'
+  | 'none'
+  | 'ritual'
+  | 'buff'
+  | 'attack_multi'
+  | 'attack_frail'
+  | 'attack_vulnerable'
+  | 'attack_and_block'
+  | 'drain'
+  | 'hex'
+  | 'block_ally';
+
 export interface EnemyIntent {
-  type: 'attack' | 'block' | 'debuff' | 'vulnerable' | 'none';
+  type: EnemyIntentType;
   value: number;
   /** When set, resolving this intent adds these status cards to the player's draw or discard pile. */
   addStatus?: IntentAddStatus[];
+  /** For attack_multi: number of hits. */
+  times?: number;
+  /** For attack_frail: frail stacks. For attack_vulnerable: vulnerable stacks. For drain: value=weak, value2=strength. */
+  value2?: number;
+  /** For buff/drain: strength to gain. For block_ally: block to give. */
+  strength?: number;
+  /** For buff: block to gain (self). */
+  block?: number;
 }
 
 export interface EnemyState {
@@ -53,6 +77,20 @@ export interface EnemyState {
   weakStacks?: number;
   /** Display scale: small (0.8), medium (1), large (1.2). From EnemyDef. */
   size?: 'small' | 'medium' | 'large';
+  /** Enemy strength: adds to attack damage (per combat). */
+  strengthStacks?: number;
+  /** Ritual: at start of enemy turn, gain this much strength (each stack = +1 strength per turn). */
+  ritualStacks?: number;
+  /** Gremlin Wizard: turns spent charging before attack. */
+  chargeTurns?: number;
+  /** Red/Green Louse: per-combat attack value (roll 5–7). */
+  biteDamage?: number;
+  /** For intent patterns that cannot repeat (e.g. Jaw Worm). */
+  lastIntentType?: string;
+  /** Barricade: block is not removed at start of player turn. */
+  blockRetains?: boolean;
+  /** Artifact: negate this many debuff applications on this enemy. */
+  artifactStacks?: number;
 }
 
 /** Plant mode: determines end-of-turn action (Verdant Machinist). */

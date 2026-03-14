@@ -25,17 +25,17 @@
     { "weight": 1, "intent": { "type": "attack", "value": 18 } }
   ], "triggers": [{ "trigger": "hp_below_percent", "value": 50, "action": "split", "spawnEnemyId": "spike_slime_m", "spawnCount": 2 }]},
   { "id": "cultist", "name": "Cultist", "maxHp": 48, "intents": [
-    { "weight": 1, "intent": { "type": "none", "value": 0 } },
+    { "weight": 1, "intent": { "type": "ritual", "value": 3, "firstTurnOnly": true } },
     { "weight": 2, "intent": { "type": "attack", "value": 6 } }
   ]},
   { "id": "jaw_worm", "name": "Jaw Worm", "maxHp": 40, "intents": [
     { "weight": 25, "intent": { "type": "attack", "value": 11 } },
-    { "weight": 30, "intent": { "type": "attack", "value": 7 } },
-    { "weight": 45, "intent": { "type": "block", "value": 6 } }
+    { "weight": 30, "intent": { "type": "attack_and_block", "value": 7, "value2": 5 } },
+    { "weight": 45, "intent": { "type": "buff", "value": 0, "strength": 3, "block": 6 } }
   ]},
   { "id": "red_louse", "name": "Red Louse", "maxHp": 10, "size": "small", "intents": [
     { "weight": 2, "intent": { "type": "attack", "value": 6 } },
-    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+    { "weight": 1, "intent": { "type": "buff", "value": 0, "strength": 3 } }
   ]},
   { "id": "green_louse", "name": "Green Louse", "maxHp": 11, "size": "small", "intents": [
     { "weight": 1, "intent": { "type": "debuff", "value": 2 } },
@@ -70,7 +70,7 @@
     { "weight": 1, "intent": { "type": "attack", "value": 9 } }
   ]},
   { "id": "fat_gremlin", "name": "Fat Gremlin", "maxHp": 13, "size": "small", "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 4 } },
+    { "weight": 1, "intent": { "type": "attack_frail", "value": 4, "value2": 1 } },
     { "weight": 1, "intent": { "type": "vulnerable", "value": 1 } }
   ]},
   { "id": "gremlin_wizard", "name": "Gremlin Wizard", "maxHp": 23, "size": "small", "intents": [
@@ -78,18 +78,21 @@
     { "weight": 1, "intent": { "type": "attack", "value": 25 } }
   ]},
   { "id": "shield_gremlin", "name": "Shield Gremlin", "maxHp": 14, "size": "small", "intents": [
-    { "weight": 2, "intent": { "type": "block", "value": 8 } },
-    { "weight": 1, "intent": { "type": "block", "value": 8 } }
+    { "weight": 2, "intent": { "type": "block_ally", "value": 8, "strength": 8 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 6 } }
   ]},
-  { "id": "spheric_guardian", "name": "Spheric Guardian", "maxHp": 44, "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 11 } },
-    { "weight": 1, "intent": { "type": "block", "value": 9 } },
-    { "weight": 1, "intent": { "type": "attack", "value": 13 } }
+  { "id": "spheric_guardian", "name": "Spheric Guardian", "maxHp": 44, "blockRetains": true, "artifactStacks": 3, "intents": [
+    { "weight": 1, "intent": { "type": "block", "value": 9, "firstTurnOnly": true } },
+    { "weight": 1, "intent": { "type": "attack_frail", "value": 11, "value2": 2 } },
+    { "weight": 1, "intent": { "type": "attack_multi", "value": 5, "times": 2 } },
+    { "weight": 1, "intent": { "type": "attack_and_block", "value": 6, "value2": 9 } }
   ]},
   { "id": "chosen", "name": "Chosen", "maxHp": 72, "intents": [
-    { "weight": 1, "intent": { "type": "debuff", "value": 2 } },
-    { "weight": 1, "intent": { "type": "attack", "value": 10 } },
-    { "weight": 1, "intent": { "type": "attack", "value": 7 } }
+    { "weight": 1, "intent": { "type": "attack_multi", "value": 1, "times": 5 } },
+    { "weight": 1, "intent": { "type": "hex", "value": 0 } },
+    { "weight": 1, "intent": { "type": "attack_vulnerable", "value": 7, "value2": 2 } },
+    { "weight": 1, "intent": { "type": "drain", "value": 2, "value2": 2 } },
+    { "weight": 1, "intent": { "type": "attack", "value": 10 } }
   ]},
   { "id": "shelled_parasite", "name": "Shelled Parasite", "maxHp": 52, "intents": [
     { "weight": 1, "intent": { "type": "attack", "value": 6 } },
@@ -98,9 +101,9 @@
     { "weight": 1, "intent": { "type": "debuff", "value": 1 } }
   ]},
   { "id": "byrd", "name": "Byrd", "maxHp": 12, "size": "small", "intents": [
-    { "weight": 2, "intent": { "type": "attack", "value": 5 } },
+    { "weight": 2, "intent": { "type": "attack_multi", "value": 1, "times": 5 } },
     { "weight": 1, "intent": { "type": "attack", "value": 10 } },
-    { "weight": 1, "intent": { "type": "none", "value": 0 } }
+    { "weight": 1, "intent": { "type": "buff", "value": 0, "strength": 4 } }
   ]},
   { "id": "snake_plant", "name": "Snake Plant", "maxHp": 58, "intents": [
     { "weight": 2, "intent": { "type": "attack", "value": 8 } },
@@ -149,7 +152,7 @@
     { "weight": 1, "intent": { "type": "attack", "value": 16 } }
   ]},
   { "id": "transient", "name": "Transient", "maxHp": 999, "size": "large", "intents": [
-    { "weight": 1, "intent": { "type": "attack", "value": 40 } }
+    { "weight": 1, "intent": { "type": "attack", "value": 30 } }
   ]},
   { "id": "writhing_mass", "name": "Writhing Mass", "maxHp": 160, "intents": [
     { "weight": 1, "intent": { "type": "attack", "value": 16 } },

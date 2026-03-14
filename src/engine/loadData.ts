@@ -19,15 +19,35 @@ export interface IntentAddStatusDef {
   to: 'draw' | 'discard';
 }
 
+export interface IntentDef {
+  type: string;
+  value: number;
+  addStatus?: IntentAddStatusDef[];
+  /** For attack_multi: number of hits. */
+  times?: number;
+  /** For attack_frail: frail stacks. For attack_vulnerable: vulnerable stacks. For drain: value=weak, value2=strength. */
+  value2?: number;
+  /** For buff/drain: strength to gain. For block_ally: block to give. */
+  strength?: number;
+  /** For buff: block to gain (self). */
+  block?: number;
+  /** If true, this intent is only used on turn 1 (e.g. Cultist Incantation). */
+  firstTurnOnly?: boolean;
+}
+
 export interface EnemyDef {
   id: string;
   name: string;
   maxHp: number;
-  intents: { weight: number; intent: { type: string; value: number; addStatus?: IntentAddStatusDef[] } }[];
+  intents: { weight: number; intent: IntentDef }[];
   /** Optional size for display scale: small (0.8), medium (1), large (1.2). Default medium. */
   size?: 'small' | 'medium' | 'large';
   /** Optional triggers (e.g. split at 50% HP). Processed after damage is applied. */
   triggers?: EnemyTrigger[];
+  /** Barricade: enemy block is not removed at start of player turn (e.g. Spheric Guardian). */
+  blockRetains?: boolean;
+  /** Artifact stacks at combat start (e.g. Spheric Guardian 3). */
+  artifactStacks?: number;
 }
 
 export interface EncounterDef {

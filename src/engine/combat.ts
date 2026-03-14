@@ -1,6 +1,6 @@
 import type { GameState, EnemyState, EnemyIntent, PlantState } from './types';
 import type { CardDef } from './cardDef';
-import type { EnemyDef, EncounterDef, EnemyTrigger } from './loadData';
+import type { EnemyDef, EncounterDef, EnemyTrigger, IntentDef } from './loadData';
 import { runEffects, discardHandAndDraw } from './effectRunner';
 import { rngShuffle } from './rng';
 import type { Rng } from './rng';
@@ -31,37 +31,106 @@ const DEFAULT_STARTER_DECK_IDS = [
   'bash',
 ];
 
-function pickIntent(def: EnemyDef, rng: Rng = defaultRng): EnemyIntent {
-  const total = def.intents.reduce((s, i) => s + i.weight, 0);
-  let r = rng() * total;
-  for (const { weight, intent } of def.intents) {
-    r -= weight;
-    if (r <= 0) {
-      return {
-        type: intent.type as EnemyIntent['type'],
-        value: intent.value,
-        addStatus: intent.addStatus,
-      };
-    }
-  }
-  const last = def.intents[def.intents.length - 1];
-  const intent = last.intent;
+export interface PickIntentContext {
+  turnNumber: number;
+  enemy: EnemyState;
+  allEnemies: EnemyState[];
+}
+
+function buildIntentFromDef(intent: IntentDef): EnemyIntent {
   return {
     type: intent.type as EnemyIntent['type'],
     value: intent.value,
     addStatus: intent.addStatus,
+    times: intent.times,
+    value2: intent.value2,
+    strength: intent.strength,
+    block: intent.block,
   };
+}
+
+function pickIntent(
+  def: EnemyDef,
+  rng: Rng,
+  context: PickIntentContext
+): EnemyIntent {
+  const { turnNumber, enemy, allEnemies } = context;
+  let pool = def.intents.map((x) => ({ ...x }));
+
+  if (turnNumber === 1) {
+    const firstOnly = pool.filter((x) => (x.intent as IntentDef & { firstTurnOnly?: boolean }).firstTurnOnly);
+    if (firstOnly.length > 0) {
+      const pick = firstOnly[Math.floor(rng() * firstOnly.length)];
+      return buildIntentFromDef(pick.intent);
+    }
+  } else {
+    pool = pool.filter((x) => !(x.intent as IntentDef & { firstTurnOnly?: boolean }).firstTurnOnly);
+  }
+
+  if (def.id === 'chosen' && turnNumber === 2) {
+    const hexDef = pool.find((x) => x.intent.type === 'hex');
+    if (hexDef) return buildIntentFromDef(hexDef.intent);
+  }
+
+  if (def.id === 'spheric_guardian' && turnNumber === 2) {
+    const frailDef = pool.find((x) => x.intent.type === 'attack_frail');
+    if (frailDef) return buildIntentFromDef(frailDef.intent);
+  }
+
+  if (def.id === 'gremlin_wizard') {
+    const chargeTurns = enemy.chargeTurns ?? 0;
+    if (chargeTurns < 2) {
+      return { type: 'none', value: 0 };
+    }
+    const attackDef = pool.find((x) => x.intent.type === 'attack');
+    if (attackDef) return buildIntentFromDef(attackDef.intent);
+  }
+
+  if (def.id === 'shield_gremlin') {
+    const aliveAllies = allEnemies.filter((e) => e.id !== enemy.id && e.hp > 0);
+    if (aliveAllies.length > 0) {
+      const blockAllyDef = pool.find((x) => x.intent.type === 'block_ally');
+      if (blockAllyDef) return buildIntentFromDef(blockAllyDef.intent);
+    }
+  }
+
+  if (def.id === 'transient') {
+    const attackDef = pool.find((x) => x.intent.type === 'attack');
+    if (attackDef) {
+      const base = 30 + (turnNumber - 1) * 10;
+      return { ...buildIntentFromDef(attackDef.intent), value: base };
+    }
+  }
+
+  const lastType = enemy.lastIntentType;
+  if (lastType) {
+    pool = pool.filter((x) => x.intent.type !== lastType);
+  }
+  if (pool.length === 0) {
+    pool = def.intents.map((x) => ({ ...x }));
+  }
+
+  const total = pool.reduce((s, i) => s + i.weight, 0);
+  let r = rng() * total;
+  for (const { weight, intent } of pool) {
+    r -= weight;
+    if (r <= 0) return buildIntentFromDef(intent);
+  }
+  const last = pool[pool.length - 1];
+  return buildIntentFromDef(last.intent);
 }
 
 function setEnemyIntents(
   enemies: EnemyState[],
   enemyDefs: Map<string, EnemyDef>,
+  turnNumber: number,
   rng: Rng = defaultRng
 ): EnemyState[] {
   return enemies.map((e) => {
     const def = enemyDefs.get(e.id);
     if (!def) return e;
-    return { ...e, intent: pickIntent(def, rng) };
+    const intent = pickIntent(def, rng, { turnNumber, enemy: e, allEnemies: enemies });
+    return { ...e, intent };
   });
 }
 
@@ -78,6 +147,78 @@ function getAttackTarget(
   const pick = pool[Math.floor(rng() * pool.length)];
   const plantIndex = state.plants!.findIndex((p) => p.id === pick.id);
   return { target: 'plant', plantIndex };
+}
+
+/**
+ * Apply one hit of attack damage from an enemy to the player/plants. Damage flows through plants in order
+ * (defense first, then by index): each plant absorbs with block then HP; when a plant dies, remainder
+ * goes to the next plant; when no plants left, remainder goes to player block then HP.
+ * Returns updated state. Used for attack and each hit of attack_multi.
+ */
+function applyEnemyAttackHit(
+  next: GameState,
+  enemy: EnemyState,
+  dmg: number,
+  rng: Rng = defaultRng
+): GameState {
+  dmg += enemy.strengthStacks ?? 0;
+  const frail = (next.frailStacks ?? 0) > 0 ? 1 + 0.25 * (next.frailStacks ?? 0) : 1;
+  const weak = (next.playerWeakStacks ?? 0) > 0 ? 1 + 0.25 * (next.playerWeakStacks ?? 0) : 1;
+  const vuln = (next.playerVulnerableStacks ?? 0) > 0 ? 1.5 : 1;
+  dmg = Math.ceil(dmg * frail * weak * vuln);
+  let remain = dmg;
+
+  const plants = (next.plants ?? []).map((p) => ({ ...p }));
+  if (plants.length > 0 && isPlantCharacter(next.characterId)) {
+    const aliveIndices = plants
+      .map((p, i) => (p.hp > 0 ? i : -1))
+      .filter((i) => i >= 0);
+    const defenseFirst = [...aliveIndices].sort((a, b) => {
+      const aDef = plants[a].mode === 'defense' ? 1 : 0;
+      const bDef = plants[b].mode === 'defense' ? 1 : 0;
+      if (bDef !== aDef) return bDef - aDef;
+      return a - b;
+    });
+    for (const i of defenseFirst) {
+      if (remain <= 0) break;
+      const p = plants[i];
+      if (p.hp <= 0) continue;
+      const blockHere = Math.min(p.block ?? 0, remain);
+      if (blockHere > 0) {
+        p.block = (p.block ?? 0) - blockHere;
+        remain -= blockHere;
+      }
+      if (remain > 0) {
+        const hpDmg = Math.min(p.hp, remain);
+        p.hp = Math.max(0, p.hp - hpDmg);
+        remain -= hpDmg;
+      }
+    }
+    next = { ...next, plants: plants.filter((x) => x.hp > 0) };
+  }
+
+  if (remain > 0) {
+    if (next.playerBlock > 0) {
+      const blockReduce = Math.min(next.playerBlock, remain);
+      next = { ...next, playerBlock: next.playerBlock - blockReduce };
+      remain -= blockReduce;
+    }
+    if (remain > 0) {
+      next = { ...next, playerHp: Math.max(0, next.playerHp - remain) };
+      const thorns = next.playerThorns ?? 0;
+      if (thorns > 0) {
+        const ei = next.enemies.findIndex((e) => e.id === enemy.id);
+        if (ei >= 0 && next.enemies[ei].hp > 0) {
+          const en = [...next.enemies];
+          const targetEn = en[ei];
+          const blockReduce = Math.min(targetEn.block, thorns);
+          en[ei] = { ...targetEn, block: targetEn.block - blockReduce, hp: Math.max(0, targetEn.hp - (thorns - blockReduce)) };
+          next = { ...next, enemies: en };
+        }
+      }
+    }
+  }
+  return next;
 }
 
 /**
@@ -189,6 +330,8 @@ export function processHpThresholdTriggers(
         block: 0,
         intent: { type: 'none', value: 0 },
         size: spawnDef.size,
+        blockRetains: spawnDef.blockRetains,
+        artifactStacks: spawnDef.artifactStacks,
       });
     }
   }
@@ -236,19 +379,30 @@ export function createInitialState(
     hand.push(restDeck.shift()!);
   }
 
-  const enemies: EnemyState[] = encounter.enemies.map((id) => {
+  const enemiesBase: EnemyState[] = encounter.enemies.map((id) => {
     const def = enemyDefs.get(id);
     if (!def) return { id, name: id, hp: 1, maxHp: 1, block: 0, intent: null };
-    const intent = pickIntent(def, rng);
-    return {
+    let stateEnemy: EnemyState = {
       id: def.id,
       name: def.name,
       hp: def.maxHp,
       maxHp: def.maxHp,
       block: 0,
-      intent,
+      intent: null,
       size: def.size,
+      blockRetains: def.blockRetains,
+      artifactStacks: def.artifactStacks,
     };
+    if (def.id === 'red_louse' || def.id === 'green_louse') {
+      stateEnemy = { ...stateEnemy, biteDamage: 5 + Math.floor(rng() * 3) };
+    }
+    return stateEnemy;
+  });
+  const enemies: EnemyState[] = enemiesBase.map((e) => {
+    const def = enemyDefs.get(e.id);
+    if (!def) return e;
+    const intent = pickIntent(def, rng, { turnNumber: 1, enemy: e, allEnemies: enemiesBase });
+    return { ...e, intent };
   });
 
   return {
@@ -293,19 +447,30 @@ export function startCombatFromRunState(
     hand.push(restDeck.shift()!);
   }
 
-  const enemies: EnemyState[] = encounter.enemies.map((id) => {
+  const enemiesBase: EnemyState[] = encounter.enemies.map((id) => {
     const def = enemyDefs.get(id);
     if (!def) return { id, name: id, hp: 1, maxHp: 1, block: 0, intent: null };
-    const intent = pickIntent(def, simRng);
-    return {
+    let stateEnemy: EnemyState = {
       id: def.id,
       name: def.name,
       hp: def.maxHp,
       maxHp: def.maxHp,
       block: 0,
-      intent,
+      intent: null,
       size: def.size,
+      blockRetains: def.blockRetains,
+      artifactStacks: def.artifactStacks,
     };
+    if (def.id === 'red_louse' || def.id === 'green_louse') {
+      stateEnemy = { ...stateEnemy, biteDamage: 5 + Math.floor(simRng() * 3) };
+    }
+    return stateEnemy;
+  });
+  const enemies: EnemyState[] = enemiesBase.map((e) => {
+    const def = enemyDefs.get(e.id);
+    if (!def) return e;
+    const intent = pickIntent(def, simRng, { turnNumber: 1, enemy: e, allEnemies: enemiesBase });
+    return { ...e, intent };
   });
 
   let plants: PlantState[] | undefined;
@@ -371,6 +536,9 @@ export function playCard(
     next = { ...next, playerNextCardPlayedTwice: false };
     next = runEffects(card, next, targetEnemyIndex, cardsMap, targetPlantIndex ?? null);
   }
+  if (cardId === 'hex') {
+    next = { ...next, discard: [...next.discard, 'hex'] };
+  }
   next = processHpThresholdTriggers(next, enemyDefs);
 
   // Check combat result
@@ -392,76 +560,76 @@ export function endTurn(
   let next: GameState = { ...state, playerBlock: state.playerBlock, phase: 'enemy' };
   next = runPlantTurnActions(next, next._simRng ?? defaultRng);
 
+  // Ritual tick: at start of enemy phase, each alive enemy gains strength equal to ritualStacks
+  const rng = next._simRng ?? defaultRng;
+  next = {
+    ...next,
+    enemies: next.enemies.map((e) => {
+      if (e.hp <= 0 || (e.ritualStacks ?? 0) <= 0) return e;
+      return { ...e, strengthStacks: (e.strengthStacks ?? 0) + (e.ritualStacks ?? 0) };
+    }),
+  };
+
+  const attackTypes = ['attack', 'attack_multi', 'attack_frail', 'attack_vulnerable', 'attack_and_block'];
   for (const enemy of next.enemies) {
     if (enemy.hp <= 0) continue;
     const intent = enemy.intent;
     if (!intent) continue;
-    if (intent.type === 'attack') {
+
+    const ei = next.enemies.findIndex((e) => e.id === enemy.id);
+    if (ei < 0) continue;
+    const currentEnemy = next.enemies[ei];
+
+    if (intent.type === 'ritual') {
+      const en = [...next.enemies];
+      en[ei] = { ...currentEnemy, ritualStacks: (currentEnemy.ritualStacks ?? 0) + intent.value };
+      next = { ...next, enemies: en };
+    }
+    if (intent.type === 'buff') {
+      const en = [...next.enemies];
+      en[ei] = {
+        ...currentEnemy,
+        strengthStacks: (currentEnemy.strengthStacks ?? 0) + (intent.strength ?? 0),
+        block: (currentEnemy.block ?? 0) + (intent.block ?? 0),
+      };
+      next = { ...next, enemies: en };
+    }
+    if (attackTypes.includes(intent.type)) {
       let dmg = intent.value;
-      const frail = (next.frailStacks ?? 0) > 0 ? 1 + 0.25 * (next.frailStacks ?? 0) : 1;
-      const weak = (next.playerWeakStacks ?? 0) > 0 ? 1 + 0.25 * (next.playerWeakStacks ?? 0) : 1;
-      const vuln = (next.playerVulnerableStacks ?? 0) > 0 ? 1.5 : 1;
-      dmg = Math.ceil(dmg * frail * weak * vuln);
-      const attackTarget = getAttackTarget(next, next._simRng ?? defaultRng);
-      let applyDamageToPlayer = attackTarget.target === 'player';
-      if (attackTarget.target === 'plant') {
-        const plants = (next.plants ?? []).map((p) => ({ ...p }));
-        const aliveIndices = plants.map((p, i) => (p.hp > 0 ? i : -1)).filter((i) => i >= 0);
-        if (aliveIndices.length === 0) {
-          applyDamageToPlayer = true;
-        } else {
-          // Phase 1: combined plant shield — drain damage from total plant block (order: by array index)
-          let remain = dmg;
-          for (let i = 0; i < plants.length && remain > 0; i++) {
-            if (plants[i].hp <= 0) continue;
-            const blockHere = Math.min(plants[i].block ?? 0, remain);
-            if (blockHere > 0) {
-              plants[i].block = (plants[i].block ?? 0) - blockHere;
-              remain -= blockHere;
-            }
-          }
-          next = { ...next, plants };
-          // Phase 2: remaining damage to plant HP using same targeting (defense first, then any plant)
-          if (remain > 0) {
-            const hpTarget = getAttackTarget(next, next._simRng ?? defaultRng);
-            if (hpTarget.target === 'plant' && next.plants?.[hpTarget.plantIndex] && next.plants[hpTarget.plantIndex].hp > 0) {
-              const updated = next.plants.map((p, i) =>
-                i === hpTarget.plantIndex ? { ...p, hp: Math.max(0, p.hp - remain) } : p
-              );
-              next = { ...next, plants: updated.filter((x) => x.hp > 0) };
-            }
-          } else {
-            next = { ...next, plants: plants.filter((x) => x.hp > 0) };
-          }
-        }
+      if (currentEnemy.id === 'transient') {
+        dmg = 30 + (next.turnNumber - 1) * 10;
+      } else if (currentEnemy.biteDamage != null && (currentEnemy.id === 'red_louse' || currentEnemy.id === 'green_louse')) {
+        dmg = currentEnemy.biteDamage;
       }
-      if (applyDamageToPlayer) {
-        if (next.playerBlock > 0) {
-          const blockReduce = Math.min(next.playerBlock, dmg);
-          next = { ...next, playerBlock: next.playerBlock - blockReduce };
-          dmg -= blockReduce;
-        }
-        if (dmg > 0) {
-          next = { ...next, playerHp: Math.max(0, next.playerHp - dmg) };
-          const thorns = next.playerThorns ?? 0;
-          if (thorns > 0) {
-            const ei = next.enemies.findIndex((e) => e.id === enemy.id);
-            if (ei >= 0 && next.enemies[ei].hp > 0) {
-              const en = [...next.enemies];
-              const targetEn = en[ei];
-              const blockReduce = Math.min(targetEn.block, thorns);
-              en[ei] = { ...targetEn, block: targetEn.block - blockReduce, hp: Math.max(0, targetEn.hp - (thorns - blockReduce)) };
-              next = { ...next, enemies: en };
-            }
-          }
-        }
+      const times = intent.times ?? 1;
+      for (let h = 0; h < times; h++) {
+        next = applyEnemyAttackHit(next, next.enemies[ei], dmg, rng);
+      }
+      if (currentEnemy.id === 'gremlin_wizard') {
+        const en = [...next.enemies];
+        en[ei] = { ...next.enemies[ei], chargeTurns: 0 };
+        next = { ...next, enemies: en };
       }
     }
     if (intent.type === 'block') {
-      const idx = next.enemies.findIndex((e) => e.id === enemy.id);
-      if (idx >= 0) {
+      const en = [...next.enemies];
+      en[ei] = { ...currentEnemy, block: (currentEnemy.block || 0) + intent.value };
+      next = { ...next, enemies: en };
+    }
+    if (intent.type === 'block_ally') {
+      const aliveAllies = next.enemies.filter((e) => e.hp > 0);
+      const blockAmount = intent.strength ?? intent.value;
+      if (aliveAllies.length > 0) {
+        const target = aliveAllies[Math.floor(rng() * aliveAllies.length)];
+        const ti = next.enemies.findIndex((e) => e.id === target.id);
+        if (ti >= 0) {
+          const en = [...next.enemies];
+          en[ti] = { ...en[ti], block: (en[ti].block ?? 0) + blockAmount };
+          next = { ...next, enemies: en };
+        }
+      } else {
         const en = [...next.enemies];
-        en[idx] = { ...en[idx], block: (en[idx].block || 0) + intent.value };
+        en[ei] = { ...currentEnemy, block: (currentEnemy.block ?? 0) + blockAmount };
         next = { ...next, enemies: en };
       }
     }
@@ -475,6 +643,34 @@ export function endTurn(
       const absorb = Math.min(artifact, intent.value);
       next = { ...next, playerArtifactStacks: Math.max(0, artifact - absorb), playerVulnerableStacks: (next.playerVulnerableStacks ?? 0) + intent.value - absorb };
     }
+    if (intent.type === 'attack_frail' && intent.value2) {
+      const artifact = next.playerArtifactStacks ?? 0;
+      const absorb = Math.min(artifact, intent.value2);
+      next = { ...next, playerArtifactStacks: Math.max(0, artifact - absorb), frailStacks: (next.frailStacks ?? 0) + intent.value2 - absorb };
+    }
+    if (intent.type === 'attack_vulnerable' && intent.value2) {
+      const artifact = next.playerArtifactStacks ?? 0;
+      const absorb = Math.min(artifact, intent.value2);
+      next = { ...next, playerArtifactStacks: Math.max(0, artifact - absorb), playerVulnerableStacks: (next.playerVulnerableStacks ?? 0) + intent.value2 - absorb };
+    }
+    if (intent.type === 'drain') {
+      const weakAmount = intent.value;
+      const strAmount = intent.value2 ?? 0;
+      const artifact = next.playerArtifactStacks ?? 0;
+      const absorb = Math.min(artifact, weakAmount);
+      next = { ...next, playerArtifactStacks: Math.max(0, artifact - absorb), playerWeakStacks: (next.playerWeakStacks ?? 0) + weakAmount - absorb };
+      const en = [...next.enemies];
+      en[ei] = { ...next.enemies[ei], strengthStacks: (next.enemies[ei].strengthStacks ?? 0) + strAmount };
+      next = { ...next, enemies: en };
+    }
+    if (intent.type === 'hex') {
+      next = { ...next, discard: [...next.discard, 'hex'] };
+    }
+    if (intent.type === 'none' && currentEnemy.id === 'gremlin_wizard') {
+      const en = [...next.enemies];
+      en[ei] = { ...currentEnemy, chargeTurns: (currentEnemy.chargeTurns ?? 0) + 1 };
+      next = { ...next, enemies: en };
+    }
     if (intent.addStatus?.length) {
       for (const { cardId, count, to } of intent.addStatus) {
         const cards = Array.from({ length: count }, () => cardId);
@@ -482,6 +678,10 @@ export function endTurn(
         else next = { ...next, discard: [...next.discard, ...cards] };
       }
     }
+
+    const en = [...next.enemies];
+    en[ei] = { ...en[ei], lastIntentType: intent.type };
+    next = { ...next, enemies: en };
   }
 
   // Burn: at end of turn, take 2 damage per Burn in hand (before discarding)
@@ -493,14 +693,18 @@ export function endTurn(
 
   if (next.playerHp <= 0) return { ...next, combatResult: 'lose' };
 
-  // Next turn: discard hand, draw 5, refill energy, decay statuses, new intents
+  // Next turn: discard hand, draw 5, refill energy, decay statuses, clear non-retained block, new intents
   next = discardHandAndDraw(next, DRAW_PER_TURN);
   const voidCount = next.hand.filter((id) => id === 'void').length;
-  const decayedEnemies = next.enemies.map((e) => ({
-    ...e,
-    vulnerableStacks: Math.max(0, (e.vulnerableStacks ?? 0) - 1),
-    weakStacks: Math.max(0, (e.weakStacks ?? 0) - 1),
-  }));
+  const decayedEnemies = next.enemies.map((e) => {
+    const decayed = {
+      ...e,
+      vulnerableStacks: Math.max(0, (e.vulnerableStacks ?? 0) - 1),
+      weakStacks: Math.max(0, (e.weakStacks ?? 0) - 1),
+      ...(e.blockRetains ? {} : { block: 0 }),
+    };
+    return decayed;
+  });
   const decayStrength = next.playerStrengthDecayAtEnd ?? 0;
   const healEnd = next.playerHealAtEndOfTurn ?? 0;
   const blockPerTurn = next.playerBlockPerTurn ?? 0;
@@ -518,7 +722,7 @@ export function endTurn(
     frailStacks: Math.max(0, (next.frailStacks ?? 0) - 1),
     playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),
     playerVulnerableStacks: Math.max(0, (next.playerVulnerableStacks ?? 0) - 1),
-    enemies: setEnemyIntents(decayedEnemies, enemyDefs, next._simRng ?? defaultRng),
+    enemies: setEnemyIntents(decayedEnemies, enemyDefs, next.turnNumber + 1, next._simRng ?? defaultRng),
   };
   return next;
 }

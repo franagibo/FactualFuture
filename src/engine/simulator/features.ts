@@ -31,18 +31,23 @@ function encodeEnemyIntent(enemy: EnemyState | null): number[] {
     return [...oneHot(4, 5), 0]; // type none + value 0
   }
 
-  const typeIndex =
-    enemy.intent.type === 'attack'
-      ? 0
-      : enemy.intent.type === 'block'
-      ? 1
-      : enemy.intent.type === 'debuff'
-      ? 2
-      : enemy.intent.type === 'vulnerable'
-      ? 3
-      : 4;
+  const attackLike = ['attack', 'attack_multi', 'attack_frail', 'attack_vulnerable', 'attack_and_block'];
+  const typeIndex = attackLike.includes(enemy.intent.type)
+    ? 0
+    : enemy.intent.type === 'block' || enemy.intent.type === 'block_ally'
+    ? 1
+    : enemy.intent.type === 'debuff' || enemy.intent.type === 'drain'
+    ? 2
+    : enemy.intent.type === 'vulnerable'
+    ? 3
+    : 4;
 
-  const valueNorm = clamp(enemy.intent.value / Math.max(1, enemy.maxHp), 0, 1);
+  let valueNorm = clamp(enemy.intent.value / Math.max(1, enemy.maxHp), 0, 1);
+  if (typeIndex === 0) {
+    const dmg = enemy.intent.value + (enemy.strengthStacks ?? 0);
+    const times = enemy.intent.times ?? 1;
+    valueNorm = clamp((dmg * times) / Math.max(1, enemy.maxHp), 0, 1);
+  }
 
   return [...oneHot(typeIndex, 5), valueNorm];
 }
