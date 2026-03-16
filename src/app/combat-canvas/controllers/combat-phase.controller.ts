@@ -20,7 +20,21 @@ export interface CombatPhaseHost {
   getCardCost(cardId: string): number;
   getCardName(cardId: string): string;
   getCardEffectDescription(cardId: string): string;
-  getCombatAssets(): { getCardArtTexture: (id: string) => PIXI.Texture | null; getPlayerTexture: (now: number) => PIXI.Texture | null; getEnemyTexture: (id: string) => PIXI.Texture | null; getEnemyAnimationTexture: (variant: number, animation: 'idle' | 'hurt' | 'dying', nowMs: number, startMs?: number) => PIXI.Texture | null; getCombatBgTexture: () => PIXI.Texture | null; getHpIconTexture: () => PIXI.Texture | null; getBlockIconTexture: () => PIXI.Texture | null; getShieldVideoTexture: () => PIXI.Texture | null; getShootingTexture: () => PIXI.Texture | null; getSlashingTexture: () => PIXI.Texture | null };
+  getCombatAssets(): {
+    getCardArtTexture: (id: string) => PIXI.Texture | null;
+    getPlayerTexture: (now: number) => PIXI.Texture | null;
+    getEnemyTexture: (id: string) => PIXI.Texture | null;
+    getEnemyAnimationTexture: (variant: number, animation: 'idle' | 'hurt' | 'dying', nowMs: number, startMs?: number) => PIXI.Texture | null;
+    getCombatBgTexture: () => PIXI.Texture | null;
+    getHpIconTexture: () => PIXI.Texture | null;
+    getBlockIconTexture: () => PIXI.Texture | null;
+    getShieldVideoTexture: () => PIXI.Texture | null;
+    getShootingTexture: () => PIXI.Texture | null;
+    getSlashingTexture: () => PIXI.Texture | null;
+    getVMGrowSeedTexture: () => PIXI.Texture | null;
+    getVMSpellTexture: () => PIXI.Texture | null;
+    getVMSummoningTexture: () => PIXI.Texture | null;
+  };
   getGameSettings(): { handLayout: () => 'default' | 'compact'; reducedMotion: () => boolean; textScale: () => number; vfxIntensity: () => 'full' | 'reduced' | 'off' };
   getApp(): PIXI.Application | null;
   redraw(): void;
@@ -65,6 +79,9 @@ export class CombatPhaseController {
   shieldAnimationPlaying = false;
   shootingAnimationPlaying = false;
   slashingAnimationPlaying = false;
+  vmGrowSeedAnimationPlaying = false;
+  vmSpellAnimationPlaying = false;
+  vmSummoningAnimationPlaying = false;
   activeCardVfx: { vfxId: string; x: number; y: number; startTime: number }[] = [];
 
   /** Target-based card presentation (current/target position, rotation, scale). Length matches state.hand. */
@@ -196,6 +213,12 @@ export class CombatPhaseController {
         getShootingTexture: () => assets.getShootingTexture(),
         slashingAnimationPlaying: c.slashingAnimationPlaying,
         getSlashingTexture: () => assets.getSlashingTexture(),
+        vmGrowSeedAnimationPlaying: c.vmGrowSeedAnimationPlaying,
+        getVMGrowSeedTexture: () => assets.getVMGrowSeedTexture(),
+        vmSpellAnimationPlaying: c.vmSpellAnimationPlaying,
+        getVMSpellTexture: () => assets.getVMSpellTexture(),
+        vmSummoningAnimationPlaying: c.vmSummoningAnimationPlaying,
+        getVMSummoningTexture: () => assets.getVMSummoningTexture(),
         onPlayerSpriteCreated: (s) => { c.playerSpriteRef = s; },
       },
       enemies: {
@@ -258,6 +281,12 @@ export class CombatPhaseController {
       getShootingTexture: () => assets.getShootingTexture(),
       slashingAnimationPlaying: c.slashingAnimationPlaying,
       getSlashingTexture: () => assets.getSlashingTexture(),
+      vmGrowSeedAnimationPlaying: c.vmGrowSeedAnimationPlaying,
+      getVMGrowSeedTexture: () => assets.getVMGrowSeedTexture(),
+      vmSpellAnimationPlaying: c.vmSpellAnimationPlaying,
+      getVMSpellTexture: () => assets.getVMSpellTexture(),
+      vmSummoningAnimationPlaying: c.vmSummoningAnimationPlaying,
+      getVMSummoningTexture: () => assets.getVMSummoningTexture(),
       onPlayerSpriteCreated: (s) => { c.playerSpriteRef = s; },
       onEnemySpriteCreated: (i, s) => { c.enemySpriteRefs[i] = s; },
     };

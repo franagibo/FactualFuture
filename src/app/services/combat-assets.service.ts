@@ -37,6 +37,19 @@ function getShootingSheetPath(characterId: string): string {
   return `${PLAYER_CHARACTERS_PREFIX}${characterId}/${characterId}_shooting.png`;
 }
 
+/** Verdant Machinist uses strike sheet for Strike card (not shooting). */
+function getStrikeSheetPath(characterId: string): string {
+  if (characterId === 'verdant_machinist') {
+    return `${PLAYER_CHARACTERS_PREFIX}verdant_machinist/verdant_machinist_strike.png`;
+  }
+  return getShootingSheetPath(characterId);
+}
+
+/** Verdant Machinist extra animation sheets: grow_seed, spell, summoning. 5×5 grid. */
+function getVMAnimationSheetPath(name: 'grow_seed' | 'spell' | 'summoning'): string {
+  return `${PLAYER_CHARACTERS_PREFIX}verdant_machinist/verdant_machinist_${name}.png`;
+}
+
 /** Chibi idle animation: 18 frames in Idle/0_Dark_Oracle_Idle_000.png .. 017.png. Used when characterId is 'chibi'. */
 const CHIBI_IDLE_FRAME_COUNT = 18;
 /** Shorter = faster, smoother idle loop. ~50ms per frame ≈ 20 fps animation. */
@@ -48,7 +61,6 @@ function getChibiIdleFramePath(frameIndex: number): string {
 
 /** Chibi slashing animation (e.g. for strike card): 12 frames in Slashing/0_Dark_Oracle_Slashing_000.png .. 011.png. */
 const CHIBI_SLASHING_FRAME_COUNT = 12;
-const CHIBI_SLASHING_FRAME_MS = 10;
 function getChibiSlashingFramePath(frameIndex: number): string {
   const pad = String(frameIndex).padStart(3, '0');
   return `${PLAYER_CHARACTERS_PREFIX}chibi/Slashing/0_Dark_Oracle_Slashing_${pad}.png`;
@@ -71,7 +83,20 @@ function getZombiePlaceholderFramePath(
 
 const SHIELD_SHEET_COLS = 6;
 const SHIELD_SHEET_ROWS = 6;
-const SHIELD_FRAME_MS = 80;
+
+/** Frame duration (ms per frame) per player animation. Tweak these to speed up or slow down each animation. */
+export const PLAYER_ANIMATION_FRAME_MS: Record<
+  'shield' | 'shooting' | 'slashing' | 'vmGrowSeed' | 'vmSpell' | 'vmSummoning',
+  number
+> = {
+  shield: 55,
+  shooting: 40,
+  slashing: 10,
+  vmGrowSeed: 44,
+  vmSpell: 45,
+  vmSummoning: 45,
+};
+
 const SHIELD_FRAME_COUNT = SHIELD_SHEET_COLS * SHIELD_SHEET_ROWS;
 
 /** Gungirl uses 5x5 sprite sheets for idle, shield and shooting (25 frames each). */
@@ -127,6 +152,16 @@ export class CombatAssetsService {
   private gungirlIdleTextures: PIXI.Texture[] = [];
   /** Verdant Machinist idle animation (5×5 = 25 frames, 4500×4500 px sheet). */
   private verdantMachinistIdleTextures: PIXI.Texture[] = [];
+  /** Verdant Machinist grow_seed / spell / summoning animations (5×5 sheets). */
+  private verdantMachinistGrowSeedTextures: PIXI.Texture[] = [];
+  private verdantMachinistSpellTextures: PIXI.Texture[] = [];
+  private verdantMachinistSummoningTextures: PIXI.Texture[] = [];
+  private vmGrowSeedStartTime: number | null = null;
+  private vmGrowSeedResolve: (() => void) | null = null;
+  private vmSpellStartTime: number | null = null;
+  private vmSpellResolve: (() => void) | null = null;
+  private vmSummoningStartTime: number | null = null;
+  private vmSummoningResolve: (() => void) | null = null;
 
   /** Placeholder enemy animations (Idle, Hurt, Dying) per Zombie_Villager variant. Loaded once when combat uses placeholders. */
   private zombiePlaceholderTextures: Record<
@@ -288,25 +323,41 @@ export class CombatAssetsService {
       try {
         const sheetPath = this.resolveUrl(getShieldSheetPath(cid));
         const sheetTexture = (await PIXI.Assets.load(sheetPath)) as PIXI.Texture;
-        const cols = cid === 'gungirl' ? GUNGIRL_SHEET_COLS : SHIELD_SHEET_COLS;
-        const rows = cid === 'gungirl' ? GUNGIRL_SHEET_ROWS : SHIELD_SHEET_ROWS;
+        const cols = cid === 'gungirl' ? GUNGIRL_SHEET_COLS : cid === 'verdant_machinist' ? VM_IDLE_SHEET_COLS : SHIELD_SHEET_COLS;
+        const rows = cid === 'gungirl' ? GUNGIRL_SHEET_ROWS : cid === 'verdant_machinist' ? VM_IDLE_SHEET_ROWS : SHIELD_SHEET_ROWS;
         const frames = this.buildSheetFrames(sheetTexture, cols, rows);
         if (frames.length > 0) {
           if (!this.playerTextures.has(cid)) this.playerTextures.set(cid, frames[0]);
-          if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shieldFrameTextures = frames;
+          if (cid === DEFAULT_PLAYER_CHARACTER_ID || cid === 'verdant_machinist') this.shieldFrameTextures = frames;
         }
       } catch {
         if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shieldFrameTextures = [];
       }
       try {
-        const shootingPath = this.resolveUrl(getShootingSheetPath(cid));
-        const shootingTexture = (await PIXI.Assets.load(shootingPath)) as PIXI.Texture;
-        const cols = cid === 'gungirl' ? GUNGIRL_SHEET_COLS : SHIELD_SHEET_COLS;
-        const rows = cid === 'gungirl' ? GUNGIRL_SHEET_ROWS : SHIELD_SHEET_ROWS;
-        const frames = this.buildSheetFrames(shootingTexture, cols, rows);
-        if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = frames;
+        const strikeOrShootingPath = this.resolveUrl(getStrikeSheetPath(cid));
+        const strikeOrShootingTexture = (await PIXI.Assets.load(strikeOrShootingPath)) as PIXI.Texture;
+        const cols = cid === 'gungirl' ? GUNGIRL_SHEET_COLS : cid === 'verdant_machinist' ? VM_IDLE_SHEET_COLS : SHIELD_SHEET_COLS;
+        const rows = cid === 'gungirl' ? GUNGIRL_SHEET_ROWS : cid === 'verdant_machinist' ? VM_IDLE_SHEET_ROWS : SHIELD_SHEET_ROWS;
+        const frames = this.buildSheetFrames(strikeOrShootingTexture, cols, rows);
+        if (cid === DEFAULT_PLAYER_CHARACTER_ID || cid === 'verdant_machinist') this.shootingFrameTextures = frames;
       } catch {
         if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = [];
+      }
+      if (cid === 'verdant_machinist') {
+        for (const name of ['grow_seed', 'spell', 'summoning'] as const) {
+          try {
+            const path = this.resolveUrl(getVMAnimationSheetPath(name));
+            const sheet = (await PIXI.Assets.load(path)) as PIXI.Texture;
+            const frames = this.buildSheetFrames(sheet, VM_IDLE_SHEET_COLS, VM_IDLE_SHEET_ROWS);
+            if (name === 'grow_seed') this.verdantMachinistGrowSeedTextures = frames;
+            else if (name === 'spell') this.verdantMachinistSpellTextures = frames;
+            else this.verdantMachinistSummoningTextures = frames;
+          } catch {
+            if (name === 'grow_seed') this.verdantMachinistGrowSeedTextures = [];
+            else if (name === 'spell') this.verdantMachinistSpellTextures = [];
+            else this.verdantMachinistSummoningTextures = [];
+          }
+        }
       }
     }
     for (const id of enemyIds ?? []) {
@@ -448,16 +499,18 @@ export class CombatAssetsService {
   /** Returns the current shield animation frame texture, or null if not playing or no frames. */
   getShieldVideoTexture(): PIXI.Texture | null {
     if (this.shieldFrameTextures.length === 0 || this.shieldStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.shield;
     const elapsed = Date.now() - this.shieldStartTime;
-    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), this.shieldFrameTextures.length - 1);
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.shieldFrameTextures.length - 1);
     return this.shieldFrameTextures[frameIndex] ?? null;
   }
 
   /** Call each tick while shield is playing. Resolves the play promise when animation is done. */
   getShieldAnimationDone(): void {
     if (this.shieldStartTime == null || !this.shieldResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.shield;
     const elapsed = Date.now() - this.shieldStartTime;
-    const durationMs = this.shieldFrameTextures.length * SHIELD_FRAME_MS;
+    const durationMs = this.shieldFrameTextures.length * frameMs;
     if (elapsed >= durationMs) {
       this.shieldStartTime = null;
       const resolve = this.shieldResolve;
@@ -478,16 +531,18 @@ export class CombatAssetsService {
   /** Returns the current shooting animation frame texture, or null if not playing or no frames. */
   getShootingTexture(): PIXI.Texture | null {
     if (this.shootingFrameTextures.length === 0 || this.shootingStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.shooting;
     const elapsed = Date.now() - this.shootingStartTime;
-    const frameIndex = Math.min(Math.floor(elapsed / SHIELD_FRAME_MS), this.shootingFrameTextures.length - 1);
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.shootingFrameTextures.length - 1);
     return this.shootingFrameTextures[frameIndex] ?? null;
   }
 
   /** Call each tick while shooting is playing. Resolves the play promise when animation is done. */
   getShootingAnimationDone(): void {
     if (this.shootingStartTime == null || !this.shootingResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.shooting;
     const elapsed = Date.now() - this.shootingStartTime;
-    const durationMs = this.shootingFrameTextures.length * SHIELD_FRAME_MS;
+    const durationMs = this.shootingFrameTextures.length * frameMs;
     if (elapsed >= durationMs) {
       this.shootingStartTime = null;
       const resolve = this.shootingResolve;
@@ -508,16 +563,18 @@ export class CombatAssetsService {
   /** Returns current chibi slashing frame, or null if not playing or no frames. */
   getSlashingTexture(): PIXI.Texture | null {
     if (this.chibiSlashingTextures.length === 0 || this.slashingStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.slashing;
     const elapsed = Date.now() - this.slashingStartTime;
-    const frameIndex = Math.min(Math.floor(elapsed / CHIBI_SLASHING_FRAME_MS), this.chibiSlashingTextures.length - 1);
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.chibiSlashingTextures.length - 1);
     return this.chibiSlashingTextures[frameIndex] ?? null;
   }
 
   /** Call each tick while slashing is playing. Resolves the play promise when animation is done. */
   getSlashingAnimationDone(): void {
     if (this.slashingStartTime == null || !this.slashingResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.slashing;
     const elapsed = Date.now() - this.slashingStartTime;
-    const durationMs = this.chibiSlashingTextures.length * CHIBI_SLASHING_FRAME_MS;
+    const durationMs = this.chibiSlashingTextures.length * frameMs;
     if (elapsed >= durationMs) {
       this.slashingStartTime = null;
       const resolve = this.slashingResolve;
@@ -533,6 +590,94 @@ export class CombatAssetsService {
     return new Promise((resolve) => {
       this.slashingResolve = resolve;
     });
+  }
+
+  /** Verdant Machinist: grow_seed / spell / summoning animation getters and play. */
+  getVMGrowSeedTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistGrowSeedTextures.length === 0 || this.vmGrowSeedStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmGrowSeed;
+    const elapsed = Date.now() - this.vmGrowSeedStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistGrowSeedTextures.length - 1);
+    return this.verdantMachinistGrowSeedTextures[frameIndex] ?? null;
+  }
+
+  getVMSpellTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistSpellTextures.length === 0 || this.vmSpellStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmSpell;
+    const elapsed = Date.now() - this.vmSpellStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistSpellTextures.length - 1);
+    return this.verdantMachinistSpellTextures[frameIndex] ?? null;
+  }
+
+  getVMSummoningTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistSummoningTextures.length === 0 || this.vmSummoningStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmSummoning;
+    const elapsed = Date.now() - this.vmSummoningStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistSummoningTextures.length - 1);
+    return this.verdantMachinistSummoningTextures[frameIndex] ?? null;
+  }
+
+  playVMGrowSeedAnimation(): Promise<void> {
+    if (this.verdantMachinistGrowSeedTextures.length === 0) return Promise.resolve();
+    this.vmGrowSeedStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmGrowSeedResolve = resolve;
+    });
+  }
+
+  playVMSpellAnimation(): Promise<void> {
+    if (this.verdantMachinistSpellTextures.length === 0) return Promise.resolve();
+    this.vmSpellStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmSpellResolve = resolve;
+    });
+  }
+
+  playVMSummoningAnimation(): Promise<void> {
+    if (this.verdantMachinistSummoningTextures.length === 0) return Promise.resolve();
+    this.vmSummoningStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmSummoningResolve = resolve;
+    });
+  }
+
+  getVMGrowSeedAnimationDone(): void {
+    if (this.vmGrowSeedStartTime == null || !this.vmGrowSeedResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmGrowSeed;
+    const elapsed = Date.now() - this.vmGrowSeedStartTime;
+    const durationMs = this.verdantMachinistGrowSeedTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmGrowSeedStartTime = null;
+      const resolve = this.vmGrowSeedResolve;
+      this.vmGrowSeedResolve = null;
+      resolve();
+    }
+  }
+
+  getVMSpellAnimationDone(): void {
+    if (this.vmSpellStartTime == null || !this.vmSpellResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmSpell;
+    const elapsed = Date.now() - this.vmSpellStartTime;
+    const durationMs = this.verdantMachinistSpellTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmSpellStartTime = null;
+      const resolve = this.vmSpellResolve;
+      this.vmSpellResolve = null;
+      resolve();
+    }
+  }
+
+  getVMSummoningAnimationDone(): void {
+    if (this.vmSummoningStartTime == null || !this.vmSummoningResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmSummoning;
+    const elapsed = Date.now() - this.vmSummoningStartTime;
+    const durationMs = this.verdantMachinistSummoningTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmSummoningStartTime = null;
+      const resolve = this.vmSummoningResolve;
+      this.vmSummoningResolve = null;
+      resolve();
+    }
   }
 
   /** Returns player texture for a given character id (for future character selection). */

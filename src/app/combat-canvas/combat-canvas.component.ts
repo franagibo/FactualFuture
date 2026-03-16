@@ -301,6 +301,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
         getShootingTexture: () => this.combatAssets.getShootingTexture(),
         getSlashingTexture: () => this.combatAssets.getSlashingTexture(),
+        getVMGrowSeedTexture: () => this.combatAssets.getVMGrowSeedTexture(),
+        getVMSpellTexture: () => this.combatAssets.getVMSpellTexture(),
+        getVMSummoningTexture: () => this.combatAssets.getVMSummoningTexture(),
       }),
       getGameSettings: () => ({
         handLayout: () => this.gameSettings.handLayout(),
@@ -487,6 +490,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           !this.combatController.shieldAnimationPlaying &&
           !this.combatController.shootingAnimationPlaying &&
           !this.combatController.slashingAnimationPlaying &&
+          !this.combatController.vmGrowSeedAnimationPlaying &&
+          !this.combatController.vmSpellAnimationPlaying &&
+          !this.combatController.vmSummoningAnimationPlaying &&
           !enemyAnimPlaying &&
           this.combatController.playerSpriteRef != null &&
           this.combatController.enemySpriteRefs.length === state.enemies.length;
@@ -909,7 +915,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (!state || !this.app || this._runPhase !== 'combat') return;
     const now = performance.now();
 
-    if (this.combatController.playerSpriteRef && !this.combatController.shieldAnimationPlaying && !this.combatController.shootingAnimationPlaying && !this.combatController.slashingAnimationPlaying) {
+    const noPlayerAnim =
+      !this.combatController.shieldAnimationPlaying && !this.combatController.shootingAnimationPlaying &&
+      !this.combatController.slashingAnimationPlaying && !this.combatController.vmGrowSeedAnimationPlaying &&
+      !this.combatController.vmSpellAnimationPlaying && !this.combatController.vmSummoningAnimationPlaying;
+    if (this.combatController.playerSpriteRef && noPlayerAnim) {
       const tex = this.combatAssets.getPlayerTexture(now);
       if (tex) this.combatController.playerSpriteRef.texture = tex;
     }
@@ -966,9 +976,55 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Trigger exactly one player animation for the played card (priority: strike → block → summoning → growth → spell). */
+  private triggerPlayerAnimationForCard(cardId: string): void {
+    const state = this.bridge.getState();
+    const isVM = state?.characterId === 'verdant_machinist';
+    if (this.cardIsStrike(cardId)) {
+      this.triggerShootingAnimationIfStrike(cardId);
+      return;
+    }
+    if (this.cardHasBlockEffect(cardId)) {
+      this.triggerShieldAnimationIfBlock(cardId);
+      return;
+    }
+    if (isVM && this.cardHasSummonPlantEffect(cardId)) {
+      this.triggerVMSummoningAnimationIfSummon(cardId);
+      return;
+    }
+    if (isVM && this.cardHasGrowPlantEffect(cardId)) {
+      this.triggerVMGrowSeedAnimationIfGrowth(cardId);
+      return;
+    }
+    if (isVM && this.cardIsVMSpell(cardId)) {
+      this.triggerVMSpellAnimationIfSpell(cardId);
+    }
+  }
+
   /** True if the card is the Strike card (triggers shooting animation). */
   private cardIsStrike(cardId: string): boolean {
     return cardId === 'strike';
+  }
+
+  /** True if the card has grow_plant effect (Verdant Machinist growth). */
+  private cardHasGrowPlantEffect(cardId: string): boolean {
+    const def = this.bridge.getCardDef(cardId);
+    return def?.effects?.some((e) => e.type === 'grow_plant') ?? false;
+  }
+
+  /** True if the card has summon_plant effect (creates new seeds). */
+  private cardHasSummonPlantEffect(cardId: string): boolean {
+    const def = this.bridge.getCardDef(cardId);
+    return def?.effects?.some((e) => e.type === 'summon_plant') ?? false;
+  }
+
+  /** Verdant Machinist cards that use the "spell" animation (damage/debuff, not strike). */
+  private static readonly VM_SPELL_CARD_IDS = new Set([
+    'thorn_jab', 'vine_lash', 'drain_tendril', 'root_slam', 'thorn_volley', 'spore_cloud', 'symbiotic_strike',
+  ]);
+
+  private cardIsVMSpell(cardId: string): boolean {
+    return CombatCanvasComponent.VM_SPELL_CARD_IDS.has(cardId);
   }
 
   /** If the card is Strike, play shooting or chibi slashing animation on the player character. Pixi-only; no overlay change. */
@@ -997,13 +1053,65 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Verdant Machinist: play grow_seed animation for growth abilities. */
+  private triggerVMGrowSeedAnimationIfGrowth(cardId: string): void {
+    if (!this.cardHasGrowPlantEffect(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmGrowSeedAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMGrowSeedAnimation().then(() => {
+      this.combatController.vmGrowSeedAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
+  /** Verdant Machinist: play spell animation for VM spell cards. */
+  private triggerVMSpellAnimationIfSpell(cardId: string): void {
+    if (!this.cardIsVMSpell(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmSpellAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMSpellAnimation().then(() => {
+      this.combatController.vmSpellAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
+  /** Verdant Machinist: play summoning animation for cards that create new seeds. */
+  private triggerVMSummoningAnimationIfSummon(cardId: string): void {
+    if (!this.cardHasSummonPlantEffect(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmSummoningAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMSummoningAnimation().then(() => {
+      this.combatController.vmSummoningAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
   private ensurePlayerAnimationTicker(): void {
     if (this.app && !this.shieldTicker) {
       const runShieldTickerOutsideZone = (): void => {
-        if (this.combatController.shieldAnimationPlaying || this.combatController.shootingAnimationPlaying || this.combatController.slashingAnimationPlaying) {
+        const c = this.combatController;
+        const anyPlaying =
+          c.shieldAnimationPlaying || c.shootingAnimationPlaying || c.slashingAnimationPlaying ||
+          c.vmGrowSeedAnimationPlaying || c.vmSpellAnimationPlaying || c.vmSummoningAnimationPlaying;
+        if (anyPlaying) {
           this.combatAssets.getShieldAnimationDone();
           this.combatAssets.getShootingAnimationDone();
           this.combatAssets.getSlashingAnimationDone();
+          this.combatAssets.getVMGrowSeedAnimationDone();
+          this.combatAssets.getVMSpellAnimationDone();
+          this.combatAssets.getVMSummoningAnimationDone();
           this.redraw();
         }
       };
@@ -1013,7 +1121,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   private removePlayerAnimationTickerIfIdle(): void {
-    if (this.combatController.shieldAnimationPlaying || this.combatController.shootingAnimationPlaying || this.combatController.slashingAnimationPlaying) return;
+    const c = this.combatController;
+    if (c.shieldAnimationPlaying || c.shootingAnimationPlaying || c.slashingAnimationPlaying ||
+        c.vmGrowSeedAnimationPlaying || c.vmSpellAnimationPlaying || c.vmSummoningAnimationPlaying) return;
     if (this.shieldTicker && this.app) {
       this.app.ticker.remove(this.shieldTicker);
       this.shieldTicker = null;
@@ -1262,8 +1372,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           const playLineY = this.app.screen.height * ratio;
           if (y < playLineY) {
             this.bridge.playCard(currentCardId, undefined, currentHandIndex);
-            this.triggerShieldAnimationIfBlock(currentCardId);
-            this.triggerShootingAnimationIfStrike(currentCardId);
+            this.triggerPlayerAnimationForCard(currentCardId);
             played = true;
           }
         }
@@ -1366,8 +1475,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       fromY = pos.y - layout.hoverLift;
     } else {
       this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
-      this.triggerShieldAnimationIfBlock(cardId);
-      this.triggerShootingAnimationIfStrike(cardId);
+      this.triggerPlayerAnimationForCard(cardId);
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
       this.combatController.cardInteractionCardId = null;
@@ -1404,8 +1512,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (flyCard.parent) flyCard.destroy({ children: true });
       const oldState = state;
       this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
-      this.triggerShieldAnimationIfBlock(cardId);
-      this.triggerShootingAnimationIfStrike(cardId);
+      this.triggerPlayerAnimationForCard(cardId);
       this.sound.playCardPlay();
       const vfxId = this.cardVfx.getVfxIdForCard(cardId);
       if (vfxId && this.gameSettings.vfxIntensity() !== 'off' && this.cardVfx.getVfxFrames(vfxId).length > 0) {

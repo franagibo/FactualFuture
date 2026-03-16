@@ -143,6 +143,12 @@ export interface CombatViewPlayerContext {
   getShootingTexture?: () => PIXI.Texture | null;
   slashingAnimationPlaying?: boolean;
   getSlashingTexture?: () => PIXI.Texture | null;
+  vmGrowSeedAnimationPlaying?: boolean;
+  getVMGrowSeedTexture?: () => PIXI.Texture | null;
+  vmSpellAnimationPlaying?: boolean;
+  getVMSpellTexture?: () => PIXI.Texture | null;
+  vmSummoningAnimationPlaying?: boolean;
+  getVMSummoningTexture?: () => PIXI.Texture | null;
   onPlayerSpriteCreated?: (sprite: PIXI.Sprite) => void;
 }
 
@@ -239,6 +245,12 @@ export interface CombatViewContext {
   slashingAnimationPlaying?: boolean;
   /** @deprecated Use player.getSlashingTexture */
   getSlashingTexture?: () => PIXI.Texture | null;
+  vmGrowSeedAnimationPlaying?: boolean;
+  getVMGrowSeedTexture?: () => PIXI.Texture | null;
+  vmSpellAnimationPlaying?: boolean;
+  getVMSpellTexture?: () => PIXI.Texture | null;
+  vmSummoningAnimationPlaying?: boolean;
+  getVMSummoningTexture?: () => PIXI.Texture | null;
   textScale?: number;
   vfxIntensity?: 'full' | 'reduced' | 'off';
   /** @deprecated Use hand.isDraggingCard */
@@ -384,7 +396,10 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const slashingTex = ctx.slashingAnimationPlaying && ctx.getSlashingTexture?.() ? ctx.getSlashingTexture() : null;
   const shootingTex = ctx.shootingAnimationPlaying && ctx.getShootingTexture?.() ? ctx.getShootingTexture() : null;
   const shieldTex = ctx.shieldAnimationPlaying && ctx.getShieldVideoTexture?.() ? ctx.getShieldVideoTexture() : null;
-  const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? (ctx.getPlayerTexture?.() ?? null);
+  const vmGrowSeedTex = ctx.vmGrowSeedAnimationPlaying && ctx.getVMGrowSeedTexture?.() ? ctx.getVMGrowSeedTexture() : null;
+  const vmSpellTex = ctx.vmSpellAnimationPlaying && ctx.getVMSpellTexture?.() ? ctx.getVMSpellTexture() : null;
+  const vmSummoningTex = ctx.vmSummoningAnimationPlaying && ctx.getVMSummoningTexture?.() ? ctx.getVMSummoningTexture() : null;
+  const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? vmGrowSeedTex ?? vmSpellTex ?? vmSummoningTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
     const centerX = playerPlaceholderW / 2;
     const feetY = playerPlaceholderH;
