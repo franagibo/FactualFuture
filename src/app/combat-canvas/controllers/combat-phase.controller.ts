@@ -46,6 +46,8 @@ export interface CombatPhaseHost {
     getVMDrainTexture: () => PIXI.Texture | null;
   };
   getGameSettings(): { handLayout: () => 'default' | 'compact'; reducedMotion: () => boolean; textScale: () => number; vfxIntensity: () => 'full' | 'reduced' | 'off' };
+  /** Optional presentation-only effect (short flash overlay). */
+  getImpactFlash?(): { alpha: number; color: number } | null;
   getApp(): PIXI.Application | null;
   redraw(): void;
   requestTemplateUpdate(): void;
@@ -191,12 +193,18 @@ export class CombatPhaseController {
         handLayout: settings.handLayout(),
         reducedMotion: settings.reducedMotion(),
       });
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    // Optional presentation layer from host (juice effects).
+    const anyHost = host as unknown as { getImpactFlash?: () => { alpha: number; color: number } | null };
+    const impactFlash = anyHost.getImpactFlash?.() ?? null;
+
     return {
       stage,
       state,
       w,
       h,
       padding,
+      ...(impactFlash ? { impactFlash } : {}),
       pools: undefined,
       hand: {
         hoveredCardIndex: c.hoveredCardIndex,

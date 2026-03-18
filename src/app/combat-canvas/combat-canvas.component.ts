@@ -18,6 +18,7 @@ import { GameBridgeService } from '../services/game-bridge.service';
 import { GameSettingsService } from '../services/game-settings.service';
 import { MapAssetsService } from '../services/map-assets.service';
 import { SoundService } from '../services/sound.service';
+import { RunPhaseMachineService } from '../services/run-phase-machine.service';
 import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
@@ -30,6 +31,7 @@ import { drawCombatView, buildCardVisualsContainer } from './renderers/combat-vi
 import { MapPhaseController, type MapPhaseHost } from './controllers/map-phase.controller';
 import { CombatPhaseController, type CombatPhaseHost } from './controllers/combat-phase.controller';
 import { updateCardAnimations } from './systems/card-animation.system';
+import { FixedTimestepLoop } from './systems/fixed-timestep-loop';
 import { CombatPools } from './pools/pixi-pools';
 import type { FloatingNumber } from './constants/combat-types';
 import { logger } from '../util/app-logger';
@@ -39,6 +41,9 @@ import { RestPanelComponent } from './panels/rest-panel.component';
 import { ShopPanelComponent } from './panels/shop-panel.component';
 import { EventPanelComponent } from './panels/event-panel.component';
 import { VictoryPanelComponent } from './panels/victory-panel.component';
+import { NoiseFilter } from '@pixi/filter-noise';
+import { GlowFilter } from '@pixi/filter-glow';
+import { ColorMatrixFilter } from '@pixi/filter-color-matrix';
 
 /**
  * Main game canvas: owns PixiJS app lifecycle, game state sync, and user actions.
@@ -106,9 +111,26 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private resizeRedrawScheduled = false;
   /** Ticker frame counter for throttling idle and animation-only redraws. */
   private tickerFrameCount = 0;
+  private fixedLoop = new FixedTimestepLoop({ stepMs: 1000 / 60, maxCatchUpSteps: 5 });
   /** Persistent containers so we can update only VFX without full stage clear (avoids recreating all combat nodes every frame). */
   private contentContainer: PIXI.Container | null = null;
   private vfxContainer: PIXI.Container | null = null;
+  /** Root container that is scaled/letterboxed to match fixed internal resolution. */
+  private rootContainer: PIXI.Container | null = null;
+  /** Fixed internal resolution (render coordinates). */
+  private static readonly GAME_WIDTH = 1920;
+  private static readonly GAME_HEIGHT = 1080;
+  /** Current letterbox transform. */
+  private viewScale = 1;
+  private viewOffsetX = 0;
+  private viewOffsetY = 0;
+
+  private postFxFilters: unknown[] | null = null;
+
+  // --- Juice (small reusable game-feel effects) ---
+  private hitstopUntilMs = 0;
+  private flashUntilMs = 0;
+  private flashColor = 0xffffff;
   /** Throttle hover resolution to ~30fps to reduce work on pointer move. */
   private lastResolveHoverTime = 0;
   /** Pools for combat view display objects; reused across redraws to reduce allocations. */
@@ -134,6 +156,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     private cardVfx: CardVfxService,
     public gameSettings: GameSettingsService,
     public sound: SoundService,
+    private phaseMachine: RunPhaseMachineService,
     private router: Router,
     private cdr: ChangeDetectorRef,
     private zone: NgZone
@@ -151,10 +174,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private syncOverlaySignals(state: GameState | null): void {
     if (state) {
       const nextPhase = this.bridge.getRunPhase();
-      if (nextPhase !== this._runPhase) {
-        if (nextPhase === 'map') this.sound.startMapSoundtrack();
-        if (nextPhase === 'combat') this.sound.startCombatSoundtrack();
-      }
+      const transition = this.phaseMachine.step(nextPhase);
+      if (transition?.to === 'map') this.sound.startMapSoundtrack();
+      if (transition?.to === 'combat') this.sound.startCombatSoundtrack();
       this._runPhase = nextPhase;
       this._combatResult = state.combatResult ?? null;
     }
@@ -321,6 +343,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         textScale: () => this.gameSettings.textScale(),
         vfxIntensity: () => this.gameSettings.vfxIntensity(),
       }),
+      getImpactFlash: () => {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (this.flashUntilMs <= now) return null;
+        const remaining = this.flashUntilMs - now;
+        const alpha = Math.min(1, remaining / 120) * 0.22;
+        return { alpha, color: this.flashColor };
+      },
       getApp: () => this.app,
       redraw: () => this.redraw(),
       requestTemplateUpdate: () => this.requestTemplateUpdate(),
@@ -352,6 +381,95 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.app = null;
     this.contentContainer = null;
     this.vfxContainer = null;
+    this.rootContainer = null;
+  }
+
+  /** Update root container scale/offset to letterbox fixed internal resolution into host size. */
+  private updateViewTransform(): void {
+    if (!this.app || !this.rootContainer) return;
+    const host = this.canvasHostRef.nativeElement;
+    const hostW = host.clientWidth;
+    const hostH = host.clientHeight;
+    if (hostW <= 0 || hostH <= 0) return;
+
+    // Map (and overlays rendered on top of map) are intentionally scrollable and can be taller than the viewport.
+    // In those phases, we want the Pixi renderer to match the host size (no letterboxing), otherwise the browser
+    // will stretch a 1080p render up to a huge scroll height (looks stretched and breaks scrolling).
+    if (this.isMapOrOverlayPhase(this._runPhase)) {
+      // Resize the renderer to match the scroll content.
+      this.app.renderer?.resize?.(hostW, hostH);
+      this.viewScale = 1;
+      this.viewOffsetX = 0;
+      this.viewOffsetY = 0;
+      this.rootContainer.scale.set(1);
+      this.rootContainer.position.set(0, 0);
+      this.rootContainer.filters = null; // keep map crisp; postFX is for combat feel
+      this.app.canvas.style.position = 'absolute';
+      this.app.canvas.style.left = '0px';
+      this.app.canvas.style.top = '0px';
+      this.app.canvas.style.width = `${hostW}px`;
+      this.app.canvas.style.height = `${hostH}px`;
+      return;
+    }
+
+    // Combat: fixed internal resolution, canvas letterboxed into host (no CSS stretch)
+    const baseW = CombatCanvasComponent.GAME_WIDTH;
+    const baseH = CombatCanvasComponent.GAME_HEIGHT;
+    const scale = Math.min(hostW / baseW, hostH / baseH);
+    const usedW = baseW * scale;
+    const usedH = baseH * scale;
+    const offsetX = Math.floor((hostW - usedW) / 2);
+    const offsetY = Math.floor((hostH - usedH) / 2);
+    // No additional coordinate transform needed for combat; the canvas itself is sized/positioned.
+    this.viewScale = 1;
+    this.viewOffsetX = 0;
+    this.viewOffsetY = 0;
+    // Ensure renderer stays at fixed internal resolution for combat.
+    this.app.renderer?.resize?.(CombatCanvasComponent.GAME_WIDTH, CombatCanvasComponent.GAME_HEIGHT);
+    this.rootContainer.scale.set(1);
+    this.rootContainer.position.set(0, 0);
+    // Apply post FX based on settings
+    const enablePostFx = this.gameSettings.postFx() === 'on' && !this.gameSettings.reducedMotion();
+    if (enablePostFx) {
+      if (!this.postFxFilters) {
+        const noise = new NoiseFilter(0.08);
+        const glow = new GlowFilter({ distance: 10, outerStrength: 0.35, innerStrength: 0, color: 0xffffff, quality: 0.2 });
+        const cm = new ColorMatrixFilter();
+        cm.brightness(1.02, false);
+        cm.contrast(1.05, false);
+        this.postFxFilters = [cm, glow, noise];
+      }
+      this.rootContainer.filters = this.postFxFilters as unknown as PIXI.Filter[];
+    } else {
+      this.rootContainer.filters = null;
+    }
+    // Letterbox by sizing/positioning the canvas element itself.
+    this.app.canvas.style.position = 'absolute';
+    this.app.canvas.style.left = `${offsetX}px`;
+    this.app.canvas.style.top = `${offsetY}px`;
+    this.app.canvas.style.width = `${Math.floor(usedW)}px`;
+    this.app.canvas.style.height = `${Math.floor(usedH)}px`;
+  }
+
+  private triggerHitstop(durationMs: number): void {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.hitstopUntilMs = Math.max(this.hitstopUntilMs, now + durationMs);
+  }
+
+  private triggerFlash(color: number, durationMs: number): void {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.flashColor = color;
+    this.flashUntilMs = Math.max(this.flashUntilMs, now + durationMs);
+  }
+
+  /** Convert screen (Pixi global) coordinates to game coordinates (fixed internal resolution). */
+  private screenToGame(x: number, y: number): { x: number; y: number } {
+    if (this.isMapOrOverlayPhase(this._runPhase)) return { x, y };
+    const scale = this.viewScale || 1;
+    return {
+      x: (x - this.viewOffsetX) / scale,
+      y: (y - this.viewOffsetY) / scale,
+    };
   }
 
   /** Create Pixi app, attach to host, wire resize and initial redraw. */
@@ -365,6 +483,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const state = this.bridge.getState();
     this._combatResult = state?.combatResult ?? null;
     this._runPhase = this.bridge.getRunPhase();
+    this.phaseMachine.step(this._runPhase);
     if (this._runPhase === 'map') this.sound.startMapSoundtrack();
     if (this._runPhase === 'combat') this.sound.startCombatSoundtrack();
     this.syncOverlaySignals(state);
@@ -380,23 +499,41 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const host = this.canvasHostRef.nativeElement;
     this.app = new PIXI.Application();
     await this.app.init({
-      resizeTo: host,
+      width: CombatCanvasComponent.GAME_WIDTH,
+      height: CombatCanvasComponent.GAME_HEIGHT,
       background: 0x1a1a2e,
       antialias: true,
     });
     host.appendChild(this.app.canvas);
     this.app.stage.eventMode = 'passive' as PIXI.EventMode;
+    // Root container gets scaled/centered into host.
+    this.rootContainer = new PIXI.Container();
+    this.app.stage.addChild(this.rootContainer);
+    this.updateViewTransform();
+    this.fixedLoop.reset(performance.now());
     this.resizeObserver = new ResizeObserver(() => {
       if (this.resizeRedrawScheduled) return;
       this.resizeRedrawScheduled = true;
       requestAnimationFrame(() => {
         this.resizeRedrawScheduled = false;
+        this.updateViewTransform();
         this.redraw();
       });
     });
     this.resizeObserver.observe(host);
     const runTickerOutsideZone = (ticker: PIXI.Ticker): void => {
       if (!this.app) return;
+      const nowMs = performance.now();
+      if (this.hitstopUntilMs > nowMs) {
+        // Keep shake updating, but skip gameplay animation updates during hitstop.
+        this.updateViewTransform();
+        this.redraw();
+        return;
+      }
+      const steps = this.fixedLoop.advance(nowMs);
+      // For now, we use fixed-step time only to stabilize “juice” and small animation updates;
+      // main gameplay still derives from engine state.
+      if (steps > 0) this.updateViewTransform();
       const w = this.app.screen.width;
       const h = this.app.screen.height;
       const hasValidSize = w > 0 && h > 0;
@@ -628,14 +765,14 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private scheduleCanvasLayoutFix(opts: { scrollToBottom?: boolean } = {}): void {
     if (!this.app) return;
     this.zone.run(() => this.cdr.detectChanges());
-    this.app.resize();
+    this.updateViewTransform();
     requestAnimationFrame(() => {
       if (!this.app) return;
       this.redraw();
       requestAnimationFrame(() => {
         if (!this.app) return;
         this.zone.run(() => this.cdr.detectChanges());
-        this.app.resize();
+        this.updateViewTransform();
         this.redraw();
         if (opts.scrollToBottom) {
           const el = this.scrollAreaRef?.nativeElement;
@@ -664,8 +801,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private async doRedrawBody(): Promise<void> {
     const state = this.bridge.getState();
     if (!state || !this.app) return;
-    const w = this.app.screen.width;
-    const h = this.app.screen.height;
+    const w = this.isMapOrOverlayPhase(this._runPhase) ? this.app.screen.width : CombatCanvasComponent.GAME_WIDTH;
+    const h = this.isMapOrOverlayPhase(this._runPhase) ? this.app.screen.height : CombatCanvasComponent.GAME_HEIGHT;
     if (w <= 0 || h <= 0) {
       requestAnimationFrame(() => this.redraw());
       return;
@@ -677,6 +814,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const prevPhase = this._runPhase;
     this._combatResult = state.combatResult;
     this._runPhase = this.bridge.getRunPhase();
+    const transition = this.phaseMachine.step(this._runPhase);
     if (this._runPhase !== 'combat') {
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
@@ -689,8 +827,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.syncOverlaySignals(state);
     if (state.combatResult === 'win' && prevResult !== 'win') this.sound.playVictory();
     if (state.combatResult === 'lose' && prevResult !== 'lose') this.sound.playDefeat();
-    if (this._runPhase === 'map' && prevPhase !== 'map') this.sound.startMapSoundtrack();
-    if (this._runPhase === 'combat' && prevPhase !== 'combat') {
+    if (transition?.to === 'map') this.sound.startMapSoundtrack();
+    if (transition?.to === 'combat') {
       this.sound.startCombatSoundtrack();
       this.sound.playCombatStart();
     }
@@ -708,8 +846,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (!this.contentContainer) {
       this.contentContainer = new PIXI.Container();
       this.vfxContainer = new PIXI.Container();
-      this.app.stage.addChild(this.contentContainer);
-      this.app.stage.addChild(this.vfxContainer);
+      // Route all game drawing into rootContainer so letterboxing affects everything consistently.
+      const root = this.rootContainer ?? this.app.stage;
+      root.addChild(this.contentContainer);
+      root.addChild(this.vfxContainer);
     }
     const content = this.contentContainer;
     const vfx = this.vfxContainer!;
@@ -1277,10 +1417,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const rect = this.app.canvas.getBoundingClientRect();
     const scaleX = this.app.screen.width / rect.width;
     const scaleY = this.app.screen.height / rect.height;
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
+    const screenX = (clientX - rect.left) * scaleX;
+    const screenY = (clientY - rect.top) * scaleY;
+    return this.screenToGame(screenX, screenY);
   }
 
   private clearDragListeners(): void {
@@ -1414,6 +1553,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Card pointer down: enter Pressed; Dragging after threshold; play or Returning on release. */
   onCardPointerDown(cardId: string, handIndex: number, stageX: number, stageY: number): void {
+    // Renderer passes Pixi global coordinates; convert to fixed game coordinates for logic/layout.
+    const p = this.screenToGame(stageX, stageY);
+    stageX = p.x;
+    stageY = p.y;
     this.clearDragListeners();
     const state = this.bridge.getState();
     if (!state || state.phase !== 'player' || state.combatResult || this._runPhase !== 'combat') return;
@@ -1647,6 +1790,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         if (hpLost > 0) {
           toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
           this.sound.playHit();
+          this.triggerHitstop(this.gameSettings.reducedMotion() ? 0 : 45);
+          this.triggerFlash(0xff6666, 110);
           this.combatController.enemyHurtStartMs[enemyIndex] = now;
           if (newState.enemies[enemyIndex].hp <= 0) {
             this.combatController.enemyDyingStartMs[enemyIndex] = now;
@@ -1658,6 +1803,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         const playerCenter = getPlayerCenter(w, h);
         toAdd.push({ type: 'block', value: blockGain, x: playerCenter.x, y: playerCenter.y, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
         this.sound.playBlock();
+        this.triggerFlash(0x66ff88, 90);
       }
       this.combatController.floatingNumbers = [...this.combatController.floatingNumbers, ...toAdd];
       this.redraw();

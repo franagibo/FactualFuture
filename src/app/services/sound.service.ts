@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { Howl, Howler } from 'howler';
 
 const AUDIO_BASE = '/assets/audio/';
 const VFX_BASE = '/assets/vfx/';
@@ -59,11 +60,16 @@ export class SoundService {
   private musicVolume = DEFAULT_PREFS.musicVolume;
   private effectsVolume = DEFAULT_PREFS.effectsVolume;
   private clickSoundEnabled = DEFAULT_PREFS.clickSoundEnabled;
-  private soundtrackEl: HTMLAudioElement | null = null;
+
+  private soundtrack: Howl | null = null;
+  private soundtrackFadeMs = 650;
   private currentContext: SoundtrackContext | null = null;
   private currentPlaylist: string[] = [];
   private playlistIndex = 0;
   private playlistBasePath = '';
+
+  private sfx: Record<keyof typeof PATHS, Howl> | null = null;
+  private unlocked = false;
 
   setMuted(m: boolean): void {
     this.muted = m;
@@ -91,6 +97,7 @@ export class SoundService {
 
   setEffectsVolume(v: number): void {
     this.effectsVolume = clamp01(v);
+    this.applySfxVolume();
     this.savePreferences();
   }
 
@@ -121,6 +128,7 @@ export class SoundService {
         if (typeof parsed.clickSoundEnabled === 'boolean') this.clickSoundEnabled = parsed.clickSoundEnabled;
       }
       this.applySoundtrackVolume();
+      this.applySfxVolume();
     } catch {}
   }
 
@@ -140,28 +148,50 @@ export class SoundService {
   }
 
   private applySoundtrackVolume(): void {
-    if (!this.soundtrackEl) return;
     if (this.muted) {
-      this.soundtrackEl.volume = 0;
+      Howler.volume(0);
     } else {
-      this.soundtrackEl.volume = this.musicVolume;
+      Howler.volume(1);
+    }
+    if (this.soundtrack) this.soundtrack.volume(this.musicVolume);
+  }
+
+  private applySfxVolume(): void {
+    if (!this.sfx) return;
+    for (const k of Object.keys(this.sfx) as (keyof typeof PATHS)[]) {
+      this.sfx[k].volume(this.effectsVolume);
     }
   }
 
-  private bindSoundtrackEnded(): void {
-    if (!this.soundtrackEl) return;
-    this.soundtrackEl.onended = () => {
-      if (this.currentPlaylist.length === 0) return;
-      this.playlistIndex = (this.playlistIndex + 1) % this.currentPlaylist.length;
-      const path = `${this.playlistBasePath}/${this.currentPlaylist[this.playlistIndex]}`;
-      const url = path.startsWith('/') ? window.location.origin + path : path;
-      this.soundtrackEl!.src = url;
-      this.soundtrackEl!.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[Sound] Next track failed', err); });
-    };
+  /** Ensure Howler is ready (and create reusable Howl instances for SFX). */
+  private ensureInit(): void {
+    if (typeof window === 'undefined') return;
+    if (!this.sfx) {
+      this.sfx = {
+        cardPlay: new Howl({ src: [PATHS.cardPlay], preload: true, volume: this.effectsVolume }),
+        hit: new Howl({ src: [PATHS.hit], preload: true, volume: this.effectsVolume }),
+        block: new Howl({ src: [PATHS.block], preload: true, volume: this.effectsVolume }),
+        turnStart: new Howl({ src: [PATHS.turnStart], preload: true, volume: this.effectsVolume }),
+        turnEnd: new Howl({ src: [PATHS.turnEnd], preload: true, volume: this.effectsVolume }),
+        victory: new Howl({ src: [PATHS.victory], preload: true, volume: this.effectsVolume }),
+        defeat: new Howl({ src: [PATHS.defeat], preload: true, volume: this.effectsVolume }),
+        combatStart: new Howl({ src: [PATHS.combatStart], preload: true, volume: this.effectsVolume }),
+        click: new Howl({ src: [PATHS.click], preload: true, volume: this.effectsVolume }),
+      };
+    }
+    this.applySoundtrackVolume();
+    this.applySfxVolume();
+  }
+
+  /** Call once after first user interaction to satisfy autoplay policies. */
+  unlock(): void {
+    this.ensureInit();
+    this.unlocked = true;
   }
 
   private startPlaylist(context: SoundtrackContext): void {
     if (typeof window === 'undefined') return;
+    this.ensureInit();
     const files = SOUNDTRACK_PLAYLISTS[context];
     if (!files?.length) return;
     try {
@@ -169,17 +199,48 @@ export class SoundService {
       this.currentPlaylist = shuffleArray(files);
       this.playlistIndex = 0;
       this.playlistBasePath = `${SOUNDTRACK_BASE}${context}`;
-      if (!this.soundtrackEl) {
-        this.soundtrackEl = new Audio();
-        this.soundtrackEl.loop = false;
-        this.bindSoundtrackEnded();
-      }
       const path = `${this.playlistBasePath}/${this.currentPlaylist[0]}`;
       const url = path.startsWith('/') ? window.location.origin + path : path;
-      this.soundtrackEl.src = url;
-      this.applySoundtrackVolume();
-      this.soundtrackEl.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[Sound] Soundtrack play failed', err); });
+      const next = new Howl({
+        src: [url],
+        html5: true,
+        loop: false,
+        volume: this.musicVolume,
+        onend: () => this.playNextTrack(),
+      });
+      // Crossfade (or hard swap if we have nothing playing yet)
+      const prev = this.soundtrack;
+      this.soundtrack = next;
+      if (this.muted || !this.unlocked) return;
+      next.play();
+      if (prev) {
+        prev.fade(prev.volume(), 0, this.soundtrackFadeMs);
+        setTimeout(() => prev.unload(), this.soundtrackFadeMs + 50);
+      }
     } catch {}
+  }
+
+  private playNextTrack(): void {
+    if (typeof window === 'undefined') return;
+    if (this.currentPlaylist.length === 0) return;
+    this.playlistIndex = (this.playlistIndex + 1) % this.currentPlaylist.length;
+    const path = `${this.playlistBasePath}/${this.currentPlaylist[this.playlistIndex]}`;
+    const url = path.startsWith('/') ? window.location.origin + path : path;
+    const next = new Howl({
+      src: [url],
+      html5: true,
+      loop: false,
+      volume: this.musicVolume,
+      onend: () => this.playNextTrack(),
+    });
+    const prev = this.soundtrack;
+    this.soundtrack = next;
+    if (this.muted || !this.unlocked) return;
+    next.play();
+    if (prev) {
+      prev.fade(prev.volume(), 0, this.soundtrackFadeMs);
+      setTimeout(() => prev.unload(), this.soundtrackFadeMs + 50);
+    }
   }
 
   /** Start main menu playlist (shuffled, full playlist on loop). */
@@ -204,61 +265,60 @@ export class SoundService {
 
   stopSoundtrack(): void {
     try {
-      if (this.soundtrackEl) {
-        this.soundtrackEl.pause();
-        this.soundtrackEl.currentTime = 0;
-        this.soundtrackEl.onended = null;
+      if (this.soundtrack) {
+        const s = this.soundtrack;
+        this.soundtrack = null;
+        s.stop();
+        s.unload();
       }
       this.currentContext = null;
       this.currentPlaylist = [];
     } catch {}
   }
 
-  private play(path: string): void {
-    if (this.muted || typeof window === 'undefined') return;
+  private playSfx(key: keyof typeof PATHS): void {
+    if (this.muted || typeof window === 'undefined' || !this.unlocked) return;
+    this.ensureInit();
     try {
-      const url = path.startsWith('/') ? window.location.origin + path : path;
-      const audio = new Audio(url);
-      audio.volume = this.effectsVolume;
-      audio.play().catch((err) => { if (typeof console !== 'undefined' && console.warn) console.warn('[App] Effect play failed', path, err); });
+      this.sfx?.[key]?.play();
     } catch {}
   }
 
   playCardPlay(): void {
-    this.play(PATHS.cardPlay);
+    this.playSfx('cardPlay');
   }
 
   playHit(): void {
-    this.play(PATHS.hit);
+    this.playSfx('hit');
   }
 
   playBlock(): void {
-    this.play(PATHS.block);
+    this.playSfx('block');
   }
 
   playTurnStart(): void {
-    this.play(PATHS.turnStart);
+    this.playSfx('turnStart');
   }
 
   playTurnEnd(): void {
-    this.play(PATHS.turnEnd);
+    this.playSfx('turnEnd');
   }
 
   playVictory(): void {
-    this.play(PATHS.victory);
+    this.playSfx('victory');
   }
 
   playDefeat(): void {
-    this.play(PATHS.defeat);
+    this.playSfx('defeat');
   }
 
   playCombatStart(): void {
-    this.play(PATHS.combatStart);
+    this.playSfx('combatStart');
   }
 
   /** UI click feedback. Only plays when click sound is enabled and not muted. */
   playClick(): void {
     if (!this.clickSoundEnabled || this.muted) return;
-    this.play(PATHS.click);
+    this.playSfx('click');
   }
 }

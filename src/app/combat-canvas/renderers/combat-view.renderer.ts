@@ -980,6 +980,15 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   const sizeScale = (size: 'small' | 'medium' | 'large' | undefined): number =>
     size === 'small' ? 0.8 : size === 'large' ? 1.2 : 1;
 
+  const hpBarBg = ctx.getHpBarBgTexture?.() ?? null;
+  const hpBarProgress = ctx.getHpBarProgressTexture?.() ?? null;
+  const hpBarBorder = ctx.getHpBarBorderTexture?.() ?? null;
+  const useEnemyHpBar = hpBarBg && hpBarProgress && hpBarBorder;
+  const shieldBarBg = ctx.getShieldBarBgTexture?.() ?? null;
+  const shieldBarProgress = ctx.getShieldBarProgressTexture?.() ?? null;
+  const shieldBarBorder = ctx.getShieldBarBorderTexture?.() ?? null;
+  const useEnemyShieldBar = shieldBarBg && shieldBarProgress && shieldBarBorder;
+
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     const isAlive = e.hp > 0;
@@ -1048,12 +1057,62 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     nameT.x = 8;
     nameT.y = 8;
     container.addChild(nameT);
-    const hpT = t(ctx);
-    hpT.text = `HP: ${e.hp}/${e.maxHp}  Block: ${e.block}`;
-    hpT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(11, ctx), fill: 0xcccccc };
-    hpT.x = 8;
-    hpT.y = 26;
-    container.addChild(hpT);
+
+    // Enemy HP + Shield bars (same assets as player, scaled down and masked).
+    if (useEnemyHpBar) {
+      const barW = L.enemyBarWidth ?? 112;
+      const barH = L.enemyBarHeight ?? 18;
+      const x = Math.floor((enemyPlaceholderW - barW) / 2);
+      const hpY = enemyPlaceholderH - (barH * 2 + 14);
+      const shieldY = hpY + barH + 4;
+      const hpRatio = e.maxHp > 0 ? Math.max(0, Math.min(1, e.hp / e.maxHp)) : 0;
+      const blockRatio = e.maxHp > 0 ? Math.max(0, Math.min(1, (e.block ?? 0) / e.maxHp)) : 0;
+
+      const drawBar = (bgTex: PIXI.Texture, progTex: PIXI.Texture, borderTex: PIXI.Texture, y: number, ratio: number, label: string) => {
+        const bg = spriteNew();
+        bg.texture = bgTex;
+        bg.x = x;
+        bg.y = y;
+        bg.width = barW;
+        bg.height = barH;
+        container.addChild(bg);
+
+        const progContainer = c(ctx);
+        progContainer.x = x;
+        progContainer.y = y;
+        const prog = spriteNew();
+        prog.texture = progTex;
+        prog.width = barW;
+        prog.height = barH;
+        progContainer.addChild(prog);
+        const mask = g(ctx);
+        mask.rect(0, 0, barW * ratio, barH).fill(0xffffff);
+        progContainer.mask = mask;
+        progContainer.addChild(mask);
+        container.addChild(progContainer);
+
+        const border = spriteNew();
+        border.texture = borderTex;
+        border.x = x;
+        border.y = y;
+        border.width = barW;
+        border.height = barH;
+        container.addChild(border);
+
+        const txt = t(ctx);
+        txt.text = label;
+        txt.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(11, ctx), fill: 0xffffff, fontWeight: 'bold' };
+        txt.anchor.set(0.5, 0.5);
+        txt.x = x + barW / 2;
+        txt.y = y + barH / 2;
+        container.addChild(txt);
+      };
+
+      drawBar(hpBarBg!, hpBarProgress!, hpBarBorder!, hpY, hpRatio, `${e.hp}/${e.maxHp}`);
+      if (useEnemyShieldBar) {
+        drawBar(shieldBarBg!, shieldBarProgress!, shieldBarBorder!, shieldY, blockRatio, `${e.block ?? 0}`);
+      }
+    }
     if (e.intent) {
       drawIntentIcon(ctx, container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY, e.intent.addStatus, {
         times: e.intent.times,
@@ -1443,6 +1502,18 @@ function drawEnemyTurnBanner(ctx: CombatViewContext): void {
   stage.addChild(turnText);
 }
 
+/** Fullscreen flash overlay for impacts (very short-lived). */
+function drawImpactFlash(ctx: CombatViewContext): void {
+  const any = ctx as unknown as { impactFlash?: { alpha: number; color: number } };
+  const flash = any.impactFlash;
+  if (!flash || flash.alpha <= 0) return;
+  const { stage, w, h } = ctx;
+  const gr = g(ctx);
+  gr.rect(0, 0, w, h).fill({ color: flash.color ?? 0xffffff, alpha: Math.max(0, Math.min(1, flash.alpha)) });
+  gr.zIndex = 999;
+  stage.addChild(gr);
+}
+
 // ---------------------------------------------------------------------------
 // Full card visuals (for fly-to-enemy and other single-card use)
 // ---------------------------------------------------------------------------
@@ -1566,4 +1637,5 @@ export function drawCombatView(context: CombatViewContext): void {
   drawReturningCard(context);
   drawFloatingNumbers(context);
   drawEnemyTurnBanner(context);
+  drawImpactFlash(context);
 }

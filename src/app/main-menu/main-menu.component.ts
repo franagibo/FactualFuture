@@ -4,6 +4,7 @@ import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
 import { SoundService } from '../services/sound.service';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
+import { AssetManifestService } from '../services/asset-manifest.service';
 
 @Component({
   selector: 'app-main-menu',
@@ -15,7 +16,9 @@ import { SettingsModalComponent } from '../settings-modal/settings-modal.compone
       @if (!backgroundReady) {
         <div class="menu-loading-overlay" aria-busy="true">
           <span class="menu-loading-spinner"></span>
-          <span class="menu-loading-label">Loading…</span>
+          <span class="menu-loading-label">
+            Loading… @if (assetProgress.total > 0) { {{ assetProgress.loaded }}/{{ assetProgress.total }} }
+          </span>
         </div>
       }
       <div class="menu-panel">
@@ -285,11 +288,13 @@ export class MainMenuComponent implements OnInit {
   showContinue = false;
   meta: MetaState | null = null;
   backgroundReady = false;
+  assetProgress = { loaded: 0, total: 0, label: '' };
 
   constructor(
     private router: Router,
     private bridge: GameBridgeService,
     private sound: SoundService,
+    private assets: AssetManifestService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -297,6 +302,21 @@ export class MainMenuComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.sound.startMainMenuSoundtrack();
+    // Boot preload: small UI set so the first combat/map feels instant.
+    void this.assets.loadGroup('boot', [
+      '/assets/UI/header/header-1440p.png',
+      '/assets/UI/footer/footer.png',
+      '/assets/UI/hp/BarV5_Bar.png',
+      '/assets/UI/hp/BarV5_ProgressBar.png',
+      '/assets/UI/hp/BarV5_ProgressBarBorder.png',
+      '/assets/UI/shield/BarV9_Bar.png',
+      '/assets/UI/shield/BarV9_ProgressBar.png',
+      '/assets/UI/shield/BarV6_ProgressBarBorder.png',
+      '/assets/cards/empty_card.png',
+    ]).finally(() => {
+      this.assetProgress = { ...this.assets.getProgress(), label: this.assets.getProgress().label ?? '' } as unknown as { loaded: number; total: number; label: string };
+      this.cdr.markForCheck();
+    });
     this.loadBackgroundImage();
     try {
       await this.bridge.ensureDataLoaded();
@@ -308,6 +328,7 @@ export class MainMenuComponent implements OnInit {
     this.meta = this.bridge.getMeta();
     const has = await this.bridge.hasSavedRun();
     this.showContinue = has;
+    this.assetProgress = { ...this.assets.getProgress(), label: this.assets.getProgress().label ?? '' } as unknown as { loaded: number; total: number; label: string };
     this.cdr.markForCheck();
   }
 

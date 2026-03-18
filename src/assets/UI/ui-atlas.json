@@ -1,0 +1,16 @@
+{
+  "frames": {
+    "hp_bar_bg": { "frame": { "x": 0, "y": 0, "w": 1, "h": 1 } },
+    "hp_bar_progress": { "frame": { "x": 0, "y": 0, "w": 1, "h": 1 } },
+    "hp_bar_border": { "frame": { "x": 0, "y": 0, "w": 1, "h": 1 } },
+    "shield_bar_bg": { "frame": { "x": 0, "y": 0, "w": 1, "h": 1 } },
+    "shield_bar_progress": { "frame": { "x": 0, "y": 0, "w": 1, "h": 1 } },
+    "shield_bar_border": { "frame": { "x": 0, "y": 0, "w": 1, "h": 1 } }
+  },
+  "meta": {
+    "app": "atlas-placeholder",
+    "version": "1.0",
+    "image": "ui-atlas.png",
+    "scale": "1"
+  }
+}

@@ -29,6 +29,7 @@ export class AppComponent implements OnInit {
 
   @HostListener('document:click')
   onAppClick(): void {
+    this.sound.unlock();
     if (this.sound.isClickSoundEnabled()) this.sound.playClick();
   }
 }

@@ -212,6 +212,17 @@
                 Reduced motion
               </label>
             </div>
+            <div class="settings-row settings-row-checkbox">
+              <label class="settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  [checked]="gameSettings.postFx() === 'on'"
+                  (change)="gameSettings.setPostFx($any($event.target).checked ? 'on' : 'off'); cdr.markForCheck()"
+                  class="settings-checkbox"
+                />
+                Post-processing
+              </label>
+            </div>
           </section>
         }
         @case ('display') {

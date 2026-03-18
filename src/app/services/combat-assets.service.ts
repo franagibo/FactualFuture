@@ -27,6 +27,10 @@ const SHIELD_BAR_BORDER_PATH = `${SHIELD_BAR_PREFIX}BarV6_ProgressBarBorder.png`
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
+// Optional UI atlas (if present). We can migrate more UI to atlases over time.
+const UI_ATLAS_JSON = '/assets/UI/ui-atlas.json';
+const UI_ATLAS_PNG = '/assets/UI/ui-atlas.png';
+
 /** Default static / idle image. Gungirl: 5x5 idle sheet. Verdant Machinist: 5x5 4500×4500 idle sheet (verdant_machinist_idle.png.png). */
 function getStaticImagePath(characterId: string): string {
   if (characterId === 'gungirl') {
@@ -173,6 +177,7 @@ export class CombatAssetsService {
   private shieldBarBgTexture: PIXI.Texture | null = null;
   private shieldBarProgressTexture: PIXI.Texture | null = null;
   private shieldBarBorderTexture: PIXI.Texture | null = null;
+  private uiAtlasLoaded = false;
   private globalLoadPromise: Promise<void> | null = null;
   /** Character id last loaded in loadCombatAssets; used so getPlayerTexture returns the correct character. */
   private currentPlayerCharacterId = DEFAULT_PLAYER_CHARACTER_ID;
@@ -261,6 +266,14 @@ export class CombatAssetsService {
         this.blockIconTexture = (await PIXI.Assets.load(this.resolveUrl(BLOCK_ICON_PATH))) as PIXI.Texture;
       } catch {
         this.blockIconTexture = null;
+      }
+      // Atlas is optional; if it fails we just fall back to direct loads.
+      try {
+        await PIXI.Assets.load(this.resolveUrl(UI_ATLAS_JSON));
+        await PIXI.Assets.load(this.resolveUrl(UI_ATLAS_PNG));
+        this.uiAtlasLoaded = true;
+      } catch {
+        this.uiAtlasLoaded = false;
       }
       try {
         this.hpBarBgTexture = (await PIXI.Assets.load(this.resolveUrl(HP_BAR_BG_PATH))) as PIXI.Texture;
