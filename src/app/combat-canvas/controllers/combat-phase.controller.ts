@@ -28,12 +28,22 @@ export interface CombatPhaseHost {
     getCombatBgTexture: () => PIXI.Texture | null;
     getHpIconTexture: () => PIXI.Texture | null;
     getBlockIconTexture: () => PIXI.Texture | null;
+    getHpBarBgTexture: () => PIXI.Texture | null;
+    getHpBarProgressTexture: () => PIXI.Texture | null;
+    getHpBarBorderTexture: () => PIXI.Texture | null;
+    getShieldBarBgTexture: () => PIXI.Texture | null;
+    getShieldBarProgressTexture: () => PIXI.Texture | null;
+    getShieldBarBorderTexture: () => PIXI.Texture | null;
     getShieldVideoTexture: () => PIXI.Texture | null;
     getShootingTexture: () => PIXI.Texture | null;
     getSlashingTexture: () => PIXI.Texture | null;
     getVMGrowSeedTexture: () => PIXI.Texture | null;
     getVMSpellTexture: () => PIXI.Texture | null;
     getVMSummoningTexture: () => PIXI.Texture | null;
+    getVMCommandingTexture: () => PIXI.Texture | null;
+    getVMEvolveTexture: () => PIXI.Texture | null;
+    getVMDetonateTexture: () => PIXI.Texture | null;
+    getVMDrainTexture: () => PIXI.Texture | null;
   };
   getGameSettings(): { handLayout: () => 'default' | 'compact'; reducedMotion: () => boolean; textScale: () => number; vfxIntensity: () => 'full' | 'reduced' | 'off' };
   getApp(): PIXI.Application | null;
@@ -82,6 +92,10 @@ export class CombatPhaseController {
   vmGrowSeedAnimationPlaying = false;
   vmSpellAnimationPlaying = false;
   vmSummoningAnimationPlaying = false;
+  vmCommandingAnimationPlaying = false;
+  vmEvolveAnimationPlaying = false;
+  vmDetonateAnimationPlaying = false;
+  vmDrainAnimationPlaying = false;
   activeCardVfx: { vfxId: string; x: number; y: number; startTime: number }[] = [];
 
   /** Target-based card presentation (current/target position, rotation, scale). Length matches state.hand. */
@@ -219,6 +233,14 @@ export class CombatPhaseController {
         getVMSpellTexture: () => assets.getVMSpellTexture(),
         vmSummoningAnimationPlaying: c.vmSummoningAnimationPlaying,
         getVMSummoningTexture: () => assets.getVMSummoningTexture(),
+        vmCommandingAnimationPlaying: c.vmCommandingAnimationPlaying,
+        getVMCommandingTexture: () => assets.getVMCommandingTexture(),
+        vmEvolveAnimationPlaying: c.vmEvolveAnimationPlaying,
+        getVMEvolveTexture: () => assets.getVMEvolveTexture(),
+        vmDetonateAnimationPlaying: c.vmDetonateAnimationPlaying,
+        getVMDetonateTexture: () => assets.getVMDetonateTexture(),
+        vmDrainAnimationPlaying: c.vmDrainAnimationPlaying,
+        getVMDrainTexture: () => assets.getVMDrainTexture(),
         onPlayerSpriteCreated: (s) => { c.playerSpriteRef = s; },
       },
       enemies: {
@@ -263,6 +285,12 @@ export class CombatPhaseController {
       getCombatBgTexture: () => assets.getCombatBgTexture(),
       getHpIconTexture: () => assets.getHpIconTexture(),
       getBlockIconTexture: () => assets.getBlockIconTexture(),
+      getHpBarBgTexture: () => assets.getHpBarBgTexture(),
+      getHpBarProgressTexture: () => assets.getHpBarProgressTexture(),
+      getHpBarBorderTexture: () => assets.getHpBarBorderTexture(),
+      getShieldBarBgTexture: () => assets.getShieldBarBgTexture(),
+      getShieldBarProgressTexture: () => assets.getShieldBarProgressTexture(),
+      getShieldBarBorderTexture: () => assets.getShieldBarBorderTexture(),
       getPlayerTexture: () => assets.getPlayerTexture(performance.now()),
       getEnemyTexture: (id) => assets.getEnemyTexture(id),
       enemyVariants: c.enemyVariants,
@@ -287,6 +315,14 @@ export class CombatPhaseController {
       getVMSpellTexture: () => assets.getVMSpellTexture(),
       vmSummoningAnimationPlaying: c.vmSummoningAnimationPlaying,
       getVMSummoningTexture: () => assets.getVMSummoningTexture(),
+      vmCommandingAnimationPlaying: c.vmCommandingAnimationPlaying,
+      getVMCommandingTexture: () => assets.getVMCommandingTexture(),
+      vmEvolveAnimationPlaying: c.vmEvolveAnimationPlaying,
+      getVMEvolveTexture: () => assets.getVMEvolveTexture(),
+      vmDetonateAnimationPlaying: c.vmDetonateAnimationPlaying,
+      getVMDetonateTexture: () => assets.getVMDetonateTexture(),
+      vmDrainAnimationPlaying: c.vmDrainAnimationPlaying,
+      getVMDrainTexture: () => assets.getVMDrainTexture(),
       onPlayerSpriteCreated: (s) => { c.playerSpriteRef = s; },
       onEnemySpriteCreated: (i, s) => { c.enemySpriteRefs[i] = s; },
     };

@@ -298,12 +298,22 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
         getHpIconTexture: () => this.combatAssets.getHpIconTexture(),
         getBlockIconTexture: () => this.combatAssets.getBlockIconTexture(),
+        getHpBarBgTexture: () => this.combatAssets.getHpBarBgTexture(),
+        getHpBarProgressTexture: () => this.combatAssets.getHpBarProgressTexture(),
+        getHpBarBorderTexture: () => this.combatAssets.getHpBarBorderTexture(),
+        getShieldBarBgTexture: () => this.combatAssets.getShieldBarBgTexture(),
+        getShieldBarProgressTexture: () => this.combatAssets.getShieldBarProgressTexture(),
+        getShieldBarBorderTexture: () => this.combatAssets.getShieldBarBorderTexture(),
         getShieldVideoTexture: () => this.combatAssets.getShieldVideoTexture(),
         getShootingTexture: () => this.combatAssets.getShootingTexture(),
         getSlashingTexture: () => this.combatAssets.getSlashingTexture(),
         getVMGrowSeedTexture: () => this.combatAssets.getVMGrowSeedTexture(),
         getVMSpellTexture: () => this.combatAssets.getVMSpellTexture(),
         getVMSummoningTexture: () => this.combatAssets.getVMSummoningTexture(),
+        getVMCommandingTexture: () => this.combatAssets.getVMCommandingTexture(),
+        getVMEvolveTexture: () => this.combatAssets.getVMEvolveTexture(),
+        getVMDetonateTexture: () => this.combatAssets.getVMDetonateTexture(),
+        getVMDrainTexture: () => this.combatAssets.getVMDrainTexture(),
       }),
       getGameSettings: () => ({
         handLayout: () => this.gameSettings.handLayout(),
@@ -493,6 +503,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           !this.combatController.vmGrowSeedAnimationPlaying &&
           !this.combatController.vmSpellAnimationPlaying &&
           !this.combatController.vmSummoningAnimationPlaying &&
+          !this.combatController.vmCommandingAnimationPlaying &&
+          !this.combatController.vmEvolveAnimationPlaying &&
+          !this.combatController.vmDetonateAnimationPlaying &&
+          !this.combatController.vmDrainAnimationPlaying &&
           !enemyAnimPlaying &&
           this.combatController.playerSpriteRef != null &&
           this.combatController.enemySpriteRefs.length === state.enemies.length;
@@ -918,7 +932,9 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const noPlayerAnim =
       !this.combatController.shieldAnimationPlaying && !this.combatController.shootingAnimationPlaying &&
       !this.combatController.slashingAnimationPlaying && !this.combatController.vmGrowSeedAnimationPlaying &&
-      !this.combatController.vmSpellAnimationPlaying && !this.combatController.vmSummoningAnimationPlaying;
+      !this.combatController.vmSpellAnimationPlaying && !this.combatController.vmSummoningAnimationPlaying &&
+      !this.combatController.vmCommandingAnimationPlaying && !this.combatController.vmEvolveAnimationPlaying &&
+      !this.combatController.vmDetonateAnimationPlaying && !this.combatController.vmDrainAnimationPlaying;
     if (this.combatController.playerSpriteRef && noPlayerAnim) {
       const tex = this.combatAssets.getPlayerTexture(now);
       if (tex) this.combatController.playerSpriteRef.texture = tex;
@@ -976,12 +992,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Trigger exactly one player animation for the played card (priority: strike → block → summoning → growth → spell). */
+  /** Trigger exactly one player animation for the played card. Priority: strike → evolve → block → summoning → growth → spell → commanding → detonate → drain. */
   private triggerPlayerAnimationForCard(cardId: string): void {
     const state = this.bridge.getState();
     const isVM = state?.characterId === 'verdant_machinist';
     if (this.cardIsStrike(cardId)) {
       this.triggerShootingAnimationIfStrike(cardId);
+      return;
+    }
+    if (isVM && this.cardIsVMEvolve(cardId)) {
+      this.triggerVMEvolveAnimationIfEvolve(cardId);
       return;
     }
     if (this.cardHasBlockEffect(cardId)) {
@@ -998,6 +1018,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     }
     if (isVM && this.cardIsVMSpell(cardId)) {
       this.triggerVMSpellAnimationIfSpell(cardId);
+      return;
+    }
+    if (isVM && this.cardIsVMCommanding(cardId)) {
+      this.triggerVMCommandingAnimationIfCommanding(cardId);
+      return;
+    }
+    if (isVM && this.cardIsVMDetonate(cardId)) {
+      this.triggerVMDetonateAnimationIfDetonate(cardId);
+      return;
+    }
+    if (isVM && this.cardIsVMDrain(cardId)) {
+      this.triggerVMDrainAnimationIfDrain(cardId);
     }
   }
 
@@ -1023,8 +1055,27 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     'thorn_jab', 'vine_lash', 'drain_tendril', 'root_slam', 'thorn_volley', 'spore_cloud', 'symbiotic_strike',
   ]);
 
+  private static readonly VM_COMMANDING_CARD_IDS = new Set([
+    'attack_directive', 'support_protocol', 'adaptive_directive',
+  ]);
+  private static readonly VM_EVOLVE_CARD_IDS = new Set(['genetic_rewrite', 'bioforge']);
+  private static readonly VM_DETONATE_CARD_IDS = new Set(['exploding_seed']);
+  private static readonly VM_DRAIN_CARD_IDS = new Set(['biomass_conversion']);
+
   private cardIsVMSpell(cardId: string): boolean {
     return CombatCanvasComponent.VM_SPELL_CARD_IDS.has(cardId);
+  }
+  private cardIsVMCommanding(cardId: string): boolean {
+    return CombatCanvasComponent.VM_COMMANDING_CARD_IDS.has(cardId);
+  }
+  private cardIsVMEvolve(cardId: string): boolean {
+    return CombatCanvasComponent.VM_EVOLVE_CARD_IDS.has(cardId);
+  }
+  private cardIsVMDetonate(cardId: string): boolean {
+    return CombatCanvasComponent.VM_DETONATE_CARD_IDS.has(cardId);
+  }
+  private cardIsVMDrain(cardId: string): boolean {
+    return CombatCanvasComponent.VM_DRAIN_CARD_IDS.has(cardId);
   }
 
   /** If the card is Strike, play shooting or chibi slashing animation on the player character. Pixi-only; no overlay change. */
@@ -1098,13 +1149,74 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Verdant Machinist: commanding gesture for directive cards. */
+  private triggerVMCommandingAnimationIfCommanding(cardId: string): void {
+    if (!this.cardIsVMCommanding(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmCommandingAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMCommandingAnimation().then(() => {
+      this.combatController.vmCommandingAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
+  /** Verdant Machinist: evolve animation for genetic_rewrite / bioforge. */
+  private triggerVMEvolveAnimationIfEvolve(cardId: string): void {
+    if (!this.cardIsVMEvolve(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmEvolveAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMEvolveAnimation().then(() => {
+      this.combatController.vmEvolveAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
+  /** Verdant Machinist: detonate animation for exploding_seed. */
+  private triggerVMDetonateAnimationIfDetonate(cardId: string): void {
+    if (!this.cardIsVMDetonate(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmDetonateAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMDetonateAnimation().then(() => {
+      this.combatController.vmDetonateAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
+  /** Verdant Machinist: drain animation for biomass_conversion. */
+  private triggerVMDrainAnimationIfDrain(cardId: string): void {
+    if (!this.cardIsVMDrain(cardId)) return;
+    const state = this.bridge.getState();
+    if (state?.characterId !== 'verdant_machinist') return;
+    this.combatController.vmDrainAnimationPlaying = true;
+    this.ensurePlayerAnimationTicker();
+    this.redraw();
+    this.combatAssets.playVMDrainAnimation().then(() => {
+      this.combatController.vmDrainAnimationPlaying = false;
+      this.removePlayerAnimationTickerIfIdle();
+      this.redraw();
+    });
+  }
+
   private ensurePlayerAnimationTicker(): void {
     if (this.app && !this.shieldTicker) {
       const runShieldTickerOutsideZone = (): void => {
         const c = this.combatController;
         const anyPlaying =
           c.shieldAnimationPlaying || c.shootingAnimationPlaying || c.slashingAnimationPlaying ||
-          c.vmGrowSeedAnimationPlaying || c.vmSpellAnimationPlaying || c.vmSummoningAnimationPlaying;
+          c.vmGrowSeedAnimationPlaying || c.vmSpellAnimationPlaying || c.vmSummoningAnimationPlaying ||
+          c.vmCommandingAnimationPlaying || c.vmEvolveAnimationPlaying || c.vmDetonateAnimationPlaying || c.vmDrainAnimationPlaying;
         if (anyPlaying) {
           this.combatAssets.getShieldAnimationDone();
           this.combatAssets.getShootingAnimationDone();
@@ -1112,6 +1224,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           this.combatAssets.getVMGrowSeedAnimationDone();
           this.combatAssets.getVMSpellAnimationDone();
           this.combatAssets.getVMSummoningAnimationDone();
+          this.combatAssets.getVMCommandingAnimationDone();
+          this.combatAssets.getVMEvolveAnimationDone();
+          this.combatAssets.getVMDetonateAnimationDone();
+          this.combatAssets.getVMDrainAnimationDone();
           this.redraw();
         }
       };
@@ -1123,7 +1239,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private removePlayerAnimationTickerIfIdle(): void {
     const c = this.combatController;
     if (c.shieldAnimationPlaying || c.shootingAnimationPlaying || c.slashingAnimationPlaying ||
-        c.vmGrowSeedAnimationPlaying || c.vmSpellAnimationPlaying || c.vmSummoningAnimationPlaying) return;
+        c.vmGrowSeedAnimationPlaying || c.vmSpellAnimationPlaying || c.vmSummoningAnimationPlaying ||
+        c.vmCommandingAnimationPlaying || c.vmEvolveAnimationPlaying || c.vmDetonateAnimationPlaying || c.vmDrainAnimationPlaying) return;
     if (this.shieldTicker && this.app) {
       this.app.ticker.remove(this.shieldTicker);
       this.shieldTicker = null;

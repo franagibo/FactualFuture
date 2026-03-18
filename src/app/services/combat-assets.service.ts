@@ -8,11 +8,22 @@ const FIGHT_LOCATION_CONFIG_URL = '/assets/data/fight-location.json';
 const ENEMY_PATH_PREFIX = '/assets/combat/enemies/';
 const CARD_ART_PREFIX = '/assets/cards/';
 /** Fallback when a card has no dedicated art image ({cardId}.png). Used for all cards until you add per-card art. */
-const EMPTY_CARD_TEMPLATE_PATH = `${CARD_ART_PREFIX}empty_card_template.png`;
+const EMPTY_CARD_TEMPLATE_PATH = `${CARD_ART_PREFIX}empty_card.png`;
 
 const EFFECTS_PREFIX = '/assets/effects/';
 const HP_ICON_PATH = `${EFFECTS_PREFIX}hp.svg`;
 const BLOCK_ICON_PATH = `${EFFECTS_PREFIX}block.svg`;
+
+const HP_BAR_PREFIX = '/assets/UI/hp/';
+const HP_BAR_BG_PATH = `${HP_BAR_PREFIX}BarV5_Bar.png`;
+const HP_BAR_PROGRESS_PATH = `${HP_BAR_PREFIX}BarV5_ProgressBar.png`;
+const HP_BAR_BORDER_PATH = `${HP_BAR_PREFIX}BarV5_ProgressBarBorder.png`;
+
+const SHIELD_BAR_PREFIX = '/assets/UI/shield/';
+const SHIELD_BAR_BG_PATH = `${SHIELD_BAR_PREFIX}BarV9_Bar.png`;
+const SHIELD_BAR_PROGRESS_PATH = `${SHIELD_BAR_PREFIX}BarV9_ProgressBar.png`;
+// Note: border asset version differs, but it's still the correct "frame" layer.
+const SHIELD_BAR_BORDER_PATH = `${SHIELD_BAR_PREFIX}BarV6_ProgressBarBorder.png`;
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
 
@@ -45,8 +56,12 @@ function getStrikeSheetPath(characterId: string): string {
   return getShootingSheetPath(characterId);
 }
 
-/** Verdant Machinist extra animation sheets: grow_seed, spell, summoning. 5×5 grid. */
-function getVMAnimationSheetPath(name: 'grow_seed' | 'spell' | 'summoning'): string {
+/** Verdant Machinist extra animation sheets. 5×5 grid. */
+const VM_ANIMATION_NAMES = [
+  'grow_seed', 'spell', 'summoning', 'commanding', 'evolve', 'detonate', 'drain',
+] as const;
+type VMAnimationName = (typeof VM_ANIMATION_NAMES)[number];
+function getVMAnimationSheetPath(name: VMAnimationName): string {
   return `${PLAYER_CHARACTERS_PREFIX}verdant_machinist/verdant_machinist_${name}.png`;
 }
 
@@ -86,7 +101,16 @@ const SHIELD_SHEET_ROWS = 6;
 
 /** Frame duration (ms per frame) per player animation. Tweak these to speed up or slow down each animation. */
 export const PLAYER_ANIMATION_FRAME_MS: Record<
-  'shield' | 'shooting' | 'slashing' | 'vmGrowSeed' | 'vmSpell' | 'vmSummoning',
+  | 'shield'
+  | 'shooting'
+  | 'slashing'
+  | 'vmGrowSeed'
+  | 'vmSpell'
+  | 'vmSummoning'
+  | 'vmCommanding'
+  | 'vmEvolve'
+  | 'vmDetonate'
+  | 'vmDrain',
   number
 > = {
   shield: 55,
@@ -95,6 +119,10 @@ export const PLAYER_ANIMATION_FRAME_MS: Record<
   vmGrowSeed: 44,
   vmSpell: 45,
   vmSummoning: 45,
+  vmCommanding: 48,
+  vmEvolve: 50,
+  vmDetonate: 45,
+  vmDrain: 50,
 };
 
 const SHIELD_FRAME_COUNT = SHIELD_SHEET_COLS * SHIELD_SHEET_ROWS;
@@ -139,6 +167,12 @@ export class CombatAssetsService {
   private shootingResolve: (() => void) | null = null;
   private hpIconTexture: PIXI.Texture | null = null;
   private blockIconTexture: PIXI.Texture | null = null;
+  private hpBarBgTexture: PIXI.Texture | null = null;
+  private hpBarProgressTexture: PIXI.Texture | null = null;
+  private hpBarBorderTexture: PIXI.Texture | null = null;
+  private shieldBarBgTexture: PIXI.Texture | null = null;
+  private shieldBarProgressTexture: PIXI.Texture | null = null;
+  private shieldBarBorderTexture: PIXI.Texture | null = null;
   private globalLoadPromise: Promise<void> | null = null;
   /** Character id last loaded in loadCombatAssets; used so getPlayerTexture returns the correct character. */
   private currentPlayerCharacterId = DEFAULT_PLAYER_CHARACTER_ID;
@@ -152,16 +186,28 @@ export class CombatAssetsService {
   private gungirlIdleTextures: PIXI.Texture[] = [];
   /** Verdant Machinist idle animation (5×5 = 25 frames, 4500×4500 px sheet). */
   private verdantMachinistIdleTextures: PIXI.Texture[] = [];
-  /** Verdant Machinist grow_seed / spell / summoning animations (5×5 sheets). */
+  /** Verdant Machinist animations (5×5 sheets). */
   private verdantMachinistGrowSeedTextures: PIXI.Texture[] = [];
   private verdantMachinistSpellTextures: PIXI.Texture[] = [];
   private verdantMachinistSummoningTextures: PIXI.Texture[] = [];
+  private verdantMachinistCommandingTextures: PIXI.Texture[] = [];
+  private verdantMachinistEvolveTextures: PIXI.Texture[] = [];
+  private verdantMachinistDetonateTextures: PIXI.Texture[] = [];
+  private verdantMachinistDrainTextures: PIXI.Texture[] = [];
   private vmGrowSeedStartTime: number | null = null;
   private vmGrowSeedResolve: (() => void) | null = null;
   private vmSpellStartTime: number | null = null;
   private vmSpellResolve: (() => void) | null = null;
   private vmSummoningStartTime: number | null = null;
   private vmSummoningResolve: (() => void) | null = null;
+  private vmCommandingStartTime: number | null = null;
+  private vmCommandingResolve: (() => void) | null = null;
+  private vmEvolveStartTime: number | null = null;
+  private vmEvolveResolve: (() => void) | null = null;
+  private vmDetonateStartTime: number | null = null;
+  private vmDetonateResolve: (() => void) | null = null;
+  private vmDrainStartTime: number | null = null;
+  private vmDrainResolve: (() => void) | null = null;
 
   /** Placeholder enemy animations (Idle, Hurt, Dying) per Zombie_Villager variant. Loaded once when combat uses placeholders. */
   private zombiePlaceholderTextures: Record<
@@ -215,6 +261,36 @@ export class CombatAssetsService {
         this.blockIconTexture = (await PIXI.Assets.load(this.resolveUrl(BLOCK_ICON_PATH))) as PIXI.Texture;
       } catch {
         this.blockIconTexture = null;
+      }
+      try {
+        this.hpBarBgTexture = (await PIXI.Assets.load(this.resolveUrl(HP_BAR_BG_PATH))) as PIXI.Texture;
+      } catch {
+        this.hpBarBgTexture = null;
+      }
+      try {
+        this.hpBarProgressTexture = (await PIXI.Assets.load(this.resolveUrl(HP_BAR_PROGRESS_PATH))) as PIXI.Texture;
+      } catch {
+        this.hpBarProgressTexture = null;
+      }
+      try {
+        this.hpBarBorderTexture = (await PIXI.Assets.load(this.resolveUrl(HP_BAR_BORDER_PATH))) as PIXI.Texture;
+      } catch {
+        this.hpBarBorderTexture = null;
+      }
+      try {
+        this.shieldBarBgTexture = (await PIXI.Assets.load(this.resolveUrl(SHIELD_BAR_BG_PATH))) as PIXI.Texture;
+      } catch {
+        this.shieldBarBgTexture = null;
+      }
+      try {
+        this.shieldBarProgressTexture = (await PIXI.Assets.load(this.resolveUrl(SHIELD_BAR_PROGRESS_PATH))) as PIXI.Texture;
+      } catch {
+        this.shieldBarProgressTexture = null;
+      }
+      try {
+        this.shieldBarBorderTexture = (await PIXI.Assets.load(this.resolveUrl(SHIELD_BAR_BORDER_PATH))) as PIXI.Texture;
+      } catch {
+        this.shieldBarBorderTexture = null;
       }
     })();
     return this.globalLoadPromise;
@@ -344,18 +420,30 @@ export class CombatAssetsService {
         if (cid === DEFAULT_PLAYER_CHARACTER_ID) this.shootingFrameTextures = [];
       }
       if (cid === 'verdant_machinist') {
-        for (const name of ['grow_seed', 'spell', 'summoning'] as const) {
+        for (const name of VM_ANIMATION_NAMES) {
           try {
             const path = this.resolveUrl(getVMAnimationSheetPath(name));
             const sheet = (await PIXI.Assets.load(path)) as PIXI.Texture;
             const frames = this.buildSheetFrames(sheet, VM_IDLE_SHEET_COLS, VM_IDLE_SHEET_ROWS);
-            if (name === 'grow_seed') this.verdantMachinistGrowSeedTextures = frames;
-            else if (name === 'spell') this.verdantMachinistSpellTextures = frames;
-            else this.verdantMachinistSummoningTextures = frames;
+            switch (name) {
+              case 'grow_seed': this.verdantMachinistGrowSeedTextures = frames; break;
+              case 'spell': this.verdantMachinistSpellTextures = frames; break;
+              case 'summoning': this.verdantMachinistSummoningTextures = frames; break;
+              case 'commanding': this.verdantMachinistCommandingTextures = frames; break;
+              case 'evolve': this.verdantMachinistEvolveTextures = frames; break;
+              case 'detonate': this.verdantMachinistDetonateTextures = frames; break;
+              case 'drain': this.verdantMachinistDrainTextures = frames; break;
+            }
           } catch {
-            if (name === 'grow_seed') this.verdantMachinistGrowSeedTextures = [];
-            else if (name === 'spell') this.verdantMachinistSpellTextures = [];
-            else this.verdantMachinistSummoningTextures = [];
+            switch (name) {
+              case 'grow_seed': this.verdantMachinistGrowSeedTextures = []; break;
+              case 'spell': this.verdantMachinistSpellTextures = []; break;
+              case 'summoning': this.verdantMachinistSummoningTextures = []; break;
+              case 'commanding': this.verdantMachinistCommandingTextures = []; break;
+              case 'evolve': this.verdantMachinistEvolveTextures = []; break;
+              case 'detonate': this.verdantMachinistDetonateTextures = []; break;
+              case 'drain': this.verdantMachinistDrainTextures = []; break;
+            }
           }
         }
       }
@@ -435,6 +523,30 @@ export class CombatAssetsService {
 
   getHpIconTexture(): PIXI.Texture | null {
     return this.hpIconTexture;
+  }
+
+  getHpBarBgTexture(): PIXI.Texture | null {
+    return this.hpBarBgTexture;
+  }
+
+  getHpBarProgressTexture(): PIXI.Texture | null {
+    return this.hpBarProgressTexture;
+  }
+
+  getHpBarBorderTexture(): PIXI.Texture | null {
+    return this.hpBarBorderTexture;
+  }
+
+  getShieldBarBgTexture(): PIXI.Texture | null {
+    return this.shieldBarBgTexture;
+  }
+
+  getShieldBarProgressTexture(): PIXI.Texture | null {
+    return this.shieldBarProgressTexture;
+  }
+
+  getShieldBarBorderTexture(): PIXI.Texture | null {
+    return this.shieldBarBorderTexture;
   }
 
   getBlockIconTexture(): PIXI.Texture | null {
@@ -676,6 +788,122 @@ export class CombatAssetsService {
       this.vmSummoningStartTime = null;
       const resolve = this.vmSummoningResolve;
       this.vmSummoningResolve = null;
+      resolve();
+    }
+  }
+
+  getVMCommandingTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistCommandingTextures.length === 0 || this.vmCommandingStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmCommanding;
+    const elapsed = Date.now() - this.vmCommandingStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistCommandingTextures.length - 1);
+    return this.verdantMachinistCommandingTextures[frameIndex] ?? null;
+  }
+
+  getVMEvolveTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistEvolveTextures.length === 0 || this.vmEvolveStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmEvolve;
+    const elapsed = Date.now() - this.vmEvolveStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistEvolveTextures.length - 1);
+    return this.verdantMachinistEvolveTextures[frameIndex] ?? null;
+  }
+
+  getVMDetonateTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistDetonateTextures.length === 0 || this.vmDetonateStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmDetonate;
+    const elapsed = Date.now() - this.vmDetonateStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistDetonateTextures.length - 1);
+    return this.verdantMachinistDetonateTextures[frameIndex] ?? null;
+  }
+
+  getVMDrainTexture(): PIXI.Texture | null {
+    if (this.verdantMachinistDrainTextures.length === 0 || this.vmDrainStartTime == null) return null;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmDrain;
+    const elapsed = Date.now() - this.vmDrainStartTime;
+    const frameIndex = Math.min(Math.floor(elapsed / frameMs), this.verdantMachinistDrainTextures.length - 1);
+    return this.verdantMachinistDrainTextures[frameIndex] ?? null;
+  }
+
+  playVMCommandingAnimation(): Promise<void> {
+    if (this.verdantMachinistCommandingTextures.length === 0) return Promise.resolve();
+    this.vmCommandingStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmCommandingResolve = resolve;
+    });
+  }
+
+  playVMEvolveAnimation(): Promise<void> {
+    if (this.verdantMachinistEvolveTextures.length === 0) return Promise.resolve();
+    this.vmEvolveStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmEvolveResolve = resolve;
+    });
+  }
+
+  playVMDetonateAnimation(): Promise<void> {
+    if (this.verdantMachinistDetonateTextures.length === 0) return Promise.resolve();
+    this.vmDetonateStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmDetonateResolve = resolve;
+    });
+  }
+
+  playVMDrainAnimation(): Promise<void> {
+    if (this.verdantMachinistDrainTextures.length === 0) return Promise.resolve();
+    this.vmDrainStartTime = Date.now();
+    return new Promise((resolve) => {
+      this.vmDrainResolve = resolve;
+    });
+  }
+
+  getVMCommandingAnimationDone(): void {
+    if (this.vmCommandingStartTime == null || !this.vmCommandingResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmCommanding;
+    const elapsed = Date.now() - this.vmCommandingStartTime;
+    const durationMs = this.verdantMachinistCommandingTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmCommandingStartTime = null;
+      const resolve = this.vmCommandingResolve;
+      this.vmCommandingResolve = null;
+      resolve();
+    }
+  }
+
+  getVMEvolveAnimationDone(): void {
+    if (this.vmEvolveStartTime == null || !this.vmEvolveResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmEvolve;
+    const elapsed = Date.now() - this.vmEvolveStartTime;
+    const durationMs = this.verdantMachinistEvolveTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmEvolveStartTime = null;
+      const resolve = this.vmEvolveResolve;
+      this.vmEvolveResolve = null;
+      resolve();
+    }
+  }
+
+  getVMDetonateAnimationDone(): void {
+    if (this.vmDetonateStartTime == null || !this.vmDetonateResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmDetonate;
+    const elapsed = Date.now() - this.vmDetonateStartTime;
+    const durationMs = this.verdantMachinistDetonateTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmDetonateStartTime = null;
+      const resolve = this.vmDetonateResolve;
+      this.vmDetonateResolve = null;
+      resolve();
+    }
+  }
+
+  getVMDrainAnimationDone(): void {
+    if (this.vmDrainStartTime == null || !this.vmDrainResolve) return;
+    const frameMs = PLAYER_ANIMATION_FRAME_MS.vmDrain;
+    const elapsed = Date.now() - this.vmDrainStartTime;
+    const durationMs = this.verdantMachinistDrainTextures.length * frameMs;
+    if (elapsed >= durationMs) {
+      this.vmDrainStartTime = null;
+      const resolve = this.vmDrainResolve;
+      this.vmDrainResolve = null;
       resolve();
     }
   }

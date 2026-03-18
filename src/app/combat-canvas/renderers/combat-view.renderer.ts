@@ -149,6 +149,14 @@ export interface CombatViewPlayerContext {
   getVMSpellTexture?: () => PIXI.Texture | null;
   vmSummoningAnimationPlaying?: boolean;
   getVMSummoningTexture?: () => PIXI.Texture | null;
+  vmCommandingAnimationPlaying?: boolean;
+  getVMCommandingTexture?: () => PIXI.Texture | null;
+  vmEvolveAnimationPlaying?: boolean;
+  getVMEvolveTexture?: () => PIXI.Texture | null;
+  vmDetonateAnimationPlaying?: boolean;
+  getVMDetonateTexture?: () => PIXI.Texture | null;
+  vmDrainAnimationPlaying?: boolean;
+  getVMDrainTexture?: () => PIXI.Texture | null;
   onPlayerSpriteCreated?: (sprite: PIXI.Sprite) => void;
 }
 
@@ -210,6 +218,12 @@ export interface CombatViewContext {
   getCombatBgTexture?: () => PIXI.Texture | null;
   getHpIconTexture?: () => PIXI.Texture | null;
   getBlockIconTexture?: () => PIXI.Texture | null;
+  getHpBarBgTexture?: () => PIXI.Texture | null;
+  getHpBarProgressTexture?: () => PIXI.Texture | null;
+  getHpBarBorderTexture?: () => PIXI.Texture | null;
+  getShieldBarBgTexture?: () => PIXI.Texture | null;
+  getShieldBarProgressTexture?: () => PIXI.Texture | null;
+  getShieldBarBorderTexture?: () => PIXI.Texture | null;
   /** @deprecated Use player.getPlayerTexture */
   getPlayerTexture?: () => PIXI.Texture | null;
   /** @deprecated Use enemies.getEnemyTexture */
@@ -251,6 +265,14 @@ export interface CombatViewContext {
   getVMSpellTexture?: () => PIXI.Texture | null;
   vmSummoningAnimationPlaying?: boolean;
   getVMSummoningTexture?: () => PIXI.Texture | null;
+  vmCommandingAnimationPlaying?: boolean;
+  getVMCommandingTexture?: () => PIXI.Texture | null;
+  vmEvolveAnimationPlaying?: boolean;
+  getVMEvolveTexture?: () => PIXI.Texture | null;
+  vmDetonateAnimationPlaying?: boolean;
+  getVMDetonateTexture?: () => PIXI.Texture | null;
+  vmDrainAnimationPlaying?: boolean;
+  getVMDrainTexture?: () => PIXI.Texture | null;
   textScale?: number;
   vfxIntensity?: 'full' | 'reduced' | 'off';
   /** @deprecated Use hand.isDraggingCard */
@@ -399,7 +421,11 @@ function drawPlayerArea(ctx: CombatViewContext): void {
   const vmGrowSeedTex = ctx.vmGrowSeedAnimationPlaying && ctx.getVMGrowSeedTexture?.() ? ctx.getVMGrowSeedTexture() : null;
   const vmSpellTex = ctx.vmSpellAnimationPlaying && ctx.getVMSpellTexture?.() ? ctx.getVMSpellTexture() : null;
   const vmSummoningTex = ctx.vmSummoningAnimationPlaying && ctx.getVMSummoningTexture?.() ? ctx.getVMSummoningTexture() : null;
-  const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? vmGrowSeedTex ?? vmSpellTex ?? vmSummoningTex ?? (ctx.getPlayerTexture?.() ?? null);
+  const vmCommandingTex = ctx.vmCommandingAnimationPlaying && ctx.getVMCommandingTexture?.() ? ctx.getVMCommandingTexture() : null;
+  const vmEvolveTex = ctx.vmEvolveAnimationPlaying && ctx.getVMEvolveTexture?.() ? ctx.getVMEvolveTexture() : null;
+  const vmDetonateTex = ctx.vmDetonateAnimationPlaying && ctx.getVMDetonateTexture?.() ? ctx.getVMDetonateTexture() : null;
+  const vmDrainTex = ctx.vmDrainAnimationPlaying && ctx.getVMDrainTexture?.() ? ctx.getVMDrainTexture() : null;
+  const playerTex = slashingTex ?? shootingTex ?? shieldTex ?? vmGrowSeedTex ?? vmSpellTex ?? vmSummoningTex ?? vmCommandingTex ?? vmEvolveTex ?? vmDetonateTex ?? vmDrainTex ?? (ctx.getPlayerTexture?.() ?? null);
   if (playerTex) {
     const centerX = playerPlaceholderW / 2;
     const feetY = playerPlaceholderH;
@@ -538,6 +564,7 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   const iconSize = HP_BLOCK_ENERGY_ICON_SIZE;
   const gap = HP_BLOCK_ENERGY_GAP;
   const fontSize = scaledFontSize(16, ctx);
+  const verticalGap = 6;
 
   const drawIconWithNumber = (x: number, texture: PIXI.Texture | null, label: string, fill = 0xffffff): void => {
     const container = c(ctx);
@@ -566,10 +593,115 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
     stage.addChild(container);
   };
 
-  const hpTex = ctx.getHpIconTexture?.() ?? null;
-  const blockTex = ctx.getBlockIconTexture?.() ?? null;
-  drawIconWithNumber(centerX - gap, hpTex, `${state.playerHp}/${state.playerMaxHp}`);
-  drawIconWithNumber(centerX, blockTex, String(state.playerBlock));
+  const hpBarBg = ctx.getHpBarBgTexture?.() ?? null;
+  const hpBarProgress = ctx.getHpBarProgressTexture?.() ?? null;
+  const hpBarBorder = ctx.getHpBarBorderTexture?.() ?? null;
+  const useHpBar = hpBarBg && hpBarProgress && hpBarBorder;
+
+  if (useHpBar) {
+    const barW = L.hpBarWidth;
+    const barH = L.hpBarHeight;
+    const hpRatio = state.playerMaxHp > 0 ? Math.max(0, Math.min(1, state.playerHp / state.playerMaxHp)) : 0;
+    const barLeft = centerX - barW / 2;
+    const barContainer = c(ctx);
+    barContainer.zIndex = 20;
+    barContainer.x = barLeft;
+    barContainer.y = baseY;
+
+    const bgSprite = spriteNew();
+    bgSprite.texture = hpBarBg;
+    bgSprite.width = barW;
+    bgSprite.height = barH;
+    barContainer.addChild(bgSprite);
+
+    const progressContainer = c(ctx);
+    const progressSprite = spriteNew();
+    progressSprite.texture = hpBarProgress;
+    progressSprite.width = barW;
+    progressSprite.height = barH;
+    progressContainer.addChild(progressSprite);
+    const maskShape = g(ctx);
+    maskShape.rect(0, 0, barW * hpRatio, barH).fill(0xffffff);
+    progressContainer.mask = maskShape;
+    progressContainer.addChild(maskShape);
+    barContainer.addChild(progressContainer);
+
+    const borderSprite = spriteNew();
+    borderSprite.texture = hpBarBorder;
+    borderSprite.width = barW;
+    borderSprite.height = barH;
+    barContainer.addChild(borderSprite);
+
+    const hpLabel = t(ctx);
+    hpLabel.text = `${state.playerHp}/${state.playerMaxHp}`;
+    hpLabel.style = { fontFamily: 'system-ui', fontSize, fill: 0xffffff, fontWeight: 'bold' };
+    hpLabel.anchor.set(0.5, 0.5);
+    hpLabel.x = barW / 2;
+    hpLabel.y = barH / 2;
+    barContainer.addChild(hpLabel);
+
+    stage.addChild(barContainer);
+  } else {
+    const hpTex = ctx.getHpIconTexture?.() ?? null;
+    drawIconWithNumber(centerX, hpTex, `${state.playerHp}/${state.playerMaxHp}`);
+  }
+
+  const shieldBarBg = ctx.getShieldBarBgTexture?.() ?? null;
+  const shieldBarProgress = ctx.getShieldBarProgressTexture?.() ?? null;
+  const shieldBarBorder = ctx.getShieldBarBorderTexture?.() ?? null;
+  const useShieldBar = shieldBarBg && shieldBarProgress && shieldBarBorder;
+
+  if (useShieldBar) {
+    const barW = L.shieldBarWidth;
+    const barH = L.shieldBarHeight;
+    // Shield (block) has no fixed max; scale relative to max HP so it reads well.
+    const denom = Math.max(1, state.playerMaxHp || 0);
+    const ratio = Math.max(0, Math.min(1, (state.playerBlock ?? 0) / denom));
+    const barLeft = centerX - barW / 2;
+    const barContainer = c(ctx);
+    barContainer.zIndex = 20;
+    barContainer.x = barLeft;
+    // Stack under HP (or under the HP icon if bar textures are missing)
+    const hpStackHeight = useHpBar ? L.hpBarHeight : iconSize;
+    barContainer.y = baseY + hpStackHeight + verticalGap;
+
+    const bgSprite = spriteNew();
+    bgSprite.texture = shieldBarBg;
+    bgSprite.width = barW;
+    bgSprite.height = barH;
+    barContainer.addChild(bgSprite);
+
+    const progressContainer = c(ctx);
+    const progressSprite = spriteNew();
+    progressSprite.texture = shieldBarProgress;
+    progressSprite.width = barW;
+    progressSprite.height = barH;
+    progressContainer.addChild(progressSprite);
+    const maskShape = g(ctx);
+    maskShape.rect(0, 0, barW * ratio, barH).fill(0xffffff);
+    progressContainer.mask = maskShape;
+    progressContainer.addChild(maskShape);
+    barContainer.addChild(progressContainer);
+
+    const borderSprite = spriteNew();
+    borderSprite.texture = shieldBarBorder;
+    borderSprite.width = barW;
+    borderSprite.height = barH;
+    barContainer.addChild(borderSprite);
+
+    const label = t(ctx);
+    label.text = String(state.playerBlock ?? 0);
+    label.style = { fontFamily: 'system-ui', fontSize, fill: 0xffffff, fontWeight: 'bold' };
+    label.anchor.set(0.5, 0.5);
+    label.x = barW / 2;
+    label.y = barH / 2;
+    barContainer.addChild(label);
+
+    stage.addChild(barContainer);
+  } else {
+    const blockTex = ctx.getBlockIconTexture?.() ?? null;
+    drawIconWithNumber(centerX, blockTex, String(state.playerBlock));
+  }
   const energyContainer = c(ctx);
   energyContainer.zIndex = 20;
   energyContainer.x = centerX + gap;
@@ -740,42 +872,45 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const costRadius = L.costRadius;
     const costBg = g(ctx);
     const costColor = playable ? 0x88ff88 : 0xff8888;
-    const costCenter = costRadius + L.costCenterOffset;
-    costBg.circle(costCenter, costCenter, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
+    const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
+    const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
+    costBg.circle(costCenterX, costCenterY, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
     container.addChild(costBg);
     const costFontSize = scaledFontSize(32, ctx);
     const costText = t(ctx);
     costText.text = String(cost);
     costText.style = { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor };
     costText.anchor.set(0.5, 0.5);
-    costText.x = costCenter;
-    costText.y = costCenter;
+    costText.x = costCenterX;
+    costText.y = costCenterY;
     container.addChild(costText);
 
     const name = ctx.getCardName(cardId);
     const nameDisplay = name.length > 16 ? name.slice(0, 16) + '…' : name;
     const nameText = t(ctx);
     nameText.text = nameDisplay;
-    nameText.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(28, ctx), fill: 0xeeeeee, fontWeight: 'bold' };
-    nameText.x = 24;
-    nameText.y = 84;
+    nameText.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(20, ctx), fill: 0xeeeeee, fontWeight: 'bold' };
+    nameText.anchor.set(0.5, 0);
+    nameText.x = L.cardNameCenterX ?? (cardWidth / 2);
+    nameText.y = L.cardNameY ?? 84;
     container.addChild(nameText);
 
     const effectDesc = ctx.getCardEffectDescription(cardId);
     if (effectDesc) {
       const fs = scaledFontSize(22, ctx);
       const effectText = t(ctx);
-      effectText.text = effectDesc;
+      const maxChars = L.cardDescriptionMaxChars ?? 0;
+      effectText.text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
       effectText.style = {
         fontFamily: 'system-ui',
         fontSize: fs,
         fill: 0xcccccc,
         wordWrap: true,
-        wordWrapWidth: cardWidth - L.cardTextPadding,
+        wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
         lineHeight: Math.round(fs * 1.25),
       };
-      effectText.x = 24;
-      effectText.y = cardHeight - 120;
+      effectText.x = L.cardDescriptionX ?? 24;
+      effectText.y = L.cardDescriptionY ?? (cardHeight - 120);
       container.addChild(effectText);
     }
 
@@ -1213,10 +1348,11 @@ function drawReturningCard(ctx: CombatViewContext): void {
   // Cost circle and text
   const cost = ctx.getCardCost(cardId);
   const costRadius = L.costRadius;
-  const costBg = g(ctx);
   const costColor = 0x88ff88;
-  const costCenter = costRadius + L.costCenterOffset;
-  costBg.circle(costCenter, costCenter, costRadius)
+  const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
+  const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
+  const costBg = g(ctx);
+  costBg.circle(costCenterX, costCenterY, costRadius)
     .fill({ color: 0x1a1a2a })
     .stroke({ width: 2, color: costColor });
   container.addChild(costBg);
@@ -1225,8 +1361,8 @@ function drawReturningCard(ctx: CombatViewContext): void {
   costText.text = String(cost);
   costText.style = { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor };
   costText.anchor.set(0.5, 0.5);
-  costText.x = costCenter;
-  costText.y = costCenter;
+  costText.x = costCenterX;
+  costText.y = costCenterY;
   container.addChild(costText);
 
   // Name
@@ -1235,8 +1371,9 @@ function drawReturningCard(ctx: CombatViewContext): void {
   const nameText = t(ctx);
   nameText.text = nameDisplay;
   nameText.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(28, ctx), fill: 0xeeeeee, fontWeight: 'bold' };
-  nameText.x = 24;
-  nameText.y = 84;
+  nameText.anchor.set(0.5, 0);
+  nameText.x = L.cardNameCenterX ?? (L.cardWidth / 2);
+  nameText.y = L.cardNameY ?? 84;
   container.addChild(nameText);
 
   // Effect description
@@ -1244,17 +1381,18 @@ function drawReturningCard(ctx: CombatViewContext): void {
   if (effectDesc) {
     const fs = scaledFontSize(22, ctx);
     const effectText = t(ctx);
-    effectText.text = effectDesc;
+    const maxChars = L.cardDescriptionMaxChars ?? 0;
+    effectText.text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
     effectText.style = {
       fontFamily: 'system-ui',
       fontSize: fs,
       fill: 0xcccccc,
       wordWrap: true,
-      wordWrapWidth: cardWidth - L.cardTextPadding,
+      wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
       lineHeight: Math.round(fs * 1.25),
     };
-    effectText.x = 24;
-    effectText.y = cardHeight - 120;
+    effectText.x = L.cardDescriptionX ?? 24;
+    effectText.y = L.cardDescriptionY ?? (cardHeight - 120);
     container.addChild(effectText);
   }
 
@@ -1358,10 +1496,11 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
 
   const cost = getCardCost(cardId);
   const costRadius = L.costRadius;
-  const costCenter = costRadius + L.costCenterOffset;
+  const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
+  const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
   const costColor = 0x88ff88;
   const costBg = new PIXI.Graphics();
-  costBg.circle(costCenter, costCenter, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
+  costBg.circle(costCenterX, costCenterY, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
   container.addChild(costBg);
   const costFontSize = Math.round(32 * textScale);
   const costText = new PIXI.Text({
@@ -1369,8 +1508,8 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
     style: { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor },
   });
   costText.anchor.set(0.5, 0.5);
-  costText.x = costCenter;
-  costText.y = costCenter;
+  costText.x = costCenterX;
+  costText.y = costCenterY;
   container.addChild(costText);
 
   const name = getCardName(cardId);
@@ -1379,26 +1518,29 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
     text: nameDisplay,
     style: { fontFamily: 'system-ui', fontSize: Math.round(28 * textScale), fill: 0xeeeeee, fontWeight: 'bold' },
   });
-  nameText.x = 24;
-  nameText.y = 84;
+  nameText.anchor.set(0.5, 0);
+  nameText.x = L.cardNameCenterX ?? (cardWidth / 2);
+  nameText.y = L.cardNameY ?? 84;
   container.addChild(nameText);
 
   const effectDesc = getCardEffectDescription(cardId);
   if (effectDesc) {
     const fs = Math.round(22 * textScale);
+    const maxChars = L.cardDescriptionMaxChars ?? 0;
+    const text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
     const effectText = new PIXI.Text({
-      text: effectDesc,
+      text,
       style: {
         fontFamily: 'system-ui',
         fontSize: fs,
         fill: 0xcccccc,
         wordWrap: true,
-        wordWrapWidth: cardWidth - L.cardTextPadding,
+        wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
         lineHeight: Math.round(fs * 1.25),
       },
     });
-    effectText.x = 24;
-    effectText.y = cardHeight - 120;
+    effectText.x = L.cardDescriptionX ?? 24;
+    effectText.y = L.cardDescriptionY ?? (cardHeight - 120);
     container.addChild(effectText);
   }
 

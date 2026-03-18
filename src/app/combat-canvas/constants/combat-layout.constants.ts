@@ -17,8 +17,8 @@ export const COMBAT_LAYOUT = {
   enemyPlaceholderW: 240,
   enemyPlaceholderH: 310,
   enemyGap: 28,
-  cardWidth: 200,
-  cardHeight: 280,
+  cardWidth: 220,
+  cardHeight: 340,
   overlapRatio: 0.62,
   arcAmplitude: 90,
   cardRotationRad: 0.02,
@@ -41,16 +41,16 @@ export const COMBAT_LAYOUT = {
   handYOffset: 268,
   /** Horizontal padding on both sides of the scene. */
   padding: 20,
-  costRadius: 36,
-  shadowOffset: 12,
-  cardCornerRadius: 30,
+  costRadius: 24,
+  shadowOffset: 14,
+  cardCornerRadius: 12,
   enemyCornerRadius: 10,
   /** Neon border when card is hovered (Slay the Spire style). */
   neonBorderHoverColor: 0xa0ddff,
   neonBorderHoverWidths: [10, 5, 2],
   neonBorderHoverAlphas: [0.2, 0.5, 0.95],
   /** Horizontal inset (px each side) so neon border width matches card frame; height unchanged. */
-  neonBorderWidthInset: 6,
+  neonBorderWidthInset: 0,
   /** Larger, different color when card is selected (ready to play/drop). */
   neonBorderSelectedColor: 0xffdd44,
   neonBorderSelectedWidths: [14, 7, 3],
@@ -63,8 +63,23 @@ export const COMBAT_LAYOUT = {
   hpBlockEnergyIconSize: 48,
   /** Gap between HP/Block/Energy icons (px). */
   hpBlockEnergyGap: 56,
+  /** HP bar (BarV5) display size when using 3-part bar assets. */
+  hpBarWidth: 120,
+  hpBarHeight: 24,
+  /** Shield bar display size when using 3-part bar assets. */
+  shieldBarWidth: 120,
+  shieldBarHeight: 24,
   /** Offset from cost circle center for cost text (costCenter = costRadius + costCenterOffset). */
   costCenterOffset: 18,
+  /** Card UI layout (relative to card top-left, in px). Tuned for /assets/cards/empty_card.png. */
+  cardCostCenterX: 30,
+  cardCostCenterY: 30,
+  cardNameCenterX: 90,
+  cardNameY: 16,
+  cardDescriptionX: 30,
+  cardDescriptionY: 220,
+  cardDescriptionWidth: 156,
+  cardDescriptionMaxChars: 120,
   /** Enemy target border (when dragging a targeting card): valid target. */
   enemyTargetBorderColor: 0xc9a227,
   enemyTargetBorderWidths: [6, 3, 1.5],
