@@ -10,24 +10,23 @@ export const COMBAT_LAYOUT = {
   playerZoneXRatio: 0.28,
   enemyZoneStartRatio: 0.44,
   /** Baseline for player/enemy slots (0–1). Higher = lower on screen. Raised ~20% to lower characters. */
-  baselineBottomRatio: 0.76,
+  baselineBottomRatio: 0.759,
   playerYOffsetFromBottom: 28,
-  playerPlaceholderW: 300,
-  playerPlaceholderH: 380,
-  enemyPlaceholderW: 220,
-  enemyPlaceholderH: 280,
-  enemyGap: 28,
-  // Tuned for fixed 1920×1080 combat view (prevents hand covering mid-screen).
-  // Reduced by 25% (0.75x) vs previous.
-  cardWidth: 143,
-  cardHeight: 218,
-  overlapRatio: 0.62,
+  playerPlaceholderW: 320,
+  playerPlaceholderH: 420,
+  enemyPlaceholderW: 260,
+  enemyPlaceholderH: 320,
+  enemyGap: 32,
+  // Tuned for fixed 1920×1080 combat view.
+  cardWidth: 160,
+  cardHeight: 240,
+  overlapRatio: 0.6,
   arcAmplitude: 90,
   cardRotationRad: 0.02,
-  hoverLift: 35,
-  hoverScale: 1.08,
+  hoverLift: 32,
+  hoverScale: 1.06,
   /** Arc-based hand: max fan angle in degrees (narrowed for large hands). */
-  baseFanAngleDeg: 35,
+  baseFanAngleDeg: 34,
   /** Horizontal spread of the fan (px). */
   fanRadius: 750,
   /** Vertical extent of the arc (px). Small value keeps the hand at the bottom. */
@@ -39,23 +38,28 @@ export const COMBAT_LAYOUT = {
   hoverReleaseRadiusRatio: 0.8,
   /** Pixels of movement before entering Dragging from Pressed. */
   dragThreshold: 12,
-  /** Hand vertical offset from (playerY - cardHeight). Positive = hand lower on screen. */
-  handYOffset: 261,
+  /**
+   * Hand baseline uses the card's bottom pivot and sits below the screen so cards are half-hidden at rest.
+   * Visible portion (peek) of a 240px card should be ~120px (Slay the Spire feel).
+   */
+  handPeekHeight: 120,
+  /** Additional hand Y offset in pixels (positive pushes the hand further down). */
+  handYOffset: 0,
   /** Horizontal padding on both sides of the scene. */
   padding: 20,
-  costRadius: 18,
-  shadowOffset: 11,
-  cardCornerRadius: 9,
+  costRadius: 22,
+  shadowOffset: 12,
+  cardCornerRadius: 12,
   enemyCornerRadius: 10,
   /** Neon border when card is hovered (Slay the Spire style). */
   neonBorderHoverColor: 0xa0ddff,
-  neonBorderHoverWidths: [8, 4, 2],
+  neonBorderHoverWidths: [10, 5, 2],
   neonBorderHoverAlphas: [0.2, 0.5, 0.95],
   /** Horizontal inset (px each side) so neon border width matches card frame; height unchanged. */
   neonBorderWidthInset: 0,
   /** Larger, different color when card is selected (ready to play/drop). */
   neonBorderSelectedColor: 0xffdd44,
-  neonBorderSelectedWidths: [11, 5, 2],
+  neonBorderSelectedWidths: [14, 7, 3],
   neonBorderSelectedAlphas: [0.35, 0.6, 1],
   /** Y ratio (0–1) for non-target card play line: drop above this line to play (e.g. 0.55 = higher from hand). */
   nonTargetPlayLineRatio: 0.55,
@@ -66,26 +70,26 @@ export const COMBAT_LAYOUT = {
   /** Gap between HP/Block/Energy icons (px). */
   hpBlockEnergyGap: 56,
   /** HP bar (BarV5) display size when using 3-part bar assets. */
-  hpBarWidth: 120,
+  hpBarWidth: 240,
   hpBarHeight: 24,
   /** Shield bar display size when using 3-part bar assets. */
-  shieldBarWidth: 120,
+  shieldBarWidth: 240,
   shieldBarHeight: 24,
   /** Enemy HP/Shield bars (smaller, inside enemy frame). */
-  enemyBarWidth: 112,
+  enemyBarWidth: 120,
   enemyBarHeight: 18,
   /** Offset from cost circle center for cost text (costCenter = costRadius + costCenterOffset). */
   costCenterOffset: 18,
   /** Card UI layout (relative to card top-left, in px). Tuned for /assets/cards/empty_card.png. */
-  // Tuned for current cardWidth/cardHeight (143×218).
-  cardCostCenterX: 20,
-  cardCostCenterY: 20,
-  cardNameCenterX: 72,
-  cardNameY: 11,
-  cardDescriptionX: 15,
-  cardDescriptionY: 143,
-  cardDescriptionWidth: 113,
-  cardDescriptionMaxChars: 83,
+  // Tuned for current cardWidth/cardHeight (160×240).
+  cardCostCenterX: 26,
+  cardCostCenterY: 26,
+  cardNameCenterX: 80,
+  cardNameY: 14,
+  cardDescriptionX: 16,
+  cardDescriptionY: 160,
+  cardDescriptionWidth: 128,
+  cardDescriptionMaxChars: 100,
   /** Enemy target border (when dragging a targeting card): valid target. */
   enemyTargetBorderColor: 0xc9a227,
   enemyTargetBorderWidths: [6, 3, 1.5],
@@ -206,8 +210,8 @@ export function getEnemyCenter(index: number, enemyCount: number, w: number, h: 
 /** Deck pile position (for draw animation: card flies from here into hand). Bottom-center of deck visual. */
 export function getDeckPosition(w: number, h: number): { x: number; y: number } {
   const L = COMBAT_LAYOUT;
-  const playerY = h - L.playerYOffsetFromBottom;
-  const handY = playerY - L.cardHeight + (L.handYOffset ?? 0);
+  const peek = (L as { handPeekHeight?: number }).handPeekHeight ?? Math.round(L.cardHeight * 0.5);
+  const handY = h + (L.cardHeight - peek) + (L.handYOffset ?? 0);
   return {
     x: w * (L.deckPositionXRatio ?? 0.18),
     y: handY,

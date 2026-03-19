@@ -342,6 +342,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         reducedMotion: () => this.gameSettings.reducedMotion(),
         textScale: () => this.gameSettings.textScale(),
         vfxIntensity: () => this.gameSettings.vfxIntensity(),
+        debugLayout: () => this.gameSettings.debugLayout(),
       }),
       getImpactFlash: () => {
         const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -364,6 +365,17 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       markForCheck: () => this.requestTemplateUpdate(),
       getPools: () => this.combatPools,
     };
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onWindowKeyDown(e: KeyboardEvent): void {
+    if (e.key !== 'F3') return;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    e.preventDefault();
+    this.gameSettings.setDebugLayout(!this.gameSettings.debugLayout());
+    this.redraw();
+    this.requestTemplateUpdate();
   }
 
   ngOnDestroy(): void {

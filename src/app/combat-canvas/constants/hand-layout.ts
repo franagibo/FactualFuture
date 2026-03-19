@@ -53,10 +53,12 @@ export function getHandLayout(
   hoveredIndex: number | null,
   options?: HandLayoutOptions
 ): HandLayoutResult {
-  const playerY = h - L.playerYOffsetFromBottom;
   const cardWidth = L.cardWidth;
   const cardHeight = L.cardHeight;
-  const handY = playerY - cardHeight + (L.handYOffset ?? 0);
+  const peek = (L as { handPeekHeight?: number }).handPeekHeight ?? Math.round(cardHeight * 0.5);
+  // IMPORTANT: hand layout uses the same coordinate convention as the renderer: card containers are positioned by their bottom pivot.
+  // So the resting hand baseline should be BELOW the bottom of the screen, showing only a "peek" of the card.
+  const handY = h + (cardHeight - peek) + (L.handYOffset ?? 0);
   const centerX = w / 2;
   const baseY = handY;
 

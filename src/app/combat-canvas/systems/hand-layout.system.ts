@@ -41,6 +41,9 @@ export function getHandLayoutTargets(
   const result: (HandLayoutTarget | null)[] = [];
   const hoverLift = layout.hoverLift;
   const hoverScale = COMBAT_LAYOUT.hoverScale;
+  const cardHeight = COMBAT_LAYOUT.cardHeight;
+  const peek = (COMBAT_LAYOUT as { handPeekHeight?: number }).handPeekHeight ?? Math.round(cardHeight * 0.5);
+  const hiddenAtRest = Math.max(0, cardHeight - peek);
 
   for (let i = 0; i < handCount; i++) {
     if (i === excludedIndex) {
@@ -55,7 +58,10 @@ export function getHandLayoutTargets(
     }
     const spreadOffsetX = pos.spreadOffsetX ?? 0;
     const isHovered = hoveredIndex === i;
-    const y = pos.y - (isHovered ? hoverLift : 0);
+    // Reveal the full card when hovered: lift by the hidden portion so the bottom pivot reaches the screen edge.
+    // Add only a small extra lift so the card still feels anchored to the bottom (STS-like).
+    const revealLift = hiddenAtRest + hoverLift * 0.25;
+    const y = pos.y - (isHovered ? revealLift : 0);
     const scale = isHovered ? hoverScale : 1;
     result.push({
       x: pos.x + spreadOffsetX,

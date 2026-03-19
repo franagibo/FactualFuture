@@ -182,6 +182,8 @@ export interface CombatViewContext {
   w: number;
   h: number;
   padding: number;
+  /** When enabled, draw debug rectangles for layout alignment. */
+  debugLayout?: boolean;
   /** Grouped hand state (preferred). Falls back to flat props for backward compat. */
   hand?: CombatViewHandContext;
   /** Grouped player state (preferred). */
@@ -838,7 +840,10 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const cardY = pres != null ? pres.currentY : pos ? pos.y : 0;
     const rot = pres != null ? pres.currentRotation : pos?.rotation ?? 0;
     const baseY = pos?.y ?? 0;
-    const liftY = usePresentation ? 0 : (isActive ? lerp * hoverLift : 0);
+    const peek = (L as { handPeekHeight?: number }).handPeekHeight ?? Math.round(cardHeight * 0.5);
+    const hiddenAtRest = Math.max(0, cardHeight - peek);
+    // When hovering/selected, lift the card by the hidden amount so it becomes fully visible.
+    const liftY = usePresentation ? 0 : (isActive ? lerp * (hiddenAtRest + hoverLift * 0.25) : 0);
     const cardScale = pres != null ? pres.currentScale : 1 + (isActive ? lerp : 0) * (hoverScale - 1);
     const cardZIndex = pres != null ? pres.zPriority : (isOnTop ? 100 : i);
 
@@ -959,7 +964,6 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   hoverLift: number;
 } {
   const { state, stage, w } = ctx;
-  const playerY = ctx.h - L.playerYOffsetFromBottom;
   const enemyLayout = getEnemyLayout(w, ctx.h, state.enemies.length);
   const enemyPlaceholderW = enemyLayout.placeholderW;
   const enemyPlaceholderH = enemyLayout.placeholderH;
@@ -969,7 +973,8 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
   const cardSpacing = cardWidth * L.overlapRatio;
   const totalHandWidth = (hand.length - 1) * cardSpacing + cardWidth;
   const startX = (w - totalHandWidth) / 2 + cardWidth / 2;
-  const handY = playerY - cardHeight + (L.handYOffset ?? 0);
+  const peek = (L as { handPeekHeight?: number }).handPeekHeight ?? Math.round(cardHeight * 0.5);
+  const handY = ctx.h + (cardHeight - peek) + (L.handYOffset ?? 0);
   const center = (hand.length - 1) / 2;
 
   const targetingMode =
@@ -1638,4 +1643,78 @@ export function drawCombatView(context: CombatViewContext): void {
   drawFloatingNumbers(context);
   drawEnemyTurnBanner(context);
   drawImpactFlash(context);
+  drawDebugLayout(context);
+}
+
+function drawDebugLayout(ctx: CombatViewContext): void {
+  if (!ctx.debugLayout) return;
+
+  let gr = ctx.stage.getChildByName('__debugLayout') as PIXI.Graphics | null;
+  if (!gr) {
+    gr = new PIXI.Graphics();
+    gr.name = '__debugLayout';
+    gr.zIndex = 9999;
+    ctx.stage.addChild(gr);
+  }
+  gr.clear();
+
+  const w = ctx.w;
+  const h = ctx.h;
+
+  // Spec constants (see docs/ui-layout-fights.md)
+  const safe = 24;
+  const headerH = 96;
+  const footerH = 240;
+
+  // Safe area
+  gr.lineStyle(2, 0x66ffcc, 0.9);
+  gr.drawRect(safe, safe, w - safe * 2, h - safe * 2);
+
+  // Header / footer guide lines
+  gr.lineStyle(2, 0xffcc66, 0.95);
+  gr.drawRect(0, 0, w, headerH);
+  gr.drawRect(0, h - footerH, w, footerH);
+
+  // Stage zone
+  gr.lineStyle(2, 0x66aaff, 0.9);
+  gr.drawRect(0, headerH, w, Math.max(0, h - headerH - footerH));
+
+  // Player slot
+  const playerBounds = getCombatSlotBounds('player', w, h);
+  gr.lineStyle(3, 0x33ff33, 0.95);
+  gr.drawRect(playerBounds.x, playerBounds.y, playerBounds.width, playerBounds.height);
+
+  // Player HP / shield bars (stacked under player)
+  const hpAnchor = getCombatSlotBounds('hpBlockEnergy', w, h);
+  const barW = L.hpBarWidth;
+  const barH = L.hpBarHeight;
+  const barGap = 6;
+  const barX = hpAnchor.x - barW / 2;
+  const hpY = hpAnchor.y + 8;
+  const blockY = hpY + barH + barGap;
+  gr.lineStyle(2, 0xffffff, 0.85);
+  gr.drawRect(barX, hpY, barW, barH);
+  gr.lineStyle(2, 0x7aa7ff, 0.85);
+  gr.drawRect(barX, blockY, barW, barH);
+
+  // Enemy slots
+  const enemies = ctx.state.enemies ?? [];
+  const layout = getEnemyLayout(w, h, enemies.length);
+  gr.lineStyle(3, 0xff3366, 0.9);
+  for (let i = 0; i < enemies.length; i++) {
+    const left = layout.getLeft(i);
+    gr.drawRect(left, layout.startY, layout.placeholderW, layout.placeholderH);
+    // Enemy bars inside frame (top-ish)
+    const ebw = L.enemyBarWidth;
+    const ebh = L.enemyBarHeight;
+    const egap = 4;
+    const ex = left + (layout.placeholderW - ebw) / 2;
+    const ey = layout.startY + layout.placeholderH - (ebh * 2 + egap) - 10;
+    gr.lineStyle(2, 0xffffff, 0.75);
+    gr.drawRect(ex, ey, ebw, ebh);
+    gr.lineStyle(2, 0x7aa7ff, 0.75);
+    gr.drawRect(ex, ey + ebh + egap, ebw, ebh);
+  }
+
+  // Leave attached; we reuse it each frame.
 }

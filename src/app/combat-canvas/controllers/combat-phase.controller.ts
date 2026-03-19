@@ -45,7 +45,7 @@ export interface CombatPhaseHost {
     getVMDetonateTexture: () => PIXI.Texture | null;
     getVMDrainTexture: () => PIXI.Texture | null;
   };
-  getGameSettings(): { handLayout: () => 'default' | 'compact'; reducedMotion: () => boolean; textScale: () => number; vfxIntensity: () => 'full' | 'reduced' | 'off' };
+  getGameSettings(): { handLayout: () => 'default' | 'compact'; reducedMotion: () => boolean; textScale: () => number; vfxIntensity: () => 'full' | 'reduced' | 'off'; debugLayout: () => boolean };
   /** Optional presentation-only effect (short flash overlay). */
   getImpactFlash?(): { alpha: number; color: number } | null;
   getApp(): PIXI.Application | null;
@@ -204,6 +204,7 @@ export class CombatPhaseController {
       w,
       h,
       padding,
+      debugLayout: settings.debugLayout(),
       ...(impactFlash ? { impactFlash } : {}),
       pools: undefined,
       hand: {

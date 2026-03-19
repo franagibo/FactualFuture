@@ -223,6 +223,17 @@
                 Post-processing
               </label>
             </div>
+            <div class="settings-row settings-row-checkbox">
+              <label class="settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  [checked]="gameSettings.debugLayout()"
+                  (change)="gameSettings.setDebugLayout($any($event.target).checked); cdr.markForCheck()"
+                  class="settings-checkbox"
+                />
+                Debug layout overlay (F3)
+              </label>
+            </div>
           </section>
         }
         @case ('display') {
