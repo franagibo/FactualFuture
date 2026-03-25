@@ -27,9 +27,24 @@ export class AppComponent implements OnInit {
     img.src = '/assets/main-menu.jpg';
   }
 
-  @HostListener('document:click')
-  onAppClick(): void {
+  @HostListener('document:click', ['$event'])
+  onAppClick(e: MouseEvent): void {
     this.sound.unlock();
     if (this.sound.isClickSoundEnabled()) this.sound.playClick();
+    this.spawnButtonRipple(e);
+  }
+
+  private spawnButtonRipple(e: MouseEvent): void {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    const btn = target.closest('button');
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const ripple = document.createElement('span');
+    ripple.className = 'btn-ripple';
+    ripple.style.left = (e.clientX - rect.left) + 'px';
+    ripple.style.top  = (e.clientY - rect.top) + 'px';
+    btn.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
   }
 }

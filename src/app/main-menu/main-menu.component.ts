@@ -1,10 +1,17 @@
-import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy, HostListener, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
 import { SoundService } from '../services/sound.service';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
 import { AssetManifestService } from '../services/asset-manifest.service';
+
+interface EmberParticle {
+  x: number; y: number;
+  vx: number; vy: number;
+  size: number; life: number; decay: number;
+  color: string;
+}
 
 @Component({
   selector: 'app-main-menu',
@@ -13,6 +20,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="menu-wrap" [class.bg-ready]="backgroundReady">
+      <canvas #emberCanvas class="ember-canvas" aria-hidden="true"></canvas>
       @if (!backgroundReady) {
         <div class="menu-loading-overlay" aria-busy="true">
           <span class="menu-loading-spinner"></span>
@@ -105,6 +113,16 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       background-image: url('/assets/main-menu.jpg');
     }
 
+    /* ember particle canvas */
+    .ember-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
     /* vignette overlay */
     .menu-wrap::after {
       content: '';
@@ -112,7 +130,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       inset: 0;
       background: radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.72) 100%);
       pointer-events: none;
-      z-index: 0;
+      z-index: 1;
     }
 
     .menu-loading-overlay {
@@ -148,7 +166,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     /* ── panel ── */
     .menu-panel {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       background: rgba(10, 8, 3, 0.92);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
@@ -403,12 +421,19 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     }
   `],
 })
-export class MainMenuComponent implements OnInit {
+export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
+  @ViewChild('emberCanvas') emberCanvasRef!: ElementRef<HTMLCanvasElement>;
+
   public showSettings = false;
   showContinue = false;
   meta: MetaState | null = null;
   backgroundReady = false;
   assetProgress = { loaded: 0, total: 0, label: '' };
+
+  private emberParticles: EmberParticle[] = [];
+  private emberAnimId: number | null = null;
+  private emberResizeHandler: (() => void) | null = null;
+  private emberCtx: CanvasRenderingContext2D | null = null;
 
   constructor(
     private router: Router,
@@ -419,6 +444,77 @@ export class MainMenuComponent implements OnInit {
   ) { }
 
   showDataLoadError = false;
+
+  ngAfterViewInit(): void {
+    this.startEmberParticles();
+  }
+
+  ngOnDestroy(): void {
+    if (this.emberAnimId != null) cancelAnimationFrame(this.emberAnimId);
+    if (this.emberResizeHandler) window.removeEventListener('resize', this.emberResizeHandler);
+    this.emberAnimId = null;
+    this.emberCtx = null;
+    this.emberParticles = [];
+  }
+
+  private makeEmber(canvas: HTMLCanvasElement, fromBottom = false): EmberParticle {
+    const colors = ['#ff6030', '#ff8040', '#ffaa50', '#ffcc60', '#ffd080', '#ff4420', '#ffa030', '#ff7010'];
+    return {
+      x: Math.random() * canvas.width,
+      y: fromBottom ? canvas.height + Math.random() * 20 : Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.7,
+      vy: 0.35 + Math.random() * 0.9,
+      size: 0.8 + Math.random() * 2.8,
+      life: 0.25 + Math.random() * 0.75,
+      decay: 0.0008 + Math.random() * 0.0025,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    };
+  }
+
+  private startEmberParticles(): void {
+    const canvas = this.emberCanvasRef?.nativeElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    this.emberCtx = ctx;
+
+    const resize = (): void => {
+      canvas.width = canvas.offsetWidth || window.innerWidth;
+      canvas.height = canvas.offsetHeight || window.innerHeight;
+    };
+    resize();
+    this.emberResizeHandler = resize;
+    window.addEventListener('resize', resize);
+
+    this.emberParticles = Array.from({ length: 70 }, () => this.makeEmber(canvas));
+
+    const animate = (): void => {
+      if (!this.emberCtx || !canvas) return;
+      this.emberCtx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < this.emberParticles.length; i++) {
+        const p = this.emberParticles[i];
+        p.x += p.vx + Math.sin(Date.now() * 0.001 + i) * 0.2;
+        p.y -= p.vy;
+        p.life -= p.decay;
+        if (p.life <= 0 || p.y < -8) {
+          this.emberParticles[i] = this.makeEmber(canvas, true);
+          continue;
+        }
+        const alpha = Math.min(p.life, 0.85) * (p.size > 2 ? 0.7 : 0.9);
+        this.emberCtx.save();
+        this.emberCtx.globalAlpha = alpha;
+        this.emberCtx.shadowBlur = p.size > 2 ? 10 : 5;
+        this.emberCtx.shadowColor = p.color;
+        this.emberCtx.fillStyle = p.color;
+        this.emberCtx.beginPath();
+        this.emberCtx.arc(p.x, p.y, p.size * (0.5 + p.life * 0.5), 0, Math.PI * 2);
+        this.emberCtx.fill();
+        this.emberCtx.restore();
+      }
+      this.emberAnimId = requestAnimationFrame(animate);
+    };
+    this.emberAnimId = requestAnimationFrame(animate);
+  }
 
   async ngOnInit(): Promise<void> {
     this.sound.startMainMenuSoundtrack();

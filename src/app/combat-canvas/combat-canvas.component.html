@@ -27,6 +27,12 @@
   @if (feedbackMessage()) {
     <div class="feedback-toast">{{ feedbackMessage() }}</div>
   }
+  @if (showComboSignal() && comboCountSignal() >= 2) {
+    <div class="combo-overlay" [class.combo-big]="comboCountSignal() >= 5" aria-live="polite">
+      <span class="combo-label">COMBO</span>
+      <span class="combo-number">x{{ comboCountSignal() }}</span>
+    </div>
+  }
   @if (runPhaseSignal()) {
     <header class="combat-header">
       <div class="combat-header-content">
@@ -36,6 +42,10 @@
           <div class="combat-header-stat stat-hp">
             <img class="combat-header-icon" src="/assets/effects/hp.svg" alt="HP" width="16" height="16" />
             <div class="hp-bar-wrap" [attr.title]="playerHpSignal() + ' / ' + playerMaxHpSignal() + ' HP'">
+              <div
+                class="hp-bar-ghost"
+                [style.width.%]="playerMaxHpSignal() > 0 ? (ghostPlayerHpSignal() / playerMaxHpSignal() * 100) : 0"
+              ></div>
               <div
                 class="hp-bar-fill"
                 [style.width.%]="playerMaxHpSignal() > 0 ? (playerHpSignal() / playerMaxHpSignal() * 100) : 0"

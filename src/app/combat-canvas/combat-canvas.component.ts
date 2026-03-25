@@ -8,6 +8,7 @@ import {
   ChangeDetectionStrategy,
   NgZone,
   HostListener,
+  HostBinding,
   signal,
   type Signal,
 } from '@angular/core';
@@ -96,6 +97,22 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   feedbackMessage = signal<string | null>(null);
   /** When set, reward panel shows chosen state before transitioning; used for micro-animation. */
   chosenRewardCardId: string | null = null;
+
+  /* ── VFX signals ── */
+  ghostPlayerHpSignal = signal(0);
+  comboCountSignal = signal(0);
+  showComboSignal = signal(false);
+
+  /* Screen-shake HostBinding */
+  @HostBinding('class.screen-shaking') isScreenShaking = false;
+
+  private _lastPlayerHp: number | null = null;
+  private _ghostHpTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _comboCount = 0;
+  private _lastCardPlayTs = 0;
+  private _comboHideTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _shakeTimeout: ReturnType<typeof setTimeout> | null = null;
+
   private resizeObserver: ResizeObserver | null = null;
   private hoverLerpTicker: ((ticker: PIXI.Ticker) => void) | null = null;
   private shieldTicker: (() => void) | null = null;
@@ -192,8 +209,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.rewardChoicesSignal.set(this.bridge.getRewardChoices());
     this.potionsSignal.set(this.bridge.getPotions());
     this.goldSignal.set(state.gold ?? 0);
-    this.playerHpSignal.set(state.playerHp ?? 0);
+    const nextHp = state.playerHp ?? 0;
+    const prevHp = this._lastPlayerHp;
+    this.playerHpSignal.set(nextHp);
     this.playerMaxHpSignal.set(state.playerMaxHp ?? 0);
+    if (prevHp != null && nextHp < prevHp && this._runPhase === 'combat') {
+      this.triggerScreenShake();
+      this.updateGhostHp(prevHp);
+    }
+    if (prevHp == null) this.ghostPlayerHpSignal.set(nextHp);
+    this._lastPlayerHp = nextHp;
     this.headerFloorSignal.set(state.floor ?? 1);
     const char = state.characterId ? this.bridge.getCharacter(state.characterId) : undefined;
     this.headerCharacterNameSignal.set(char?.name ?? state.characterId ?? '');
@@ -217,6 +242,43 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.pauseCombatInteractionForModal(false);
     }
     this.lastSeenTalentPoints = nextTalentPoints;
+  }
+
+  private triggerScreenShake(): void {
+    if (this._shakeTimeout != null) clearTimeout(this._shakeTimeout);
+    this.isScreenShaking = true;
+    this._shakeTimeout = setTimeout(() => {
+      this.isScreenShaking = false;
+      this.cdr.markForCheck();
+    }, 450);
+    this.cdr.markForCheck();
+  }
+
+  private updateGhostHp(prevHp: number): void {
+    this.ghostPlayerHpSignal.set(prevHp);
+    if (this._ghostHpTimeout != null) clearTimeout(this._ghostHpTimeout);
+    this._ghostHpTimeout = setTimeout(() => {
+      const current = this.playerHpSignal();
+      this.ghostPlayerHpSignal.set(current);
+    }, 1200);
+  }
+
+  incrementCombo(): void {
+    const now = performance.now();
+    if (now - this._lastCardPlayTs > 5000) this._comboCount = 0;
+    this._comboCount++;
+    this._lastCardPlayTs = now;
+    if (this._comboCount >= 2) {
+      this.comboCountSignal.set(this._comboCount);
+      this.showComboSignal.set(true);
+      if (this._comboHideTimeout != null) clearTimeout(this._comboHideTimeout);
+      this._comboHideTimeout = setTimeout(() => {
+        this.showComboSignal.set(false);
+        this._comboCount = 0;
+        this.cdr.markForCheck();
+      }, 2200);
+    }
+    this.cdr.markForCheck();
   }
 
   private isCombatInteractionBlocked(): boolean {
@@ -627,7 +689,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.viewOffsetY = 0;
     this.rootContainer.scale.set(1);
     this.rootContainer.position.set(0, 0);
-    // Apply post FX based on settings
+    // Apply post FX based on settings (combat only).
     const enablePostFx = this.gameSettings.postFx() === 'on' && !this.gameSettings.reducedMotion();
     if (enablePostFx) {
       if (!this.postFxFilters) {
@@ -2015,6 +2077,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         this.triggerFlash(0x66ff88, 90);
       }
       this.combatController.floatingNumbers = [...this.combatController.floatingNumbers, ...toAdd];
+      this.incrementCombo();
       this.redraw();
       this.requestTemplateUpdate();
       if (toAdd.length > 0) {
