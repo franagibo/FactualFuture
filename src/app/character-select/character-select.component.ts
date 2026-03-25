@@ -71,8 +71,7 @@ import type { CharacterDef } from '../../engine/loadData';
       align-items: center;
       justify-content: center;
       position: relative;
-      background: #07050f center center no-repeat;
-      background-size: cover;
+      background: #09080a center center no-repeat;      background-size: cover;
       padding: 2rem;
     }
 
@@ -84,8 +83,7 @@ import type { CharacterDef } from '../../engine/loadData';
       content: '';
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.7) 100%);
-      pointer-events: none;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.72) 100%);      pointer-events: none;
       z-index: 0;
     }
 
@@ -98,15 +96,15 @@ import type { CharacterDef } from '../../engine/loadData';
       align-items: center;
       justify-content: center;
       gap: 1rem;
-      background: #07050f;
+      background: #09080a;
       z-index: 10;
     }
 
     .char-loading-spinner {
       width: 40px;
       height: 40px;
-      border: 3px solid rgba(255, 255, 255, 0.1);
-      border-top-color: #b48cff;
+      border: 3px solid rgba(255, 255, 255, 0.08);
+      border-top-color: #c8a030;
       border-radius: 50%;
       animation: charSpin 0.8s linear infinite;
     }
@@ -116,7 +114,7 @@ import type { CharacterDef } from '../../engine/loadData';
     .char-loading-label {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 1rem;
-      color: #6a6090;
+      color: #7a6030;
       letter-spacing: 0.06em;
     }
 
@@ -124,16 +122,16 @@ import type { CharacterDef } from '../../engine/loadData';
     .char-panel {
       position: relative;
       z-index: 1;
-      background: rgba(7, 4, 16, 0.9);
+      background: rgba(10, 8, 3, 0.92);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(140, 100, 220, 0.38);
+      border: 1px solid rgba(158, 118, 34, 0.52);
       border-radius: 20px;
       padding: 2.2rem 2.5rem 2rem;
       box-shadow:
-        0 0 60px rgba(60, 30, 120, 0.5),
-        0 16px 50px rgba(0, 0, 0, 0.75),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 0 60px rgba(80, 55, 10, 0.4),
+        0 16px 50px rgba(0, 0, 0, 0.8),
+        inset 0 1px 0 rgba(255, 240, 160, 0.05);
       max-width: 820px;
       width: 100%;
       animation: panelIn 0.45s cubic-bezier(0.34, 1.1, 0.64, 1);
@@ -143,9 +141,9 @@ import type { CharacterDef } from '../../engine/loadData';
       content: '';
       position: absolute;
       top: 0; left: 10%; right: 10%;
-      height: 1px;
-      background: linear-gradient(90deg, transparent 0%, rgba(180,140,255,0.8) 50%, transparent 100%);
-      border-radius: 20px 20px 0 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, rgba(200,158,42,0.9) 50%, transparent 100%);
+       border-radius: 20px 20px 0 0;
     }
 
     @keyframes panelIn {
@@ -163,16 +161,16 @@ import type { CharacterDef } from '../../engine/loadData';
       font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
       font-size: 1.75rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       margin: 0 0 0.35rem;
-      color: #fff;
-      text-shadow: 0 0 24px rgba(180, 140, 255, 0.5), 0 2px 4px rgba(0,0,0,0.8);
+      color: #f4d98a;
+      text-shadow: 0 0 28px rgba(200, 158, 42, 0.7), 0 2px 4px rgba(0,0,0,0.9);
     }
 
     .char-subtitle {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 0.85rem;
-      color: #5a5278;
+      color: #6a5428;
       margin: 0;
       letter-spacing: 0.04em;
     }
@@ -191,20 +189,19 @@ import type { CharacterDef } from '../../engine/loadData';
       align-items: stretch;
       text-align: left;
       padding: 0;
-      border: 1px solid rgba(140, 100, 220, 0.32);
       border-radius: 14px;
-      background: linear-gradient(175deg, rgba(38, 28, 68, 0.85) 0%, rgba(18, 13, 38, 0.95) 100%);
-      cursor: pointer;
+      border: 1px solid rgba(158, 118, 34, 0.38);      border-radius: 14px;
+      background: linear-gradient(175deg, rgba(28, 20, 8, 0.9) 0%, rgba(14, 10, 4, 0.97) 100%);      cursor: pointer;
       overflow: hidden;
       transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,160,0.04);
 
       &:hover {
         transform: translateY(-5px) scale(1.015);
         box-shadow:
-          0 14px 40px rgba(80, 50, 160, 0.45),
-          0 0 28px rgba(140, 100, 255, 0.25);
-        border-color: rgba(190, 150, 255, 0.65);
+        0 14px 40px rgba(80, 55, 10, 0.5),
+          0 0 28px rgba(180, 136, 30, 0.28);
+        border-color: rgba(210, 160, 50, 0.7);
       }
 
       &:active { transform: translateY(-1px) scale(1.005); }
@@ -216,7 +213,7 @@ import type { CharacterDef } from '../../engine/loadData';
       width: 100%;
       height: 180px;
       overflow: hidden;
-      background: linear-gradient(180deg, #0a0618 0%, #12083a 100%);
+      background: linear-gradient(180deg, #0e0a04 0%, #1a1006 100%);
       display: flex;
       align-items: flex-end;
       justify-content: center;
@@ -228,13 +225,13 @@ import type { CharacterDef } from '../../engine/loadData';
       object-fit: contain;
       object-position: bottom center;
       display: block;
-      filter: drop-shadow(0 0 16px rgba(160, 120, 255, 0.35));
+      filter: drop-shadow(0 0 16px rgba(180, 138, 30, 0.35));
       transition: transform 0.22s ease, filter 0.22s ease;
     }
 
     .char-card:hover .char-card-art {
       transform: scale(1.05) translateY(-4px);
-      filter: drop-shadow(0 0 28px rgba(190, 150, 255, 0.6));
+      filter: drop-shadow(0 0 28px rgba(220, 168, 50, 0.6));
     }
 
     .char-card-art-placeholder {
@@ -243,7 +240,7 @@ import type { CharacterDef } from '../../engine/loadData';
       align-items: center;
       justify-content: center;
       font-size: 4rem;
-      color: rgba(140, 100, 220, 0.4);
+      color: rgba(158, 118, 34, 0.45);
       font-family: 'Cinzel', serif;
     }
 
@@ -251,7 +248,7 @@ import type { CharacterDef } from '../../engine/loadData';
       position: absolute;
       bottom: 0; left: 0; right: 0;
       height: 60px;
-      background: linear-gradient(0deg, rgba(18,10,40,0.95) 0%, transparent 100%);
+      background: linear-gradient(0deg, rgba(14,10,4,0.97) 0%, transparent 100%);
       pointer-events: none;
     }
 
@@ -264,15 +261,15 @@ import type { CharacterDef } from '../../engine/loadData';
       font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
       font-size: 1.1rem;
       font-weight: 700;
-      color: #e8e0ff;
+      color: #f0e8c0;
       margin-bottom: 0.4rem;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.03em;
     }
 
     .char-card-desc {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 0.82rem;
-      color: #8880a8;
+      color: #8a7040;
       line-height: 1.45;
       margin-bottom: 0.75rem;
     }
@@ -300,22 +297,22 @@ import type { CharacterDef } from '../../engine/loadData';
     }
 
     .badge-relic {
-      background: rgba(180, 140, 0, 0.15);
-      border: 1px solid rgba(220, 180, 0, 0.3);
+      background: rgba(130, 96, 10, 0.22);
+      border: 1px solid rgba(200, 158, 30, 0.35);
       color: #e8c840;
     }
 
     .char-card-cta {
-      font-family: 'Exo 2', system-ui, sans-serif;
-      font-size: 0.82rem;
+      font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+      font-size: 0.8rem;
       font-weight: 700;
-      color: rgba(160, 130, 255, 0.6);
-      letter-spacing: 0.08em;
+      color: rgba(158, 120, 36, 0.65);
+      letter-spacing: 0.1em;
       transition: color 0.15s;
     }
 
     .char-card:hover .char-card-cta {
-      color: rgba(200, 170, 255, 0.9);
+      color: rgba(220, 168, 50, 0.95);
     }
 
     /* ── actions ── */
@@ -326,22 +323,23 @@ import type { CharacterDef } from '../../engine/loadData';
 
     .char-btn {
       padding: 12px 28px;
-      font-family: 'Exo 2', system-ui, sans-serif;
-      font-size: 1rem;
+      font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+      font-size: 0.95rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       cursor: pointer;
-      color: #fff;
-      border: 1px solid rgba(120, 90, 200, 0.3);
+      color: #e8d8a0;
+      border: 1px solid rgba(158, 118, 34, 0.48);
       border-radius: 12px;
-      background: linear-gradient(160deg, #3a3068 0%, #26204c 100%);
-      box-shadow: 0 4px 0 #151030, 0 6px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
-      transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+      background: linear-gradient(160deg, #2c2210 0%, #1a1408 100%);
+      box-shadow: 0 4px 0 #0e0a04, 0 6px 16px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,160,0.07);
+       transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
 
       &:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 0 #151030, 0 10px 24px rgba(0,0,0,0.45), 0 0 20px rgba(100,70,200,0.25);
-        filter: brightness(1.1);
+        box-shadow: 0 6px 0 #0e0a04, 0 10px 24px rgba(0,0,0,0.55), 0 0 20px rgba(180,136,30,0.3);
+        filter: brightness(1.12);
+        border-color: rgba(210, 160, 50, 0.65);
       }
 
       &:active { transform: translateY(1px); }

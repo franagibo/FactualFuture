@@ -447,7 +447,7 @@ function drawStyledStatBar(
 
   const valueText = t(ctx);
   valueText.text = label;
-  valueText.style = { fontFamily: 'system-ui', fontSize, fill: 0xe8e0ff, fontWeight: 'bold' };
+  valueText.style = { fontFamily: 'system-ui', fontSize, fill: 0xe8d8a0, fontWeight: 'bold' };
   valueText.anchor.set(0.5, 0.5);
   valueText.x = x + width / 2;
   valueText.y = y + height / 2;

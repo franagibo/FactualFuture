@@ -83,7 +83,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       }
     </div>
   `,
-   styles: [`
+  styles: [`
     :host {
       display: block;
       height: 100%;
@@ -97,7 +97,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       align-items: center;
       justify-content: center;
       position: relative;
-      background: #07050f center center no-repeat;
+      background: #09080a center center no-repeat;
       background-size: cover;
     }
 
@@ -110,7 +110,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       content: '';
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse at center, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.65) 100%);
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.72) 100%);
       pointer-events: none;
       z-index: 0;
     }
@@ -123,15 +123,15 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       align-items: center;
       justify-content: center;
       gap: 1rem;
-      background: #07050f;
+      background: #09080a;
       z-index: 10;
     }
 
     .menu-loading-spinner {
       width: 42px;
       height: 42px;
-      border: 3px solid rgba(255, 255, 255, 0.1);
-      border-top-color: #b48cff;
+      border: 3px solid rgba(255, 255, 255, 0.08);
+      border-top-color: #c8a030;
       border-radius: 50%;
       animation: menuSpin 0.8s linear infinite;
     }
@@ -141,7 +141,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     .menu-loading-label {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 1rem;
-      color: #6a6090;
+      color: #7a6030;
       letter-spacing: 0.06em;
     }
 
@@ -149,17 +149,17 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     .menu-panel {
       position: relative;
       z-index: 1;
-      background: rgba(7, 4, 16, 0.88);
+      background: rgba(10, 8, 3, 0.92);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(140, 100, 220, 0.38);
+      border: 1px solid rgba(158, 118, 34, 0.52);
       border-radius: 20px;
       padding: 2.8rem 3.2rem 2rem;
       box-shadow:
-        0 0 0 1px rgba(80, 50, 160, 0.12) inset,
-        0 0 60px rgba(60, 30, 120, 0.5),
-        0 10px 40px rgba(0, 0, 0, 0.7),
-        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      0 0 0 1px rgba(100, 74, 12, 0.18) inset,
+        0 0 60px rgba(80, 55, 10, 0.45),
+        0 10px 40px rgba(0, 0, 0, 0.75),
+        inset 0 1px 0 rgba(255, 240, 180, 0.06);
       animation: panelIn 0.55s cubic-bezier(0.34, 1.1, 0.64, 1);
       min-width: 300px;
     }
@@ -169,8 +169,8 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       content: '';
       position: absolute;
       top: 0; left: 10%; right: 10%;
-      height: 1px;
-      background: linear-gradient(90deg, transparent 0%, rgba(180,140,255,0.8) 50%, transparent 100%);
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, rgba(200,158,42,0.9) 50%, transparent 100%);
       border-radius: 20px 20px 0 0;
     }
 
@@ -190,19 +190,19 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       font-size: 2.2rem;
       font-weight: 900;
       margin: 0 0 0.3rem;
-      color: #fff;
-      letter-spacing: 0.04em;
+      color: #f4d98a;
+      letter-spacing: 0.06em;
       text-shadow:
-        0 0 30px rgba(190, 150, 255, 0.65),
-        0 0 60px rgba(120, 80, 200, 0.3),
-        0 3px 6px rgba(0, 0, 0, 0.8);
+      0 0 28px rgba(200, 158, 42, 0.7),
+        0 0 56px rgba(160, 112, 20, 0.35),
+        0 3px 6px rgba(0, 0, 0, 0.9);
       animation: titleGlow 3.5s ease-in-out infinite;
     }
 
     @keyframes titleGlow {
-      0%, 100% { text-shadow: 0 0 30px rgba(190,150,255,0.65), 0 0 60px rgba(120,80,200,0.3), 0 3px 6px rgba(0,0,0,0.8); }
-      50%        { text-shadow: 0 0 40px rgba(210,170,255,0.85), 0 0 80px rgba(140,90,220,0.5), 0 3px 6px rgba(0,0,0,0.8); }
-    }
+      0%, 100% { text-shadow: 0 0 28px rgba(200,158,42,0.7), 0 0 56px rgba(160,112,20,0.35), 0 3px 6px rgba(0,0,0,0.9); }
+      50%        { text-shadow: 0 0 40px rgba(230,180,55,0.9), 0 0 80px rgba(190,138,28,0.5), 0 3px 6px rgba(0,0,0,0.9); }
+     }
 
     .menu-tagline {
       font-family: 'Exo 2', system-ui, sans-serif;
@@ -210,7 +210,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       font-weight: 400;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: #5a5280;
+      color: #6a5428;
       margin: 0;
     }
 
@@ -218,9 +218,9 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     .unlocks-section {
       margin-bottom: 1.25rem;
       padding: 0.75rem 1rem;
-      background: rgba(0,0,0,0.25);
+      background: rgba(0,0,0,0.3);
       border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid rgba(158, 118, 34, 0.2);
     }
 
     .unlocks-label {
@@ -229,7 +229,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #5a5278;
+      color: #6a5428;
       margin-bottom: 0.4rem;
     }
 
@@ -242,26 +242,26 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     .unlock-item {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 0.78rem;
-      color: #c8c0e8;
+      color: #d4b87a;
       padding: 0.2rem 0.6rem;
       border-radius: 6px;
     }
 
     .unlock-card {
-      background: rgba(80, 60, 140, 0.35);
-      border: 1px solid rgba(120, 90, 200, 0.25);
+      background: rgba(80, 60, 14, 0.35);
+      border: 1px solid rgba(160, 118, 36, 0.28);
     }
 
     .unlock-relic {
-      background: rgba(120, 90, 20, 0.35);
-      border: 1px solid rgba(200, 150, 30, 0.25);
-      color: #e8d880;
+      background: rgba(120, 90, 10, 0.35);
+      border: 1px solid rgba(200, 158, 30, 0.3);
+      color: #e8d070;
     }
 
     .unlocks-hint {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 0.78rem;
-      color: #4a4268;
+      color: #4a3818;
       font-style: italic;
     }
 
@@ -301,19 +301,20 @@ import { AssetManifestService } from '../services/asset-manifest.service';
       align-items: center;
       gap: 10px;
       padding: 14px 24px;
-      font-family: 'Exo 2', system-ui, sans-serif;
-      font-size: 1.05rem;
+      font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+      font-size: 0.98rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       cursor: pointer;
-      color: #fff;
-      border: none;
+      color: #e8d8a0;
+      border: 1px solid rgba(158, 118, 34, 0.45);
       border-radius: 12px;
-      background: linear-gradient(160deg, #3a3068 0%, #26204c 100%);
+      background: linear-gradient(160deg, #2c2210 0%, #1a1408 100%);
       box-shadow:
-        0 5px 0 #151030,
-        0 6px 18px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.13);
+      0 5px 0 #0e0a04,
+        0 6px 18px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 240, 160, 0.08);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
       transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
       overflow: hidden;
@@ -324,8 +325,8 @@ import { AssetManifestService } from '../services/asset-manifest.service';
         inset: 0;
         border-radius: 12px;
         padding: 1px;
-        background: linear-gradient(170deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        background: linear-gradient(170deg, rgba(255,240,160,0.15) 0%, rgba(255,220,80,0.04) 50%, transparent 100%);
+                -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         -webkit-mask-composite: xor;
         mask-composite: exclude;
@@ -336,47 +337,51 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     .menu-btn:hover {
       transform: translateY(-3px) scale(1.02);
       box-shadow:
-        0 8px 0 #151030,
-        0 12px 28px rgba(0, 0, 0, 0.5),
-        0 0 22px rgba(120, 90, 220, 0.35),
-        inset 0 1px 0 rgba(255, 255, 255, 0.18);
-      filter: brightness(1.1);
+      0 8px 0 #0e0a04,
+        0 12px 28px rgba(0, 0, 0, 0.6),
+        0 0 22px rgba(180, 136, 30, 0.4),
+        inset 0 1px 0 rgba(255, 240, 160, 0.14);
+      filter: brightness(1.12);
+      border-color: rgba(210, 160, 50, 0.65);
     }
 
     .menu-btn:active {
       transform: translateY(2px) scale(0.99);
-      box-shadow: 0 2px 0 #151030, 0 2px 8px rgba(0,0,0,0.4);
-    }
+      box-shadow: 0 2px 0 #0e0a04, 0 2px 8px rgba(0,0,0,0.5);
+        }
 
     .menu-btn-primary {
-      background: linear-gradient(160deg, #5840a8 0%, #3c2888 45%, #2c1870 100%);
+      background: linear-gradient(160deg, #5a3e10 0%, #3c2808 45%, #2a1c04 100%);
+      border-color: rgba(180, 136, 36, 0.6);
+      color: #f4d98a;
       box-shadow:
-        0 5px 0 #1a1040,
-        0 6px 22px rgba(0, 0, 0, 0.5),
-        0 0 18px rgba(100, 70, 200, 0.22),
-        inset 0 1px 0 rgba(255, 255, 255, 0.18);
-
+      0 5px 0 #180f02,
+        0 6px 22px rgba(0, 0, 0, 0.55),
+        0 0 18px rgba(160, 112, 20, 0.22),
+        inset 0 1px 0 rgba(255, 240, 160, 0.16);
       &:hover {
         box-shadow:
-          0 8px 0 #1a1040,
-          0 12px 30px rgba(0, 0, 0, 0.55),
-          0 0 32px rgba(140, 100, 255, 0.5),
-          inset 0 1px 0 rgba(255, 255, 255, 0.22);
+        0 8px 0 #180f02,
+          0 12px 30px rgba(0, 0, 0, 0.6),
+          0 0 36px rgba(200, 155, 40, 0.55),
+          inset 0 1px 0 rgba(255, 240, 160, 0.22);
+        border-color: rgba(220, 168, 50, 0.8);
       }
     }
 
     .menu-btn-danger {
       background: linear-gradient(160deg, #6a2828 0%, #421515 100%);
-      box-shadow: 0 5px 0 #281010, 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1);
-
+      border-color: rgba(180, 60, 60, 0.4);
+      color: #f0c0c0;
+      box-shadow: 0 5px 0 #281010, 0 6px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,200,200,0.08);
       &:hover {
-        box-shadow: 0 8px 0 #281010, 0 12px 28px rgba(0,0,0,0.5), 0 0 22px rgba(200, 60, 60, 0.3);
-      }
+        box-shadow: 0 8px 0 #281010, 0 12px 28px rgba(0,0,0,0.55), 0 0 22px rgba(200, 60, 60, 0.35);
+        border-color: rgba(220, 80, 80, 0.6);      }
     }
 
     .menu-btn-icon {
       font-size: 1em;
-      opacity: 0.75;
+      opacity: 0.7;
     }
 
     .menu-btn-inner {
@@ -393,7 +398,7 @@ import { AssetManifestService } from '../services/asset-manifest.service';
     .menu-version {
       font-family: 'Exo 2', system-ui, sans-serif;
       font-size: 0.65rem;
-      color: #2e2850;
+      color: #3a2e12;
       letter-spacing: 0.1em;
     }
   `],

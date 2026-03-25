@@ -1,7 +1,7 @@
 .settings-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
   z-index: 1000;
 }
@@ -16,16 +16,16 @@
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  background: rgba(7, 4, 16, 0.98);
+  background: rgba(10, 8, 3, 0.98);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 18px;
-  border: 1px solid rgba(140, 100, 220, 0.35);
-  box-shadow:
-  0 0 60px rgba(60, 30, 120, 0.5),
-  0 16px 50px rgba(0, 0, 0, 0.8);
-color: #e8e0ff;
-font-family: 'Exo 2', system-ui, sans-serif;
+  border: 1px solid rgba(158, 118, 34, 0.52);
+    box-shadow:
+    0 0 60px rgba(80, 55, 10, 0.45),
+    0 16px 50px rgba(0, 0, 0, 0.85);
+  color: #f0e8c0;
+  font-family: 'Exo 2', system-ui, sans-serif;
   z-index: 1001;
   overflow: hidden;
   animation: settingsIn 0.28s cubic-bezier(0.34, 1.2, 0.64, 1);
@@ -34,8 +34,8 @@ font-family: 'Exo 2', system-ui, sans-serif;
     content: '';
     position: absolute;
     top: 0; left: 10%; right: 10%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(180,140,255,0.8) 50%, transparent 100%);
+    height: 2px;
+    background: linear-gradient(90deg, transparent 0%, rgba(200,158,42,0.9) 50%, transparent 100%);
     pointer-events: none;
   }
 }
@@ -49,7 +49,7 @@ font-family: 'Exo 2', system-ui, sans-serif;
   align-items: center;
   justify-content: space-between;
   padding: 18px 22px;
-  border-bottom: 1px solid rgba(140, 100, 220, 0.18);
+  border-bottom: 1px solid rgba(158, 118, 34, 0.22);
   flex-shrink: 0;
 }
 
@@ -57,41 +57,32 @@ font-family: 'Exo 2', system-ui, sans-serif;
   font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
   font-size: 1.2rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   margin: 0;
-  color: #d8ceff;
-  text-shadow: 0 0 16px rgba(160, 120, 255, 0.4);
+  color: #f4d98a;
+  text-shadow: 0 0 16px rgba(200, 158, 42, 0.45);
 }
 
 .settings-close-btn {
   padding: 8px 18px;
-  font-family: 'Exo 2', system-ui, sans-serif;
-  font-size: 0.9rem;
+  font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+  font-size: 0.85rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  border: 1px solid rgba(120, 90, 200, 0.3);
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(158, 118, 34, 0.42);
   border-radius: 10px;
   cursor: pointer;
-  color: #fff;
-  background: linear-gradient(160deg, #3a3068 0%, #26204c 100%);
-  box-shadow: 0 3px 0 #151030, 0 4px 12px rgba(0,0,0,0.35);
+  color: #e8d8a0;
+  background: linear-gradient(160deg, #2c2210 0%, #1a1408 100%);
+  box-shadow: 0 3px 0 #0e0a04, 0 4px 12px rgba(0,0,0,0.4);
   transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 0 #151030, 0 6px 16px rgba(0,0,0,0.4);
-    filter: brightness(1.1);
+    box-shadow: 0 4px 0 #0e0a04, 0 6px 16px rgba(0,0,0,0.45), 0 0 14px rgba(180,136,30,0.3);
+    filter: brightness(1.12);
+    border-color: rgba(210, 160, 50, 0.65);
   }
   &:active { transform: translateY(0); }
-}
-
-.settings-close-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 0 #1a1630, 0 6px 16px rgba(0, 0, 0, 0.4);
-  filter: brightness(1.08);
-}
-
-.settings-close-btn:active {
-  transform: translateY(0);
 }
 
 .settings-body {
@@ -107,8 +98,8 @@ font-family: 'Exo 2', system-ui, sans-serif;
   padding: 14px 8px 14px 14px;
   width: 115px;
   flex-shrink: 0;
-  border-right: 1px solid rgba(140, 100, 220, 0.15);
-  background: rgba(0, 0, 0, 0.2);
+  border-right: 1px solid rgba(158, 118, 34, 0.18);
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .settings-nav-item {
@@ -121,17 +112,18 @@ font-family: 'Exo 2', system-ui, sans-serif;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  color: #7a7098;
+  color: #7a6030;
+  background: transparent;
   transition: background 0.15s, color 0.15s, transform 0.1s;
   &:hover {
-    color: #c8c0e8;
-    background: rgba(80, 60, 160, 0.2);
+    color: #d4b87a;
+    background: rgba(100, 72, 14, 0.22);
     transform: translateX(2px);
   }
   &.active {
-    color: #e8e0ff;
-    background: linear-gradient(90deg, rgba(80, 60, 160, 0.45) 0%, rgba(80, 60, 160, 0.15) 100%);
-    border-left: 2px solid rgba(160, 120, 255, 0.6);
+    color: #f4d98a;
+    background: linear-gradient(90deg, rgba(100, 72, 14, 0.45) 0%, rgba(100, 72, 14, 0.15) 100%);
+    border-left: 2px solid rgba(200, 158, 42, 0.65);
     padding-left: 12px;
   }
 }
@@ -142,7 +134,7 @@ font-family: 'Exo 2', system-ui, sans-serif;
   overflow-y: auto;
   padding: 20px 24px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(120, 90, 200, 0.4) transparent;
+  scrollbar-color: rgba(158, 118, 34, 0.45) transparent;
 }
 
 .settings-panel {
@@ -153,10 +145,10 @@ font-family: 'Exo 2', system-ui, sans-serif;
   font-family: 'Cinzel', serif;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #8070b0;
-  margin-bottom: 1.2rem;
+  color: #8a6a28;
+    margin-bottom: 1.2rem;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
 }
 
 .settings-row {
@@ -171,7 +163,7 @@ font-family: 'Exo 2', system-ui, sans-serif;
   display: block;
   font-size: 0.78rem;
   font-weight: 600;
-  color: #8880a0;
+  color: #8a7040;
   margin-bottom: 0.45rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -190,12 +182,12 @@ font-family: 'Exo 2', system-ui, sans-serif;
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(30, 20, 55, 0.9);
+  background: rgba(20, 15, 5, 0.9);
   border-radius: 3px;
   outline: none;
 
   &:focus-visible {
-    outline: 2px solid rgba(160, 120, 255, 0.8);
+    outline: 2px solid rgba(200, 158, 42, 0.8);
     outline-offset: 2px;
   }
   &::-webkit-slider-thumb {
@@ -204,10 +196,10 @@ font-family: 'Exo 2', system-ui, sans-serif;
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: linear-gradient(160deg, #8060c0 0%, #5040a0 100%);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(160deg, #c8a030 0%, #8a6a10 100%);
+    border: 2px solid rgba(255, 240, 160, 0.35);
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.4), 0 0 8px rgba(120,80,200,0.4);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 8px rgba(180,136,30,0.4);
     transition: transform 0.1s;
     &:hover { transform: scale(1.15); }
   }
@@ -215,10 +207,10 @@ font-family: 'Exo 2', system-ui, sans-serif;
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: linear-gradient(160deg, #8060c0 0%, #5040a0 100%);
-    border: 2px solid rgba(255,255,255,0.3);
+    background: linear-gradient(160deg, #c8a030 0%, #8a6a10 100%);
+    border: 2px solid rgba(255,240,160,0.3);
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
   }
 }
 
@@ -228,30 +220,30 @@ font-family: 'Exo 2', system-ui, sans-serif;
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #7a6aaa 0%, #5a4a9e 100%);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, #d4aa38 0%, #8a6818 100%);
+  border: 2px solid rgba(255, 240, 160, 0.35);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .settings-range::-webkit-slider-thumb:hover {
-  background: linear-gradient(180deg, #8a7aba 0%, #6a5aae 100%);
+  background: linear-gradient(180deg, #e4ba48 0%, #9a7820 100%);
 }
 
 .settings-range::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #7a6aaa 0%, #5a4a9e 100%);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, #d4aa38 0%, #8a6818 100%);
+  border: 2px solid rgba(255, 240, 160, 0.3);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .settings-value {
   font-size: 0.88rem;
   font-weight: 700;
-  color: #c0b8e0;
+  color: #c8a858;
   min-width: 2.8em;
   text-align: right;
   font-feature-settings: "tnum";
@@ -262,14 +254,14 @@ font-family: 'Exo 2', system-ui, sans-serif;
   align-items: center;
   gap: 10px;
   font-size: 0.92rem;
-  color: #c8c0e0;
+  color: #c8b87a;
   cursor: pointer;
   user-select: none;
 }
 .settings-checkbox {
   width: 16px;
   height: 16px;
-  accent-color: #7060c0;
+  accent-color: #c8a030;
   cursor: pointer;
 }
 /* ── option buttons ── */
@@ -289,26 +281,26 @@ font-family: 'Exo 2', system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: 0.03em;
   border-radius: 8px;
-  border: 1px solid rgba(100, 80, 180, 0.2);
+  border: 1px solid rgba(100, 74, 14, 0.28);
   cursor: pointer;
-  color: #a0a0c8;
-  background: rgba(20, 15, 40, 0.8);
-  box-shadow: 0 2px 0 #0a0820, 0 3px 8px rgba(0,0,0,0.3);
+  color: #907840;
+  background: rgba(14, 10, 3, 0.8);
+  box-shadow: 0 2px 0 #080604, 0 3px 8px rgba(0,0,0,0.35);
   transition: transform 0.12s, box-shadow 0.15s, filter 0.15s, border-color 0.15s, color 0.15s;
   text-align: left;
 
   &:hover {
     transform: translateY(-1px);
-    color: #e0d8f8;
-    border-color: rgba(140, 100, 220, 0.4);
-    box-shadow: 0 3px 0 #0a0820, 0 5px 12px rgba(0,0,0,0.35);
+    color: #e8d89a;
+    border-color: rgba(158, 118, 34, 0.5);
+    box-shadow: 0 3px 0 #080604, 0 5px 12px rgba(0,0,0,0.4);
     filter: brightness(1.08);
   }
   &.active {
-    background: linear-gradient(160deg, #5840a0 0%, #3c2880 100%);
-    border-color: rgba(160, 120, 255, 0.5);
-    color: #fff;
-    box-shadow: 0 2px 0 #1a1040, 0 0 16px rgba(100, 70, 200, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+    background: linear-gradient(160deg, #5a3e10 0%, #3c2808 100%);
+    border-color: rgba(200, 158, 42, 0.6);
+    color: #f4d98a;
+    box-shadow: 0 2px 0 #180f02, 0 0 16px rgba(180,136,30,0.35), inset 0 1px 0 rgba(255,240,160,0.14);
   }
   &:active { transform: translateY(0); }
 }
