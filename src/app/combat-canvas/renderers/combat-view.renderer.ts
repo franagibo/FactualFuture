@@ -499,6 +499,224 @@ function drawEnemyTargetBorder(
 }
 
 // ---------------------------------------------------------------------------
+// Card type colour palette
+// ---------------------------------------------------------------------------
+
+interface CardTypePalette {
+  frameColor: number;
+  frameColorDim: number;
+  accentTop: number;
+  accentTopAlpha: number;
+  artBg: number;
+  artPatternColor: number;
+  nameBg: number;
+  dividerColor: number;
+  bodyBg: number;
+  gemColor: number;
+  nameColor: number;
+  descColor: number;
+  costColor: number;
+  costBg: number;
+}
+
+/** Derives a colour palette for a card based on its effect description text. */
+function getCardPalette(effectDesc: string, playable: boolean): CardTypePalette {
+  const d = effectDesc.toLowerCase();
+  const isDamage  = /deal|damage|hit|strike|shot|attack/i.test(d);
+  const isDefense = /block|shield|barrier|reinforce/i.test(d);
+  const isNature  = /plant|grow|summon|seed|tendril|vine/i.test(d);
+
+  if (!playable) {
+    return {
+      frameColor:      0x3d2d60,
+      frameColorDim:   0x1e1630,
+      accentTop:       0x5533aa,
+      accentTopAlpha:  0.55,
+      artBg:           0x08060f,
+      artPatternColor: 0x2a1a55,
+      nameBg:          0x100c1f,
+      dividerColor:    0x3a2566,
+      bodyBg:          0x090714,
+      gemColor:        0x44286e,
+      nameColor:       0x7766aa,
+      descColor:       0x5c5080,
+      costColor:       0x886677,
+      costBg:          0x060410,
+    };
+  }
+
+  if (isNature) {
+    return {
+      frameColor:      0x33aa55,
+      frameColorDim:   0x1a5c2e,
+      accentTop:       0x44cc66,
+      accentTopAlpha:  0.8,
+      artBg:           0x071410,
+      artPatternColor: 0x164428,
+      nameBg:          0x0e2018,
+      dividerColor:    0x2d8847,
+      bodyBg:          0x08110d,
+      gemColor:        0x33aa55,
+      nameColor:       0xaaffcc,
+      descColor:       0x88ddaa,
+      costColor:       0x88ffaa,
+      costBg:          0x061008,
+    };
+  }
+
+  if (isDamage && !isDefense) {
+    return {
+      frameColor:      0xcc4422,
+      frameColorDim:   0x661a0e,
+      accentTop:       0xff5533,
+      accentTopAlpha:  0.8,
+      artBg:           0x160804,
+      artPatternColor: 0x441a0c,
+      nameBg:          0x1e0c08,
+      dividerColor:    0x993322,
+      bodyBg:          0x0f0604,
+      gemColor:        0xcc4422,
+      nameColor:       0xffccbb,
+      descColor:       0xddaa99,
+      costColor:       0xff8866,
+      costBg:          0x100402,
+    };
+  }
+
+  if (isDefense && !isDamage) {
+    return {
+      frameColor:      0x2266cc,
+      frameColorDim:   0x0f2e66,
+      accentTop:       0x3388ff,
+      accentTopAlpha:  0.8,
+      artBg:           0x040c18,
+      artPatternColor: 0x0e2a5c,
+      nameBg:          0x071220,
+      dividerColor:    0x1a4d99,
+      bodyBg:          0x040a14,
+      gemColor:        0x2266cc,
+      nameColor:       0xbbddff,
+      descColor:       0x99bbdd,
+      costColor:       0x6699ff,
+      costBg:          0x030810,
+    };
+  }
+
+  // Mixed or utility — rich purple (default, Slay the Spire feel)
+  return {
+    frameColor:      0x7755cc,
+    frameColorDim:   0x332266,
+    accentTop:       0x9966ff,
+    accentTopAlpha:  0.8,
+    artBg:           0x0d1020,
+    artPatternColor: 0x2a1a55,
+    nameBg:          0x160f2e,
+    dividerColor:    0x5533aa,
+    bodyBg:          0x0b0818,
+    gemColor:        0x8855dd,
+    nameColor:       0xeeddff,
+    descColor:       0xccbbee,
+    costColor:       0xaa88ff,
+    costBg:          0x08050e,
+  };
+}
+
+/** Draws a production-ready procedural card body onto `cardBody` Graphics. No external textures required. */
+function drawCardBody(
+  cardBody: PIXI.Graphics,
+  cardWidth: number,
+  cardHeight: number,
+  cr: number,
+  pal: CardTypePalette,
+): void {
+  const artH  = 90;
+  const nameH = 26;
+  const divH  = 4;
+  const nameY = artH;
+  const divY  = nameY + nameH;
+  const bodyY = divY + divH;
+
+  // ── Base card ──
+  cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).fill({ color: 0x06040d });
+
+  // ── Art zone ──
+  cardBody.roundRect(0, 0, cardWidth, artH + cr, cr).fill({ color: pal.artBg });
+  cardBody.rect(0, artH, cardWidth, cr).fill({ color: pal.artBg });
+
+  // Diagonal stripe pattern in art zone
+  for (let si = 0; si < 10; si++) {
+    const sx = si * 20 - 6;
+    cardBody.rect(sx, 0, 9, artH).fill({ color: pal.artPatternColor, alpha: 0.13 });
+  }
+  // Subtle crosshatch dots in art zone
+  for (let dx = 16; dx < cardWidth - 8; dx += 22) {
+    for (let dy = 16; dy < artH - 8; dy += 18) {
+      cardBody.circle(dx, dy, 0.9).fill({ color: pal.frameColor, alpha: 0.18 });
+    }
+  }
+  // Centre art placeholder ring
+  const cx = cardWidth / 2;
+  const cy = artH / 2 - 4;
+  cardBody.circle(cx, cy, 18).fill({ color: pal.frameColor, alpha: 0.12 });
+  cardBody.circle(cx, cy, 18).stroke({ width: 1, color: pal.frameColor, alpha: 0.22 });
+  cardBody.circle(cx, cy, 10).fill({ color: pal.artPatternColor, alpha: 0.25 });
+  // Top type accent strip
+  cardBody.roundRect(0, 0, cardWidth, 5, cr).fill({ color: pal.accentTop, alpha: pal.accentTopAlpha });
+  cardBody.rect(0, cr, cardWidth, 3).fill({ color: pal.accentTop, alpha: pal.accentTopAlpha });
+  // Art zone bottom shadow
+  cardBody.rect(0, artH - 2, cardWidth, 2).fill({ color: 0x000000, alpha: 0.4 });
+
+  // ── Name band ──
+  cardBody.rect(0, nameY, cardWidth, nameH).fill({ color: pal.nameBg });
+  cardBody.rect(2, nameY, cardWidth - 4, 1).fill({ color: 0xffffff, alpha: 0.06 });
+  cardBody.rect(2, nameY + nameH - 1, cardWidth - 4, 1).fill({ color: 0x000000, alpha: 0.25 });
+
+  // ── Divider accent ──
+  cardBody.rect(0, divY, cardWidth, divH).fill({ color: pal.dividerColor, alpha: 0.9 });
+  cardBody.rect(0, divY, cardWidth, 1).fill({ color: pal.accentTop, alpha: 0.55 });
+
+  // ── Body zone ──
+  cardBody.rect(0, bodyY, cardWidth, cardHeight - bodyY - cr).fill({ color: pal.bodyBg });
+  // Subtle vignette at bottom
+  cardBody.roundRect(0, cardHeight - cr * 3, cardWidth, cr * 3, cr).fill({ color: 0x000000, alpha: 0.22 });
+
+  // ── Outer border: layered glow + crisp edge ──
+  cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 6, color: pal.frameColor, alpha: 0.15 });
+  cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 2, color: pal.frameColor, alpha: 0.9 });
+  // Thin inner highlight bevel
+  cardBody.roundRect(2, 2, cardWidth - 4, cardHeight - 4, cr - 1).stroke({ width: 1, color: 0xffffff, alpha: 0.1 });
+
+  // ── Corner gem ornaments ──
+  const gems: [number, number][] = [
+    [4, 4], [cardWidth - 10, 4],
+    [4, cardHeight - 10], [cardWidth - 10, cardHeight - 10],
+  ];
+  for (const [gx, gy] of gems) {
+    cardBody.roundRect(gx, gy, 6, 6, 1.5).fill({ color: pal.gemColor, alpha: 0.9 });
+    cardBody.roundRect(gx, gy, 6, 6, 1.5).stroke({ width: 0.5, color: 0xffffff, alpha: 0.35 });
+    cardBody.circle(gx + 1.5, gy + 1.5, 1.2).fill({ color: 0xffffff, alpha: 0.22 });
+  }
+}
+
+/** Draws the cost gem circle. */
+function drawCostGem(
+  costBg: PIXI.Graphics,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  costColor: number,
+  costBgColor: number,
+): void {
+  costBg.circle(centerX, centerY, radius + 4).fill({ color: costColor, alpha: 0.1 });
+  costBg.circle(centerX, centerY, radius + 1).fill({ color: 0x000000, alpha: 0.55 });
+  costBg.circle(centerX, centerY, radius).fill({ color: costBgColor });
+  costBg.circle(centerX, centerY, radius).stroke({ width: 2, color: costColor, alpha: 1 });
+  // Inner gloss highlight
+  costBg.circle(centerX - 3, centerY - 4, 5).fill({ color: 0xffffff, alpha: 0.12 });
+  costBg.circle(centerX - 2, centerY - 3, 2.5).fill({ color: 0xffffff, alpha: 0.08 });
+}
+
+// ---------------------------------------------------------------------------
 // Background
 // ---------------------------------------------------------------------------
 
@@ -987,13 +1205,14 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
       .fill({ color: 0x000000, alpha: applyHover ? 0.55 : 0.28 });
     // Colored glow underneath the card when hovered/selected (purple or gold)
     if (applyHover) {
-      const glowColor = isSelected ? 0xffcc22 : 0x6633cc;
+      const glowColor = isSelected ? 0xffcc22 : 0xb87820;
       shadow.roundRect(4, 6, cardWidth, cardHeight, L.cardCornerRadius)
         .fill({ color: glowColor, alpha: 0.28 });
     }
     container.addChild(shadow);
 
-    // Card image is the full card (cardId.png or empty_card_template); text and cost are drawn on top.
+    // Card image is the full card (cardId.png); text and cost are drawn on top.
+    // Falls back to procedural drawing when no dedicated art exists.
     const cardTex = ctx.getCardArtTexture?.(cardId) ?? null;
     if (cardTex) {
       const cardSprite = spriteNew();
@@ -1003,66 +1222,10 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
       cardSprite.roundPixels = true;
       container.addChild(cardSprite);
     } else {
+      const effectDesc = ctx.getCardEffectDescription(cardId);
+      const pal = getCardPalette(effectDesc, playable);
       const cardBody = g(ctx);
-      const cr = L.cardCornerRadius;
-      // Color palette — richer purple/blue-dark for playable, muted for unplayable
-      const frameColor   = playable ? 0x7755cc : 0x443377;
-      const artBg        = playable ? 0x0d1423 : 0x080d16;
-      const nameBg       = playable ? 0x1c1640 : 0x120f2a;
-      const dividerColor = playable ? 0x8844dd : 0x4a2d88;
-      const bodyBg       = playable ? 0x100e22 : 0x0a0816;
-      const gemColor     = playable ? 0x9966ff : 0x553399;
-      // Layout zones (card is 160×240, pivot at bottom)
-      const artH   = 90;            // art occupies top 90px (cost gem floats here)
-      const nameH  = 28;            // name band
-      const divH   = 4;             // accent divider strip
-      const nameY  = artH;          // y=90
-      const divY   = nameY + nameH; // y=118
-      const bodyY  = divY + divH;   // y=122
-
-      // ── Base card background ──
-      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).fill({ color: 0x07050f });
-
-      // ── Art zone (full-width, rounded corners on top only) ──
-      cardBody.roundRect(0, 0, cardWidth, artH + cr, cr).fill({ color: artBg });
-      cardBody.rect(0, artH, cardWidth, cr).fill({ color: artBg });
-      // Subtle diagonal stripe pattern in art zone
-      for (let si = 0; si < 8; si++) {
-        const sx = si * 22 - 4;
-        cardBody.rect(sx, 0, 11, artH).fill({ color: playable ? 0x6633bb : 0x331d66, alpha: 0.09 });
-      }
-      // Corner shine highlight in art zone
-      cardBody.roundRect(5, 5, 32, 12, 3).fill({ color: 0xffffff, alpha: 0.04 });
-      // Art zone bottom edge: subtle inner shadow line
-      cardBody.rect(0, artH - 1, cardWidth, 1).fill({ color: 0x000000, alpha: 0.35 });
-
-      // ── Name band ──
-      cardBody.rect(0, nameY, cardWidth, nameH).fill({ color: nameBg });
-      // Slight inner highlight at top of name band
-      cardBody.rect(2, nameY, cardWidth - 4, 1).fill({ color: 0xffffff, alpha: 0.07 });
-
-      // ── Divider accent strip ──
-      cardBody.rect(0, divY, cardWidth, divH).fill({ color: dividerColor, alpha: 0.9 });
-      cardBody.rect(0, divY, cardWidth, 1).fill({ color: playable ? 0xbbaaff : 0x7755bb, alpha: 0.65 });
-
-      // ── Body zone (description area) ──
-      cardBody.rect(0, bodyY, cardWidth, cardHeight - bodyY - cr).fill({ color: bodyBg });
-      // Subtle vignette at bottom of body
-      cardBody.roundRect(0, cardHeight - cr * 3, cardWidth, cr * 3, cr).fill({ color: 0x000000, alpha: 0.18 });
-
-      // ── Outer border: soft glow ring + crisp edge ──
-      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 5, color: frameColor, alpha: 0.18 });
-      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 2, color: frameColor, alpha: 0.95 });
-      // Inner bevel line
-      cardBody.roundRect(2, 2, cardWidth - 4, cardHeight - 4, cr - 1).stroke({ width: 1, color: 0xffffff, alpha: 0.09 });
-
-      // ── Corner gem ornaments ──
-      const corners = [[3, 3], [cardWidth - 9, 3], [3, cardHeight - 9], [cardWidth - 9, cardHeight - 9]] as const;
-      for (const [gx, gy] of corners) {
-        cardBody.roundRect(gx, gy, 6, 6, 1.5).fill({ color: gemColor, alpha: 0.85 });
-        cardBody.roundRect(gx, gy, 6, 6, 1.5).stroke({ width: 0.5, color: 0xffffff, alpha: 0.3 });
-      }
-
+      drawCardBody(cardBody, cardWidth, cardHeight, L.cardCornerRadius, pal);
       container.addChild(cardBody);
     }
 
@@ -1074,58 +1237,62 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     container.addChild(neonBorder);
 
     const costRadius = L.costRadius;
-    const costBg = g(ctx);
-    const costColor = playable ? 0x88ffaa : 0xff7777;
+    const costBg2 = g(ctx);
+    const handEffectDesc = ctx.getCardEffectDescription(cardId);
+    const handPal = getCardPalette(handEffectDesc, playable);
+    const costColor = handPal.costColor;
     const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
     const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
-    // Outer glow ring
-    costBg.circle(costCenterX, costCenterY, costRadius + 3).fill({ color: costColor, alpha: 0.12 });
-    // Main cost gem: dark fill + colored ring
-    costBg.circle(costCenterX, costCenterY, costRadius).fill({ color: 0x0a0818 });
-    costBg.circle(costCenterX, costCenterY, costRadius).stroke({ width: 2.5, color: costColor, alpha: 0.95 });
-    // Inner highlight
-    costBg.circle(costCenterX - 3, costCenterY - 4, 4).fill({ color: 0xffffff, alpha: 0.1 });
-    container.addChild(costBg);
-    const costFontSize = scaledFontSize(30, ctx);
+    drawCostGem(costBg2, costCenterX, costCenterY, costRadius, costColor, handPal.costBg);
+    container.addChild(costBg2);
+    const costFontSize = scaledFontSize(28, ctx);
     const costText = t(ctx);
     costText.text = String(cost);
-    costText.style = { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor, fontWeight: 'bold' };
+    costText.style = {
+      fontFamily: 'system-ui',
+      fontSize: costFontSize,
+      fill: costColor,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.7 },
+    };
     costText.anchor.set(0.5, 0.5);
     costText.x = costCenterX;
     costText.y = costCenterY;
     container.addChild(costText);
 
     const name = ctx.getCardName(cardId);
-    const nameDisplay = name.length > 14 ? name.slice(0, 14) + '…' : name;
+    const nameDisplay = name.length > 13 ? name.slice(0, 13) + '…' : name;
     const nameText = t(ctx);
     nameText.text = nameDisplay;
     nameText.style = {
       fontFamily: 'system-ui',
-      fontSize: scaledFontSize(18, ctx),
-      fill: playable ? 0xeeddff : 0x9988bb,
+      fontSize: scaledFontSize(17, ctx),
+      fill: handPal.nameColor,
       fontWeight: 'bold',
+      dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.9 },
     };
     nameText.anchor.set(0.5, 0.5);
     nameText.x = L.cardNameCenterX ?? (cardWidth / 2);
-    nameText.y = (L.cardNameY ?? 93) + 14;
+    nameText.y = (L.cardNameY ?? 90) + 13;
     container.addChild(nameText);
 
-    const effectDesc = ctx.getCardEffectDescription(cardId);
-    if (effectDesc) {
-      const fs = scaledFontSize(15, ctx);
+    if (handEffectDesc) {
+      const fs = scaledFontSize(14, ctx);
       const effectText = t(ctx);
       const maxChars = L.cardDescriptionMaxChars ?? 0;
-      effectText.text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
+      effectText.text = maxChars > 0 && handEffectDesc.length > maxChars ? handEffectDesc.slice(0, maxChars - 1) + '…' : handEffectDesc;
       effectText.style = {
         fontFamily: 'system-ui',
         fontSize: fs,
-        fill: playable ? 0xddccff : 0x887799,
+        fill: handPal.descColor,
         wordWrap: true,
         wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
-        lineHeight: Math.round(fs * 1.45),
+        lineHeight: Math.round(fs * 1.5),
+        align: 'center',
       };
-      effectText.x = L.cardDescriptionX ?? 10;
-      effectText.y = L.cardDescriptionY ?? 126;
+      effectText.anchor.set(0.5, 0);
+      effectText.x = cardWidth / 2;
+      effectText.y = L.cardDescriptionY ?? 128;
       container.addChild(effectText);
     }
 
@@ -1693,8 +1860,12 @@ function drawReturningCard(ctx: CombatViewContext): void {
     .fill({ color: 0x000000, alpha: 0.35 });
   container.addChild(shadow);
 
-  // Card art background
+  // Card art background — procedural card when no dedicated art exists
   const cardTex = ctx.getCardArtTexture?.(cardId) ?? null;
+  const dragEffectDesc = ctx.getCardEffectDescription(cardId);
+  const dragCost = ctx.getCardCost(cardId);
+  const dragPlayable = true; // drag preview is always a playable card
+  const dragPal = getCardPalette(dragEffectDesc, dragPlayable);
   if (cardTex) {
     const sprite = spriteNew();
     sprite.texture = cardTex;
@@ -1704,27 +1875,27 @@ function drawReturningCard(ctx: CombatViewContext): void {
     container.addChild(sprite);
   } else {
     const bg = g(ctx);
-    bg.roundRect(0, 0, cardWidth, cardHeight, L.cardCornerRadius)
-      .fill({ color: 0x2a2a4a })
-      .stroke({ width: 2, color: 0xe8c060 });
+    drawCardBody(bg, cardWidth, cardHeight, L.cardCornerRadius, dragPal);
     container.addChild(bg);
   }
 
   // Cost circle and text
-  const cost = ctx.getCardCost(cardId);
   const costRadius = L.costRadius;
-  const costColor = 0x88ff88;
   const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
   const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
   const costBg = g(ctx);
-  costBg.circle(costCenterX, costCenterY, costRadius)
-    .fill({ color: 0x1a1a2a })
-    .stroke({ width: 2, color: costColor });
+  drawCostGem(costBg, costCenterX, costCenterY, costRadius, dragPal.costColor, dragPal.costBg);
   container.addChild(costBg);
-  const costFontSize = scaledFontSize(32, ctx);
+  const costFontSize = scaledFontSize(28, ctx);
   const costText = t(ctx);
-  costText.text = String(cost);
-  costText.style = { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor };
+  costText.text = String(dragCost);
+  costText.style = {
+    fontFamily: 'system-ui',
+    fontSize: costFontSize,
+    fill: dragPal.costColor,
+    fontWeight: 'bold',
+    dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.7 },
+  };
   costText.anchor.set(0.5, 0.5);
   costText.x = costCenterX;
   costText.y = costCenterY;
@@ -1732,32 +1903,39 @@ function drawReturningCard(ctx: CombatViewContext): void {
 
   // Name
   const name = ctx.getCardName(cardId);
-  const nameDisplay = name.length > 16 ? name.slice(0, 16) + '…' : name;
+  const nameDisplay = name.length > 13 ? name.slice(0, 13) + '…' : name;
   const nameText = t(ctx);
   nameText.text = nameDisplay;
-  nameText.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(28, ctx), fill: 0xeeeeee, fontWeight: 'bold' };
-  nameText.anchor.set(0.5, 0);
-  nameText.x = L.cardNameCenterX ?? (L.cardWidth / 2);
-  nameText.y = L.cardNameY ?? 84;
+  nameText.style = {
+    fontFamily: 'system-ui',
+    fontSize: scaledFontSize(17, ctx),
+    fill: dragPal.nameColor,
+    fontWeight: 'bold',
+    dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.9 },
+  };
+  nameText.anchor.set(0.5, 0.5);
+  nameText.x = L.cardNameCenterX ?? (cardWidth / 2);
+  nameText.y = (L.cardNameY ?? 90) + 13;
   container.addChild(nameText);
 
   // Effect description
-  const effectDesc = ctx.getCardEffectDescription(cardId);
-  if (effectDesc) {
-    const fs = scaledFontSize(22, ctx);
+  if (dragEffectDesc) {
+    const fs = scaledFontSize(14, ctx);
     const effectText = t(ctx);
     const maxChars = L.cardDescriptionMaxChars ?? 0;
-    effectText.text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
+    effectText.text = maxChars > 0 && dragEffectDesc.length > maxChars ? dragEffectDesc.slice(0, maxChars - 1) + '…' : dragEffectDesc;
     effectText.style = {
       fontFamily: 'system-ui',
       fontSize: fs,
-      fill: 0xcccccc,
+      fill: dragPal.descColor,
       wordWrap: true,
       wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
-      lineHeight: Math.round(fs * 1.25),
+      lineHeight: Math.round(fs * 1.5),
+      align: 'center',
     };
-    effectText.x = L.cardDescriptionX ?? 24;
-    effectText.y = L.cardDescriptionY ?? (cardHeight - 120);
+    effectText.anchor.set(0.5, 0);
+    effectText.x = cardWidth / 2;
+    effectText.y = L.cardDescriptionY ?? 128;
     container.addChild(effectText);
   }
 
@@ -1925,6 +2103,9 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
     .fill({ color: 0x000000, alpha: 0.35 });
   container.addChild(shadow);
 
+  const buildEffectDesc = getCardEffectDescription(cardId);
+  const buildPal = getCardPalette(buildEffectDesc, true);
+
   const cardTex = getCardArtTexture(cardId);
   if (cardTex) {
     const cardSprite = new PIXI.Sprite(cardTex);
@@ -1934,8 +2115,7 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
     container.addChild(cardSprite);
   } else {
     const bg = new PIXI.Graphics();
-    bg.roundRect(0, 0, cardWidth, cardHeight, L.cardCornerRadius)
-      .fill({ color: 0x2a2a4a }).stroke({ width: 2, color: 0xe8c060 });
+    drawCardBody(bg, cardWidth, cardHeight, L.cardCornerRadius, buildPal);
     container.addChild(bg);
   }
 
@@ -1943,14 +2123,19 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
   const costRadius = L.costRadius;
   const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
   const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
-  const costColor = 0x88ff88;
   const costBg = new PIXI.Graphics();
-  costBg.circle(costCenterX, costCenterY, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
+  drawCostGem(costBg, costCenterX, costCenterY, costRadius, buildPal.costColor, buildPal.costBg);
   container.addChild(costBg);
-  const costFontSize = Math.round(32 * textScale);
+  const costFontSize = Math.round(28 * textScale);
   const costText = new PIXI.Text({
     text: String(cost),
-    style: { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor },
+    style: {
+      fontFamily: 'system-ui',
+      fontSize: costFontSize,
+      fill: buildPal.costColor,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.7 },
+    },
   });
   costText.anchor.set(0.5, 0.5);
   costText.x = costCenterX;
@@ -1958,34 +2143,41 @@ export function buildCardVisualsContainer(params: BuildCardVisualsParams): PIXI.
   container.addChild(costText);
 
   const name = getCardName(cardId);
-  const nameDisplay = name.length > 16 ? name.slice(0, 16) + '…' : name;
+  const nameDisplay = name.length > 13 ? name.slice(0, 13) + '…' : name;
   const nameText = new PIXI.Text({
     text: nameDisplay,
-    style: { fontFamily: 'system-ui', fontSize: Math.round(28 * textScale), fill: 0xeeeeee, fontWeight: 'bold' },
+    style: {
+      fontFamily: 'system-ui',
+      fontSize: Math.round(17 * textScale),
+      fill: buildPal.nameColor,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.9 },
+    },
   });
-  nameText.anchor.set(0.5, 0);
+  nameText.anchor.set(0.5, 0.5);
   nameText.x = L.cardNameCenterX ?? (cardWidth / 2);
-  nameText.y = L.cardNameY ?? 84;
+  nameText.y = (L.cardNameY ?? 90) + 13;
   container.addChild(nameText);
 
-  const effectDesc = getCardEffectDescription(cardId);
-  if (effectDesc) {
-    const fs = Math.round(22 * textScale);
+  if (buildEffectDesc) {
+    const fs = Math.round(14 * textScale);
     const maxChars = L.cardDescriptionMaxChars ?? 0;
-    const text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
+    const text = maxChars > 0 && buildEffectDesc.length > maxChars ? buildEffectDesc.slice(0, maxChars - 1) + '…' : buildEffectDesc;
     const effectText = new PIXI.Text({
       text,
       style: {
         fontFamily: 'system-ui',
         fontSize: fs,
-        fill: 0xcccccc,
+        fill: buildPal.descColor,
         wordWrap: true,
         wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
-        lineHeight: Math.round(fs * 1.25),
+        lineHeight: Math.round(fs * 1.5),
+        align: 'center',
       },
     });
-    effectText.x = L.cardDescriptionX ?? 24;
-    effectText.y = L.cardDescriptionY ?? (cardHeight - 120);
+    effectText.anchor.set(0.5, 0);
+    effectText.x = cardWidth / 2;
+    effectText.y = L.cardDescriptionY ?? 128;
     container.addChild(effectText);
   }
 
@@ -2012,7 +2204,150 @@ export function drawCombatView(context: CombatViewContext): void {
   drawFloatingNumbers(context);
   drawEnemyTurnBanner(context);
   drawImpactFlash(context);
+  drawDeckDiscardCounter(context);
   drawDebugLayout(context);
+}
+
+
+// ---------------------------------------------------------------------------
+// Deck / Discard counter (top-right, Slay the Spire style)
+// ---------------------------------------------------------------------------
+
+/**
+ * Draws mini card-stack icons for the draw pile and discard pile in the top-right corner.
+ * The draw pile is furthest right; the discard pile sits to its left.
+ */
+function drawDeckDiscardCounter(ctx: CombatViewContext): void {
+  const { state, stage, w, h } = ctx;
+  const deckCount    = state.deck?.length    ?? 0;
+  const discardCount = state.discard?.length ?? 0;
+
+  // ── Layout ──────────────────────────────────────────────────────────────
+  const padding   = L.padding + 8;
+  const cardW     = 44;
+  const cardH     = 60;
+  const gap       = 14;            // gap between draw pile and discard pile
+  const yTop      = (L.padding + 68); // top anchor for mini-card widget row
+  const labelSize = 11;
+  const countSize = 20;
+  const cr        = 6;             // corner radius for mini cards
+
+  // Draw pile at far right; discard to its left
+  const drawX    = w - padding - cardW;
+  const discardX = drawX - gap - cardW;
+  const cardTop  = yTop;
+
+  /** Draw one pile widget. stackOffset staggers the fanned cards behind. */
+  function drawPileWidget(
+    baseX: number,
+    count: number,
+    label: string,
+    frameColor: number,
+    badgeColor: number,
+    isDiscard: boolean,
+  ): void {
+    const container = c(ctx);
+    container.zIndex = 25;
+
+    // ── Stacked card silhouettes (depth effect, 2 cards behind) ──────────
+    const stackColors = [0x1a1330, 0x221a40];
+    for (let si = 0; si < 2; si++) {
+      const off = (si + 1) * 2;
+      const back = g(ctx);
+      back.roundRect(-off, off, cardW, cardH, cr)
+        .fill({ color: stackColors[si], alpha: 0.85 });
+      back.roundRect(-off, off, cardW, cardH, cr)
+        .stroke({ width: 1, color: frameColor, alpha: 0.35 });
+      container.addChild(back);
+    }
+
+    // ── Main card face ────────────────────────────────────────────────────
+    const face = g(ctx);
+    // Background
+    face.roundRect(0, 0, cardW, cardH, cr)
+      .fill({ color: 0x100c1e });
+    // Top accent strip
+    face.roundRect(0, 0, cardW, 5, cr)
+      .fill({ color: frameColor, alpha: 0.85 });
+    face.rect(0, cr, cardW, 3)
+      .fill({ color: frameColor, alpha: 0.85 });
+    // Card back pattern — crosshatch dots
+    for (let dx = 8; dx < cardW - 4; dx += 9) {
+      for (let dy = 10; dy < cardH - 8; dy += 9) {
+        face.circle(dx, dy, 0.8).fill({ color: frameColor, alpha: 0.22 });
+      }
+    }
+    // Centre ornament
+    const cx = cardW / 2;
+    const cy = cardH / 2 + 4;
+    face.circle(cx, cy, 10).fill({ color: frameColor, alpha: 0.1 });
+    face.circle(cx, cy, 10).stroke({ width: 1, color: frameColor, alpha: 0.3 });
+    face.circle(cx, cy, 5).fill({ color: frameColor, alpha: 0.18 });
+    // Discard pile gets a subtle diagonal slash across the centre
+    if (isDiscard) {
+      face.moveTo(cx - 7, cy - 7);
+      face.lineTo(cx + 7, cy + 7);
+      // Pixi Graphics uses stroke() call for lines - we use a thin rect instead
+      face.roundRect(cx - 6, cy - 1, 12, 2, 1).fill({ color: frameColor, alpha: 0.35 });
+    }
+    // Border: glow + crisp
+    face.roundRect(0, 0, cardW, cardH, cr)
+      .stroke({ width: 3, color: frameColor, alpha: 0.15 });
+    face.roundRect(0, 0, cardW, cardH, cr)
+      .stroke({ width: 1.5, color: frameColor, alpha: 0.9 });
+    container.addChild(face);
+
+    // ── Count badge (top-right corner of card) ────────────────────────────
+    const badgeR = 11;
+    const badgeX = cardW - 2;
+    const badgeY = -2;
+    const badge = g(ctx);
+    badge.circle(badgeX, badgeY, badgeR + 2).fill({ color: 0x000000, alpha: 0.5 });
+    badge.circle(badgeX, badgeY, badgeR).fill({ color: badgeColor });
+    badge.circle(badgeX, badgeY, badgeR).stroke({ width: 1.5, color: 0xffffff, alpha: 0.25 });
+    container.addChild(badge);
+
+    const countTxt = t(ctx);
+    countTxt.text = String(count);
+    countTxt.style = {
+      fontFamily: 'system-ui',
+      fontSize: countSize,
+      fill: 0xffffff,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000000, blur: 2, distance: 0, alpha: 0.8 },
+    };
+    countTxt.anchor.set(0.5, 0.5);
+    countTxt.x = badgeX;
+    countTxt.y = badgeY;
+    container.addChild(countTxt);
+
+    // ── Label below the card ──────────────────────────────────────────────
+    const labelTxt = t(ctx);
+    labelTxt.text = label;
+    labelTxt.style = {
+      fontFamily: 'system-ui',
+      fontSize: labelSize,
+      fill: frameColor,
+      fontWeight: 'bold',
+      letterSpacing: 0.5,
+    };
+    labelTxt.anchor.set(0.5, 0);
+    labelTxt.x = cardW / 2;
+    labelTxt.y = cardH + 5;
+    container.addChild(labelTxt);
+
+    // ── Empty-pile dimming ────────────────────────────────────────────────
+    container.alpha = count === 0 ? 0.38 : 1;
+
+    container.x = baseX;
+    container.y = cardTop;
+    stage.addChild(container);
+  }
+
+  // Draw pile — warm gold palette
+  drawPileWidget(drawX, deckCount, 'DRAW', 0xc8922a, 0x9a6e1a, false);
+  // Discard pile — muted silver/slate palette
+  drawPileWidget(discardX, discardCount, 'DISCARD', 0x7a8099, 0x3a4055, true);
 }
 
 function drawDebugLayout(ctx: CombatViewContext): void {

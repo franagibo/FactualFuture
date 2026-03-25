@@ -621,8 +621,7 @@ export class CombatAssetsService {
    */
   getCardArtTexture(cardId: string): PIXI.Texture | null {
     const tex = this.cardArtTextures.get(cardId);
-    if (tex) return tex;
-    return this.emptyCardTemplateTexture;
+    return tex ?? null;
   }
 
   /** Returns the current player character texture. For chibi/gungirl, uses idle animation frame from time; otherwise static/first frame. */

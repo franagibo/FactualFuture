@@ -431,8 +431,7 @@ export class MainMenuComponent implements OnInit {
       '/assets/UI/hp/BarV5_ProgressBarBorder.png',
       '/assets/UI/shield/BarV9_Bar.png',
       '/assets/UI/shield/BarV9_ProgressBar.png',
-      '/assets/UI/shield/BarV6_ProgressBarBorder.png',
-      '/assets/cards/empty_card.png',
+      '/assets/UI/shield/BarV6_ProgressBarBorder.png'
     ]).finally(() => {
       this.assetProgress = { ...this.assets.getProgress(), label: this.assets.getProgress().label ?? '' } as unknown as { loaded: number; total: number; label: string };
       this.cdr.markForCheck();

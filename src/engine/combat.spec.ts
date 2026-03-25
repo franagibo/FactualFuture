@@ -138,6 +138,14 @@ describe('combat', () => {
     expect(after.plants![0].growth).toBe(0);
   });
 
+  it('Verdant Machinist: seedling in attack mode deals end-turn damage', () => {
+    const state = createInitialState(cardsMap, enemyDefs, encountersMap, 'test');
+    state.characterId = 'verdant_machinist';
+    state.plants = [{ id: 'p0', hp: 9, maxHp: 9, block: 0, growth: 0, growthStage: 1, mode: 'attack', turnsAlive: 0 }];
+    const after = endTurn(state, cardsMap, enemyDefs);
+    expect(after.enemies[0].hp).toBe(18);
+  });
+
   it('Cultist: turn 1 ritual (Incantation), turn 2 attack uses gained strength', () => {
     const cultistDefs = loadEnemies([
       { id: 'cultist', name: 'Cultist', maxHp: 48, intents: [

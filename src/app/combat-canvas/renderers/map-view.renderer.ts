@@ -201,49 +201,40 @@ export function drawMapView(
     stage.addChild(bgSprite);
   } else {
     const bg = new PIXI.Graphics();
-    bg.rect(0, 0, w, mapH).fill({ color: 0x1a1822, alpha: bgAlpha });
+    bg.rect(0, 0, w, mapH).fill({ color: 0x120e08, alpha: bgAlpha });
     bg.zIndex = 0;
     stage.addChild(bg);
   }
 
-  const PAD_H = ML.rowPadH;
-  const PAD_V = ML.rowPadV;
-  const rowData: { left: number; right: number; y: number }[] = [];
-  for (let f = 0; f <= maxFloor; f++) {
-    const ids = floors[f] ?? [];
-    if (ids.length === 0) continue;
-    const xs = ids.map((id) => posById.get(id)!.x);
-    const ys = ids.map((id) => posById.get(id)!.y);
-    const left = Math.min(...xs) - PAD_H;
-    const right = Math.max(...xs) + PAD_H;
-    const y = ys.reduce((a, b) => a + b, 0) / ys.length;
-    rowData.push({ left, right, y });
-  }
-  if (rowData.length >= 2) {
-    rowData[0].y += PAD_V;
-    rowData[rowData.length - 1].y -= PAD_V;
+  {
+    // Full-size map frame: use all available map space instead of hugging node rows.
     const containerShape = new PIXI.Graphics();
-    const first = rowData[0];
-    containerShape.moveTo(first.left, first.y);
-    containerShape.lineTo(first.right, first.y);
-    for (let i = 1; i < rowData.length; i++) {
-      containerShape.lineTo(rowData[i].right, rowData[i].y);
-    }
-    const last = rowData[rowData.length - 1];
-    containerShape.lineTo(last.left, last.y);
-    for (let i = rowData.length - 2; i >= 0; i--) {
-      containerShape.lineTo(rowData[i].left, rowData[i].y);
-    }
     const shapeAlpha = ML.containerShapeAlpha ?? 0.9;
-    containerShape.fill({ color: 0x0c0a18, alpha: shapeAlpha });
-    containerShape.stroke({ width: 2, color: 0xb48cff, alpha: 0.45 });
+    const frameInset = 2;
+    const frameRadius = 14;
+    containerShape.roundRect(
+      frameInset,
+      frameInset,
+      Math.max(0, w - frameInset * 2),
+      Math.max(0, mapH - frameInset * 2),
+      frameRadius
+    );
+    containerShape.fill({ color: 0x120d06, alpha: shapeAlpha });
+    containerShape.roundRect(
+      frameInset,
+      frameInset,
+      Math.max(0, w - frameInset * 2),
+      Math.max(0, mapH - frameInset * 2),
+      frameRadius
+    );
+    containerShape.stroke({ width: 2, color: 0xc8a030, alpha: 0.48 });
     containerShape.zIndex = 1;
     stage.addChild(containerShape);
   }
 
-  const strokeColor = 0xaabccc;
-  const pathBorderColor = 0x080612;
-  const pathGlowColor = 0x5577aa;
+  const strokeColor = 0xd8be74;
+  const pathBorderColor = 0x120d05;
+  const pathGlowColor = 0xc8922a;
   const drawEdgePath = (g: PIXI.Graphics, lineWidth: number, color: number, alpha = 1) => {
     for (const [from, to] of edges) {
       const fromPos = posById.get(from);
@@ -368,7 +359,7 @@ export function drawMapView(
 
     if (nodeTex) {
       if (isCurrent || isAvailable) {
-        const glowColor = isCurrent ? 0x44aaff : 0xffdd44;
+        const glowColor = isCurrent ? 0xf4d98a : 0xe0b84c;
         const ringR = size / 2 + 8;
         for (let gi = 3; gi >= 1; gi--) {
           const haloGr = new PIXI.Graphics();
@@ -377,9 +368,9 @@ export function drawMapView(
         }
         const ring = new PIXI.Graphics();
         if (isCurrent) {
-          ring.circle(0, 0, ringR).stroke({ width: 4, color: 0x55aaff, alpha: 0.95 });
+          ring.circle(0, 0, ringR).stroke({ width: 4, color: 0xf4d98a, alpha: 0.95 });
         } else {
-          ring.circle(0, 0, ringR).stroke({ width: 3, color: 0xffdd44, alpha: 0.9 });
+          ring.circle(0, 0, ringR).stroke({ width: 3, color: 0xe0b84c, alpha: 0.9 });
         }
         container.addChildAt(ring, 0);
       }
@@ -394,7 +385,7 @@ export function drawMapView(
     } else {
       const cfg = nodeVisualCfg(n.type);
       const isBoss = n.type === 'boss';
-      const glowColor = isCurrent ? 0x55aaff : 0xffdd44;
+      const glowColor = isCurrent ? 0xf4d98a : 0xe0b84c;
       if (isCurrent || isAvailable) {
         for (let gi = 4; gi >= 1; gi--) {
           const haloGr = new PIXI.Graphics();
@@ -419,7 +410,7 @@ export function drawMapView(
       const sheenGr = new PIXI.Graphics();
       sheenGr.poly(hexPts(r - 9)).fill({ color: 0xffffff, alpha: 0.10 });
       container.addChild(sheenGr);
-      const borderColor = isCurrent ? 0x66bbff : (isAvailable ? 0xffdd44 : lightenHex(cfg.inner, 0.3));
+      const borderColor = isCurrent ? 0xf4d98a : (isAvailable ? 0xe0b84c : lightenHex(cfg.inner, 0.3));
       const borderWidth = (isCurrent || isAvailable) ? 3 : 1.5;
       const borderAlpha = (isCurrent || isAvailable) ? 1 : 0.65;
       const borderGr = new PIXI.Graphics();
@@ -430,7 +421,7 @@ export function drawMapView(
       container.addChild(innerBorderGr);
       if (isAvailable && !isCurrent) {
         const pulseGr = new PIXI.Graphics();
-        pulseGr.poly(hexPts(r + 3)).stroke({ width: 1.5, color: 0xffdd44, alpha: 0.35 });
+        pulseGr.poly(hexPts(r + 3)).stroke({ width: 1.5, color: 0xe0b84c, alpha: 0.35 });
         container.addChild(pulseGr);
       }
       const iconSize = isBoss ? Math.round(r * 1.05) : Math.round(r * 0.75);
@@ -448,7 +439,7 @@ export function drawMapView(
       container.addChild(iconText);
       if (isBoss) {
         const bossRingGr = new PIXI.Graphics();
-        bossRingGr.poly(hexPts(r + 4)).stroke({ width: 2, color: 0xcc44ff, alpha: 0.5 });
+        bossRingGr.poly(hexPts(r + 4)).stroke({ width: 2, color: 0xc8a030, alpha: 0.55 });
         container.addChild(bossRingGr);
       }
 
@@ -485,7 +476,7 @@ export function drawMapView(
       const boxH = labelText.height + padV * 2;
       const tooltipBg = new PIXI.Graphics();
       tooltipBg.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 7)
-        .fill({ color: 0x080614, alpha: 0.96 })
+        .fill({ color: 0x120d05, alpha: 0.96 })
         .stroke({ width: 1.5, color: lightenHex(cfg.inner, 0.15), alpha: 0.9 });
       tooltipContainer.addChild(tooltipBg);
       tooltipContainer.addChild(labelText);

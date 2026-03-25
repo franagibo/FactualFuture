@@ -253,33 +253,33 @@ export function runPlantTurnActions(state: GameState, rng: Rng = defaultRng): Ga
   for (let i = 0; i < plants.length; i++) {
     const p = plants[i];
     if (p.hp <= 0) continue;
-    if (p.growthStage >= 2) {
-      if (p.mode === 'attack') {
-        const aliveCountBonus = hasTalent(next, 'colonyInstinct') ? getAlivePlants(plants).length : 0;
-        const bonusAttack = p.bonusAttack ?? 0;
-        const dmg = PLANT_ATTACK_DAMAGE[p.growthStage as 2 | 3] + aliveCountBonus + bonusAttack;
-        const hits = p.growthStage === 3 ? PLANT_ATTACK_HITS_MATURE : 1;
-        const aliveEnemies = enemies.filter((e) => e.hp > 0);
-        for (let h = 0; h < hits && aliveEnemies.length > 0; h++) {
-          const idx = Math.floor(rng() * aliveEnemies.length);
-          const target = aliveEnemies[idx];
-          const ei = next.enemies.findIndex((e) => e.id === target.id);
-          if (ei >= 0) {
-            let remain = dmg;
-            if (target.block > 0) {
-              const blockReduce = Math.min(target.block, remain);
-              target.block -= blockReduce;
-              remain -= blockReduce;
-            }
-            if (remain > 0) target.hp = Math.max(0, target.hp - remain);
-            next = { ...next, enemies };
+    if (p.mode === 'attack') {
+      const aliveCountBonus = hasTalent(next, 'colonyInstinct') ? getAlivePlants(plants).length : 0;
+      const bonusAttack = p.bonusAttack ?? 0;
+      const dmg = PLANT_ATTACK_DAMAGE[p.growthStage] + aliveCountBonus + bonusAttack;
+      const hits = p.growthStage === 3 ? PLANT_ATTACK_HITS_MATURE : 1;
+      const aliveEnemies = enemies.filter((e) => e.hp > 0);
+      for (let h = 0; h < hits && aliveEnemies.length > 0; h++) {
+        const idx = Math.floor(rng() * aliveEnemies.length);
+        const target = aliveEnemies[idx];
+        const ei = next.enemies.findIndex((e) => e.id === target.id);
+        if (ei >= 0) {
+          let remain = dmg;
+          if (target.block > 0) {
+            const blockReduce = Math.min(target.block, remain);
+            target.block -= blockReduce;
+            remain -= blockReduce;
           }
-          // refresh alive list for next hit
-          aliveEnemies.length = 0;
-          enemies.forEach((e) => e.hp > 0 && aliveEnemies.push(e));
+          if (remain > 0) target.hp = Math.max(0, target.hp - remain);
+          next = { ...next, enemies };
         }
-        if (bonusAttack > 0) plants[i] = { ...plants[i], bonusAttack: 0 };
+        // refresh alive list for next hit
+        aliveEnemies.length = 0;
+        enemies.forEach((e) => e.hp > 0 && aliveEnemies.push(e));
       }
+      if (bonusAttack > 0) plants[i] = { ...plants[i], bonusAttack: 0 };
+    }
+    if (p.growthStage >= 2) {
       if (p.mode === 'defense') {
         next = { ...next, playerBlock: next.playerBlock + PLANT_DEFENSE_PLAYER_BLOCK[p.growthStage as 2 | 3] };
         const plantBlock = PLANT_DEFENSE_PLANT_BLOCK[p.growthStage as 2 | 3];

@@ -13,8 +13,9 @@ export const PLANT_HP_BY_STAGE: Record<1 | 2 | 3, number> = {
   3: 13,
 };
 
-/** End-of-turn: Attack mode damage by stage (Sprout, Mature). Seedling has no ability. */
-export const PLANT_ATTACK_DAMAGE: Record<2 | 3, number> = {
+/** End-of-turn: Attack mode damage by stage (Seedling, Sprout, Mature). */
+export const PLANT_ATTACK_DAMAGE: Record<1 | 2 | 3, number> = {
+  1: 2,
   2: 4,
   3: 6,
 };

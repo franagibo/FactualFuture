@@ -49,12 +49,12 @@ export const COMBAT_LAYOUT = {
   padding: 20,
   costRadius: 20,
   shadowOffset: 12,
-  cardCornerRadius: 12,
+  cardCornerRadius: 8,
   enemyCornerRadius: 10,
   /** Neon border when card is hovered (Slay the Spire style). */
-  neonBorderHoverColor: 0xbb88ff,
+  neonBorderHoverColor: 0xc8922a,
   neonBorderHoverWidths: [14, 7, 2],
-  neonBorderHoverAlphas: [0.22, 0.55, 1.0],
+  neonBorderHoverAlphas: [0.24, 0.58, 1.0],
   /** Horizontal inset (px each side) so neon border width matches card frame; height unchanged. */
   neonBorderWidthInset: 0,
   /** Larger, different color when card is selected (ready to play/drop). */
