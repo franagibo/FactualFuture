@@ -43,11 +43,19 @@ function writeSave(filename, data) {
 }
 
 const SETTINGS_FILE = 'settings.json';
+const DEFAULT_WINDOW_WIDTH = 1920;
+const DEFAULT_WINDOW_HEIGHT = 1080;
+const MIN_WINDOW_WIDTH = 1280;
+const MIN_WINDOW_HEIGHT = 720;
 
 function getSettings() {
   const data = readSave(SETTINGS_FILE);
+  const windowWidth = typeof data?.windowWidth === 'number' ? Math.max(MIN_WINDOW_WIDTH, data.windowWidth | 0) : DEFAULT_WINDOW_WIDTH;
+  const windowHeight = typeof data?.windowHeight === 'number' ? Math.max(MIN_WINDOW_HEIGHT, data.windowHeight | 0) : DEFAULT_WINDOW_HEIGHT;
   return {
     fullscreen: data?.fullscreen !== false,
+    windowWidth,
+    windowHeight,
     ...data,
   };
 }
@@ -55,10 +63,10 @@ function getSettings() {
 function createWindow() {
   const settings = getSettings();
   const win = new BrowserWindow({
-    width: 1920,
-    height: 1080,
-    minWidth: 1280,
-    minHeight: 720,
+    width: settings.windowWidth,
+    height: settings.windowHeight,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     fullscreen: settings.fullscreen,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -84,7 +92,11 @@ function createWindow() {
   ipcMain.handle('getSteamId', () => steamId);
   ipcMain.handle('setWindowSize', (_event, width, height) => {
     if (typeof width === 'number' && typeof height === 'number') {
-      win.setSize(Math.max(800, width), Math.max(600, height));
+      const w = Math.max(MIN_WINDOW_WIDTH, width | 0);
+      const h = Math.max(MIN_WINDOW_HEIGHT, height | 0);
+      win.setSize(w, h);
+      const current = readSave(SETTINGS_FILE) || {};
+      writeSave(SETTINGS_FILE, { ...current, windowWidth: w, windowHeight: h });
     }
   });
   ipcMain.handle('getSettings', () => getSettings());

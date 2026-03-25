@@ -263,9 +263,10 @@
             <div class="settings-row">
               <label class="settings-label">Resolution</label>
               <div class="settings-options settings-options-wrap">
-                <button type="button" class="settings-opt-btn" (click)="setResolution(1920, 1080)">1920 × 1080</button>
-                <button type="button" class="settings-opt-btn" (click)="setResolution(1600, 900)">1600 × 900</button>
-                <button type="button" class="settings-opt-btn" (click)="setResolution(1280, 720)">1280 × 720</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(2560, 1440)" (click)="setResolution(2560, 1440)">2560 × 1440</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1920, 1080)" (click)="setResolution(1920, 1080)">1920 × 1080</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1600, 900)" (click)="setResolution(1600, 900)">1600 × 900</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1280, 720)" (click)="setResolution(1280, 720)">1280 × 720</button>
               </div>
             </div>
           </section>

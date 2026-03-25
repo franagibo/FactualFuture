@@ -74,6 +74,33 @@ const cardsMap = new Map<string, CardDef>([
       ],
     },
   ],
+  [
+    'seed_pod',
+    {
+      id: 'seed_pod',
+      name: 'Seed Pod',
+      cost: 1,
+      effects: [{ type: 'summon_plant', value: 9 }],
+    },
+  ],
+  [
+    'transfer',
+    {
+      id: 'transfer',
+      name: 'Transfer',
+      cost: 1,
+      effects: [{ type: 'blockToPlant', value: 10, target: 'plant' }],
+    },
+  ],
+  [
+    'sac',
+    {
+      id: 'sac',
+      name: 'Sac',
+      cost: 1,
+      effects: [{ type: 'sacrifice_plant', value: 0, target: 'plant' }],
+    },
+  ],
 ]);
 
 describe('effectRunner', () => {
@@ -122,5 +149,46 @@ describe('effectRunner', () => {
     const after = drawCards(state, 2);
     expect(after.hand.length).toBe(2);
     expect(after.deck.length).toBe(1);
+  });
+
+  it('Quick Germination gives first summon +1 growth', () => {
+    const state = minimalState({
+      characterId: 'verdant_machinist',
+      plants: [],
+      talentTreeId: 'verdant_machinist',
+      talentsSelected: ['quickGermination'],
+      talentQuickGerminationUsedCombat: false,
+    });
+    const after = runEffects(cardsMap.get('seed_pod')!, state, null, cardsMap);
+    expect(after.plants?.[0].growth).toBe(1);
+    expect(after.talentQuickGerminationUsedCombat).toBe(true);
+  });
+
+  it('Rooted Bulwark increases blockToPlant by 20%', () => {
+    const state = minimalState({
+      characterId: 'verdant_machinist',
+      plants: [{ id: 'p0', hp: 9, maxHp: 9, block: 0, growth: 0, growthStage: 1, mode: 'defense', turnsAlive: 0 }],
+      talentTreeId: 'verdant_machinist',
+      talentsSelected: ['rootedBulwark'],
+    });
+    const after = runEffects(cardsMap.get('transfer')!, state, null, cardsMap);
+    expect(after.plants?.[0].block).toBe(12);
+  });
+
+  it('Cannibal Reactor and Apex Protocol trigger on sacrifice', () => {
+    const state = minimalState({
+      characterId: 'verdant_machinist',
+      turnNumber: 2,
+      plants: [{ id: 'p0', hp: 9, maxHp: 9, block: 0, growth: 0, growthStage: 3, mode: 'attack', turnsAlive: 0 }],
+      deck: [],
+      talentTreeId: 'verdant_machinist',
+      talentsSelected: ['cannibalReactor', 'apexProtocol', 'toxicRecursion'],
+      talentEnergyNextTurn: 0,
+      talentApexProtocolCharges: 0,
+    });
+    const after = runEffects(cardsMap.get('sac')!, state, null, cardsMap);
+    expect(after.talentEnergyNextTurn).toBe(1);
+    expect(after.talentApexProtocolCharges).toBe(1);
+    expect(after.deck.includes('thorn_jab')).toBe(true);
   });
 });

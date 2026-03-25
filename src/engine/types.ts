@@ -108,6 +108,29 @@ export interface PlantState {
   growthStage: 1 | 2 | 3;
   mode: PlantMode;
   turnsAlive: number;
+  /** Temporary attack bonus granted by support synergies; consumed by plant attacks. */
+  bonusAttack?: number;
+}
+
+export interface TalentNodeDef {
+  id: string;
+  name: string;
+  description: string;
+  tier: number;
+  branch: 'seed_swarm' | 'ironbloom_bastion' | 'overclocked_bloom' | 'utility';
+  requires?: string[];
+  /** Alternative prerequisites: at least one of these must be selected. */
+  requiresAny?: string[];
+  minSpent?: number;
+  keystone?: boolean;
+  /** WoW-like choice rows: only one node can be selected per group. */
+  exclusiveGroup?: string;
+}
+
+export interface TalentTreeDef {
+  id: string;
+  characterId: string;
+  nodes: TalentNodeDef[];
 }
 
 export interface GameState {
@@ -186,6 +209,30 @@ export interface GameState {
   _simRng?: () => number;
   /** Verdant Machinist: up to 3 plant minions. Present only when character uses plant mechanic. */
   plants?: PlantState[];
+  /** Talent points currently available to spend this run. */
+  talentPoints?: number;
+  /** Selected talent IDs for this run. */
+  talentsSelected?: string[];
+  /** Talent tree id used by this character in this run. */
+  talentTreeId?: string;
+  /** Guard to avoid awarding the Act 1 boss bonus point more than once. */
+  talentAct1BossBonusGranted?: boolean;
+  /** Next-turn energy from talents (e.g. Cannibal Reactor). */
+  talentEnergyNextTurn?: number;
+  /** Turn marker for once-per-turn Cannibal Reactor award. */
+  talentCannibalAwardTurn?: number;
+  /** Current-turn marker for Predatory Roots first-attack trigger. */
+  talentPredatoryRootsTurn?: number;
+  /** Current-turn marker for Citadel Grove save trigger. */
+  talentCitadelGroveTurn?: number;
+  /** Current turn where a plant evolved; used by Adaptive Canopy. */
+  talentEvolvedTurn?: number;
+  /** Number of pending Apex Protocol duplicate charges. */
+  talentApexProtocolCharges?: number;
+  /** Seed Archive discount usage flag (first plant card each combat). */
+  talentSeedArchiveUsedCombat?: boolean;
+  /** Quick Germination usage flag (first summon each combat). */
+  talentQuickGerminationUsedCombat?: boolean;
 }
 
 /** Meta progression (unlocks) and run statistics, stored separately from run. */

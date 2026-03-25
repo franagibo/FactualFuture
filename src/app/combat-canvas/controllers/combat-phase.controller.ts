@@ -24,6 +24,7 @@ export interface CombatPhaseHost {
     getCardArtTexture: (id: string) => PIXI.Texture | null;
     getPlayerTexture: (now: number) => PIXI.Texture | null;
     getEnemyTexture: (id: string) => PIXI.Texture | null;
+    getEnemyAnimationTextureById: (enemyId: string, nowMs: number) => PIXI.Texture | null;
     getEnemyAnimationTexture: (variant: number, animation: 'idle' | 'hurt' | 'dying', nowMs: number, startMs?: number) => PIXI.Texture | null;
     getCombatBgTexture: () => PIXI.Texture | null;
     getHpIconTexture: () => PIXI.Texture | null;
@@ -258,6 +259,8 @@ export class CombatPhaseController {
         enemyDyingStartMs: c.enemyDyingStartMs,
         getEnemyAnimationTexture: (variant, animation, nowMs, startMs) =>
           assets.getEnemyAnimationTexture(variant, animation, nowMs, startMs),
+        getEnemyAnimationTextureById: (enemyId, nowMs) =>
+          assets.getEnemyAnimationTextureById(enemyId, nowMs),
         getEnemyTexture: (id) => assets.getEnemyTexture(id),
         hoveredEnemyIndex: c.hoveredEnemyIndex,
         onEnemySpriteCreated: (i, s) => { c.enemySpriteRefs[i] = s; },
@@ -302,6 +305,8 @@ export class CombatPhaseController {
       getShieldBarBorderTexture: () => assets.getShieldBarBorderTexture(),
       getPlayerTexture: () => assets.getPlayerTexture(performance.now()),
       getEnemyTexture: (id) => assets.getEnemyTexture(id),
+      getEnemyAnimationTextureById: (enemyId, nowMs) =>
+        assets.getEnemyAnimationTextureById(enemyId, nowMs),
       enemyVariants: c.enemyVariants,
       enemyHurtStartMs: c.enemyHurtStartMs,
       enemyDyingStartMs: c.enemyDyingStartMs,

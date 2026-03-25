@@ -28,6 +28,8 @@ export class SettingsModalComponent implements OnInit {
   activeCategory: SettingsCategory = 'audio';
 
   fullscreen = true;
+  selectedResolutionWidth = 1920;
+  selectedResolutionHeight = 1080;
 
   private _electronChecked = false;
 
@@ -62,9 +64,13 @@ export class SettingsModalComponent implements OnInit {
   setCategory(cat: SettingsCategory): void {
     this.activeCategory = cat;
     if (cat === 'display' && this.isElectron()) {
-      const api = (window as unknown as { electronAPI?: { getSettings?: () => Promise<{ fullscreen?: boolean }> } }).electronAPI;
+      const api = (window as unknown as {
+        electronAPI?: { getSettings?: () => Promise<{ fullscreen?: boolean; windowWidth?: number; windowHeight?: number }> }
+      }).electronAPI;
       api?.getSettings?.().then((s) => {
         this.fullscreen = s?.fullscreen !== false;
+        this.selectedResolutionWidth = Number.isFinite(s?.windowWidth) ? Math.max(1280, (s?.windowWidth as number) | 0) : 1920;
+        this.selectedResolutionHeight = Number.isFinite(s?.windowHeight) ? Math.max(720, (s?.windowHeight as number) | 0) : 1080;
         this.cdr.markForCheck();
       });
     }
@@ -105,7 +111,13 @@ export class SettingsModalComponent implements OnInit {
   setResolution(width: number, height: number): void {
     const api = (window as unknown as { electronAPI?: { setWindowSize?: (w: number, h: number) => void } }).electronAPI;
     if (api?.setWindowSize) api.setWindowSize(width | 0, height | 0);
+    this.selectedResolutionWidth = width | 0;
+    this.selectedResolutionHeight = height | 0;
     this.cdr.markForCheck();
+  }
+
+  isResolutionActive(width: number, height: number): boolean {
+    return this.selectedResolutionWidth === width && this.selectedResolutionHeight === height;
   }
 
   get musicVolumePercent(): number {

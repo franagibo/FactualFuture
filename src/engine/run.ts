@@ -72,6 +72,14 @@ export function startRun(
     lastMonsterEncounterIds: [],
     characterId: options?.characterId,
     seed,
+    talentPoints: 0,
+    talentsSelected: [],
+    talentTreeId: options?.characterId === 'verdant_machinist' ? 'verdant_machinist' : undefined,
+    talentAct1BossBonusGranted: false,
+    talentEnergyNextTurn: 0,
+    talentApexProtocolCharges: 0,
+    talentSeedArchiveUsedCombat: false,
+    talentQuickGerminationUsedCombat: false,
   };
 }
 
@@ -303,6 +311,16 @@ export function getRunPhaseAfterBossWin(state: GameState): RunPhase {
   return act >= MAX_ACT ? 'victory' : 'actComplete';
 }
 
+/** Grants one bonus talent point on the first Act 1 boss victory. */
+export function grantAct1BossTalentBonus(state: GameState): GameState {
+  if ((state.act ?? 1) !== 1 || state.talentAct1BossBonusGranted) return state;
+  return {
+    ...state,
+    talentPoints: (state.talentPoints ?? 0) + 1,
+    talentAct1BossBonusGranted: true,
+  };
+}
+
 /** Advance to next act: new map, act++, runPhase map, currentNodeId null. */
 export function advanceToNextAct(
   state: GameState,
@@ -380,6 +398,7 @@ export function chooseNode(
     ...state,
     currentNodeId: nodeId,
     floor: (state.floor ?? 0) + 1,
+    talentPoints: (state.talentPoints ?? 0) + ((state.act ?? 1) === 1 ? 1 : 0),
   };
 
   switch (node.type) {

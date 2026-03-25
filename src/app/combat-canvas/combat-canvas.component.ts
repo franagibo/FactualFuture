@@ -20,6 +20,7 @@ import { MapAssetsService } from '../services/map-assets.service';
 import { SoundService } from '../services/sound.service';
 import { RunPhaseMachineService } from '../services/run-phase-machine.service';
 import type { GameState, RunPhase, MapNodeType } from '../../engine/types';
+import type { TalentTreeDef, TalentNodeDef } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import * as PIXI from 'pixi.js';
 import { COMBAT_LAYOUT, getEnemyCenter, getEnemyIndexAtPoint, getPlayerCenter } from './constants/combat-layout.constants';
@@ -88,6 +89,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   shopStateSignal = signal<GameState['shopState']>(undefined);
   eventStateSignal = signal<GameState['eventState']>(undefined);
   restRemovableCardsSignal = signal<string[]>([]);
+  talentPointsSignal = signal(0);
+  selectedTalentsSignal = signal<string[]>([]);
   /** Short-lived feedback message (e.g. "New card: Overdrive") shown in overlay. */
   feedbackMessage = signal<string | null>(null);
   /** When set, reward panel shows chosen state before transitioning; used for micro-animation. */
@@ -139,6 +142,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private lastContentWasCombat = false;
   showPauseMenu = false;
   showPauseSettings = false;
+  showTalentTree = false;
+  talentSelectionMessage = signal<string | null>(null);
 
   /** Combat state is on CombatPhaseController; expose for template. */
   get cardInteractionState(): 'idle' | 'hover' | 'pressed' | 'dragging' | 'playing' | 'returning' {
@@ -194,10 +199,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.shopStateSignal.set(state.shopState);
     this.eventStateSignal.set(state.eventState);
     this.restRemovableCardsSignal.set(this._runPhase === 'rest' ? Array.from(new Set(state.deck ?? [])) : []);
+    this.talentPointsSignal.set(this.bridge.getTalentPoints());
+    this.selectedTalentsSignal.set(this.bridge.getSelectedTalents());
   }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.showTalentTree) {
+      this.closeTalentTree();
+      return;
+    }
     if (this.showPauseSettings) {
       this.closePauseSettings();
       return;
@@ -241,6 +252,172 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.showPauseMenu = true;
     this.showPauseSettings = true;
     this.requestTemplateUpdate();
+  }
+
+  openTalentTree(): void {
+    this.showTalentTree = true;
+    this.talentSelectionMessage.set(null);
+    this.requestTemplateUpdate();
+  }
+
+  closeTalentTree(): void {
+    this.showTalentTree = false;
+    this.talentSelectionMessage.set(null);
+    this.requestTemplateUpdate();
+  }
+
+  getTalentTree(): TalentTreeDef | null {
+    return this.bridge.getTalentTreeForCurrentCharacter();
+  }
+
+  getTalentPoints(): number {
+    return this.talentPointsSignal();
+  }
+
+  private readonly talentTreeRows = 5;
+  /**
+   * Static display layout so the modal renders as one connected tree
+   * instead of separate branch sections.
+   */
+  private readonly talentNodeLayout: Record<string, { x: number; y: number }> = {
+    // Entry layer (bottom)
+    sproutingSockets: { x: 12, y: 88 },
+    quickGermination: { x: 24, y: 88 },
+    barkPlating: { x: 36, y: 88 },
+    rootedBulwark: { x: 48, y: 88 },
+    volatileSap: { x: 62, y: 88 },
+    predatoryRoots: { x: 76, y: 88 },
+
+    // Mid layer
+    colonyInstinct: { x: 24, y: 70 },
+    symbioticAegis: { x: 44, y: 70 },
+    adaptiveCanopy: { x: 56, y: 70 },
+    cannibalReactor: { x: 68, y: 70 },
+
+    // Higher layer
+    sporeMomentum: { x: 24, y: 52 },
+    mycorrhizalNetwork: { x: 40, y: 52 },
+    photosyntheticRepair: { x: 52, y: 52 },
+    toxicRecursion: { x: 68, y: 52 },
+
+    // Keystone gateway
+    seedArchive: { x: 46, y: 34 },
+
+    // Keystones (top)
+    verdantLegion: { x: 28, y: 14 },
+    citadelGrove: { x: 46, y: 14 },
+    apexProtocol: { x: 64, y: 14 },
+  };
+
+  getTalentNodesForSingleTree(): (TalentNodeDef & { x: number; y: number })[] {
+    const tree = this.getTalentTree();
+    if (!tree) return [];
+    return tree.nodes
+      .map((node) => {
+        const pos = this.talentNodeLayout[node.id] ?? { x: 50, y: this.getTalentTierFallbackY(node.tier) };
+        return { ...node, x: pos.x, y: pos.y };
+      })
+      .sort((a, b) => a.y - b.y || a.x - b.x || a.name.localeCompare(b.name));
+  }
+
+  getTalentRequiresHint(talent: TalentNodeDef): string {
+    const hasAll = (talent.requires?.length ?? 0) > 0;
+    const hasAny = (talent.requiresAny?.length ?? 0) > 0;
+    if (hasAll && hasAny) return 'Requires all + one linked';
+    if (hasAll) return 'Requires all';
+    if (hasAny) return 'Requires one linked';
+    return '';
+  }
+
+  isTalentSelected(talentId: string): boolean {
+    return this.selectedTalentsSignal().includes(talentId);
+  }
+
+  canSelectTalentInUi(talentId: string): boolean {
+    return this.bridge.canSelectTalent(talentId).ok;
+  }
+
+  getTalentReason(talentId: string): string {
+    const res = this.bridge.canSelectTalent(talentId);
+    return res.reason ?? '';
+  }
+
+  getTalentNodeState(talentId: string): 'selected' | 'available' | 'locked' {
+    if (this.isTalentSelected(talentId)) return 'selected';
+    return this.canSelectTalentInUi(talentId) ? 'available' : 'locked';
+  }
+
+  getTalentRequiresLabel(talent: TalentNodeDef): string {
+    const allReqIds = [...(talent.requires ?? []), ...(talent.requiresAny ?? [])];
+    if (!allReqIds.length) return '';
+    const tree = this.getTalentTree();
+    if (!tree) return '';
+    const names = allReqIds
+      .map((id) => tree.nodes.find((n) => n.id === id)?.name ?? id)
+      .filter((v, i, arr) => arr.indexOf(v) === i);
+    return names.join(' / ');
+  }
+
+  getTalentEdgePaths(): {
+    id: string;
+    path: string;
+    active: boolean;
+    branch: TalentNodeDef['branch'];
+  }[] {
+    const tree = this.getTalentTree();
+    if (!tree) return [];
+    const edges: { id: string; path: string; active: boolean; branch: TalentNodeDef['branch'] }[] = [];
+    const selected = this.selectedTalentsSignal();
+
+    const nodeById = new Map(this.getTalentNodesForSingleTree().map((n) => [n.id, n]));
+    for (const node of tree.nodes) {
+      const requires = [...(node.requires ?? []), ...(node.requiresAny ?? [])];
+      for (const req of requires) {
+        const from = nodeById.get(req);
+        const to = nodeById.get(node.id);
+        if (!from || !to) continue;
+        const x1 = from.x;
+        const y1 = from.y;
+        const x2 = to.x;
+        const y2 = to.y;
+        const dy = y2 - y1;
+        const shoulder = Math.max(4, Math.min(11, Math.abs(dy) * 0.45));
+        const direction = dy >= 0 ? 1 : -1;
+        const c1y = y1 + direction * shoulder;
+        const c2y = y2 - direction * shoulder;
+        const isTrunk = Math.abs(x2 - x1) < 0.01;
+        const path = isTrunk
+          ? `M ${x1} ${y1} L ${x2} ${y2}`
+          : `M ${x1} ${y1} C ${x1} ${c1y}, ${x2} ${c2y}, ${x2} ${y2}`;
+        const branch = node.branch === 'utility' ? from.branch : node.branch;
+        edges.push({
+          id: `${req}->${node.id}`,
+          path,
+          active: selected.includes(req) && selected.includes(node.id),
+          branch,
+        });
+      }
+    }
+    return edges;
+  }
+
+  private getTalentTierFallbackY(tier: number): number {
+    const clamped = Math.max(1, Math.min(this.talentTreeRows, tier));
+    const normalized = (clamped - 1) / Math.max(1, this.talentTreeRows - 1);
+    return 88 - normalized * 74;
+  }
+
+  onSelectTalent(talentId: string): void {
+    const res = this.bridge.selectTalent(talentId);
+    if (!res.ok) {
+      this.talentSelectionMessage.set(res.reason ?? 'Could not select talent.');
+      this.requestTemplateUpdate();
+      return;
+    }
+    this.talentSelectionMessage.set('Talent selected.');
+    this.syncOverlaySignals(this.bridge.getState());
+    this.requestTemplateUpdate();
+    this.redraw();
   }
 
   closePauseSettings(): void {
@@ -316,6 +493,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         getCardArtTexture: (id) => this.combatAssets.getCardArtTexture(id),
         getPlayerTexture: (now) => this.combatAssets.getPlayerTexture(now),
         getEnemyTexture: (id) => this.combatAssets.getEnemyTexture(id),
+        getEnemyAnimationTextureById: (enemyId, nowMs) =>
+          this.combatAssets.getEnemyAnimationTextureById(enemyId, nowMs),
         getEnemyAnimationTexture: (v, a, n, s) => this.combatAssets.getEnemyAnimationTexture(v as 1 | 2 | 3, a, n, s),
         getCombatBgTexture: () => this.combatAssets.getCombatBgTexture(),
         getHpIconTexture: () => this.combatAssets.getHpIconTexture(),
@@ -1101,6 +1280,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       const sprite = this.combatController.enemySpriteRefs[i];
       if (!sprite || !enemies[i]) continue;
       const e = enemies[i];
+      const specificTex = this.combatAssets.getEnemyAnimationTextureById(e.id, now);
+      if (specificTex) {
+        sprite.texture = specificTex;
+        continue;
+      }
       const variant = this.combatController.enemyVariants[i];
       if (variant != null && (variant === 1 || variant === 2 || variant === 3)) {
         const dyingStart = this.combatController.enemyDyingStartMs[i];

@@ -12,6 +12,7 @@ import {
   evolvePlant,
   getAlivePlants,
 } from './plantConfig';
+import { getMaxPlants, hasTalent } from './talents';
 
 function isAttackCard(cardId: string, cardsMap: Map<string, CardDef>): boolean {
   const def = cardsMap.get(cardId);
@@ -20,7 +21,8 @@ function isAttackCard(cardId: string, cardsMap: Map<string, CardDef>): boolean {
 }
 
 export function drawOne(state: GameState): GameState {
-  if (state.hand.length >= 10) return state; // max hand size
+  const handCap = hasTalent(state, 'adaptiveCanopy') && state.talentEvolvedTurn === state.turnNumber ? 11 : 10;
+  if (state.hand.length >= handCap) return state; // max hand size
   const rng = state._simRng ?? defaultRng;
   let deck = [...state.deck];
   let discard = [...state.discard];
@@ -49,6 +51,12 @@ export function runEffects(
   const exhaustPile = () => next.exhaustPile ?? [];
 
   const applyDamageToEnemy = (enemy: EnemyState, dmg: number, addStrength = true): void => {
+    const sacrificeDamageBoost =
+      hasTalent(next, 'volatileSap') &&
+      card.effects.some((e) => e.type === 'sacrifice_plant')
+        ? 1.25
+        : 1;
+    dmg = Math.ceil(dmg * sacrificeDamageBoost);
     let total = dmg + (addStrength ? (next.strengthStacks ?? 0) : 0);
      // Player Weak reduces the player's outgoing attack damage by 25% (STS: flat 0.75, floor).
      if ((next.playerWeakStacks ?? 0) > 0) total = Math.floor(total * 0.75);
@@ -124,6 +132,25 @@ export function runEffects(
           let blockGain = effect.value;
           if ((next.frailStacks ?? 0) > 0) blockGain = Math.floor(blockGain * 0.75);
           next = { ...next, playerBlock: next.playerBlock + blockGain };
+          if (hasTalent(next, 'symbioticAegis') && next.plants?.length) {
+            const mirror = Math.max(0, Math.floor(blockGain * 0.5));
+            if (mirror > 0) {
+              let minHp = Infinity;
+              let lowestIdx = -1;
+              next.plants.forEach((p, i) => {
+                if (p.hp > 0 && p.hp < minHp) {
+                  minHp = p.hp;
+                  lowestIdx = i;
+                }
+              });
+              if (lowestIdx >= 0) {
+                const mirroredPlants = next.plants.map((p, i) =>
+                  i === lowestIdx ? { ...p, block: (p.block ?? 0) + mirror } : p
+                );
+                next = { ...next, plants: mirroredPlants };
+              }
+            }
+          }
         }
         break;
       case 'doubleBlock':
@@ -239,11 +266,20 @@ export function runEffects(
         if (effect.cardId) next = { ...next, discard: [...next.discard, effect.cardId] };
         break;
       case 'summon_plant': {
-        if (!isPlantCharacter(next.characterId) || (next.plants?.length ?? 0) >= MAX_PLANTS) break;
+        const maxPlants = getMaxPlants(next, MAX_PLANTS);
+        if (!isPlantCharacter(next.characterId) || (next.plants?.length ?? 0) >= maxPlants) break;
         const hp = effect.value > 0 ? effect.value : SEEDLING_DEFAULT_HP;
         const plantId = `plant_${next.plants?.length ?? 0}`;
         const seedling = createSeedling(plantId, hp, (effect as { mode?: 'defense' | 'attack' | 'support' }).mode ?? 'defense');
-        next = { ...next, plants: [...(next.plants ?? []), seedling] };
+        let summoned = seedling;
+        if (hasTalent(next, 'quickGermination') && !next.talentQuickGerminationUsedCombat) {
+          summoned = { ...summoned, growth: 1 };
+          next = { ...next, talentQuickGerminationUsedCombat: true };
+        }
+        if (hasTalent(next, 'barkPlating')) {
+          summoned = { ...summoned, block: (summoned.block ?? 0) + 4 };
+        }
+        next = { ...next, plants: [...(next.plants ?? []), summoned] };
         break;
       }
       case 'grow_plant': {
@@ -261,6 +297,7 @@ export function runEffects(
         for (const i of indices) {
           const p = next.plants![i];
           if (p.hp <= 0) continue;
+          let evolved = false;
           let growth = p.growth + amount;
           let stage = p.growthStage;
           let maxHp = p.maxHp;
@@ -268,11 +305,15 @@ export function runEffects(
             growth -= GROWTH_TO_EVOLVE;
             stage = (stage + 1) as 1 | 2 | 3;
             maxHp = PLANT_HP_BY_STAGE[stage];
+            evolved = true;
           }
           const updated = { ...p, growth, growthStage: stage, maxHp, hp: Math.min(p.hp, maxHp) };
           const newPlants = [...next.plants!];
           newPlants[i] = updated;
-          next = { ...next, plants: newPlants };
+          next = { ...next, plants: newPlants, talentEvolvedTurn: evolved ? next.turnNumber : next.talentEvolvedTurn };
+          if (evolved && hasTalent(next, 'sporeMomentum')) {
+            next = drawOne(next);
+          }
         }
         break;
       }
@@ -304,8 +345,28 @@ export function runEffects(
           idx = next.plants.findIndex((p) => p.hp > 0);
         }
         if (idx < 0) break;
+        const sacrificed = next.plants[idx];
         const newPlants = next.plants.filter((_, i) => i !== idx);
-        next = { ...next, plants: newPlants.length ? newPlants : undefined };
+        let talentEnergyNextTurn = next.talentEnergyNextTurn ?? 0;
+        let talentCannibalAwardTurn = next.talentCannibalAwardTurn;
+        if (hasTalent(next, 'cannibalReactor') && talentCannibalAwardTurn !== next.turnNumber) {
+          talentEnergyNextTurn += 1;
+          talentCannibalAwardTurn = next.turnNumber;
+        }
+        let deck = next.deck;
+        if (hasTalent(next, 'toxicRecursion') && sacrificed.growthStage >= 3) {
+          deck = [...deck, 'thorn_jab'];
+        }
+        next = {
+          ...next,
+          plants: newPlants.length ? newPlants : undefined,
+          deck,
+          talentEnergyNextTurn,
+          talentCannibalAwardTurn,
+          talentApexProtocolCharges: hasTalent(next, 'apexProtocol')
+            ? (next.talentApexProtocolCharges ?? 0) + 1
+            : next.talentApexProtocolCharges,
+        };
         break;
       }
       case 'evolve_plant': {
@@ -322,7 +383,8 @@ export function runEffects(
         const evolved = evolvePlant(p);
         const newPlants = [...next.plants];
         newPlants[idx] = evolved;
-        next = { ...next, plants: newPlants };
+        next = { ...next, plants: newPlants, talentEvolvedTurn: next.turnNumber };
+        if (hasTalent(next, 'sporeMomentum')) next = drawOne(next);
         break;
       }
       case 'blockToPlant': {
@@ -340,12 +402,30 @@ export function runEffects(
             : next.plants!.findIndex((p) => p.hp > 0);
           if (idx >= 0) indices.push(idx);
         }
+        const transfer = hasTalent(next, 'rootedBulwark') ? Math.floor(effect.value * 1.2) : effect.value;
         const newPlants = next.plants!.map((p, i) =>
-          indices.includes(i) ? { ...p, block: (p.block ?? 0) + effect.value } : p
+          indices.includes(i) ? { ...p, block: (p.block ?? 0) + transfer } : p
         );
         next = { ...next, plants: newPlants };
         break;
       }
+    }
+  }
+
+  const isAttackSpell =
+    card.effects.some((e) =>
+      (e.type === 'damage' || e.type === 'damageAll' || e.type === 'multiHit') &&
+      e.target === 'enemy'
+    );
+  if (
+    isPlantCharacter(next.characterId) &&
+    hasTalent(next, 'predatoryRoots') &&
+    isAttackSpell &&
+    next.talentPredatoryRootsTurn !== next.turnNumber
+  ) {
+    if (targetEnemyIndex != null && enemies[targetEnemyIndex] && enemies[targetEnemyIndex].hp > 0) {
+      enemies[targetEnemyIndex].weakStacks = (enemies[targetEnemyIndex].weakStacks ?? 0) + 1;
+      next = { ...next, enemies, talentPredatoryRootsTurn: next.turnNumber };
     }
   }
 

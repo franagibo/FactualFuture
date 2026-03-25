@@ -1,0 +1,165 @@
+{
+  "id": "verdant_machinist",
+  "characterId": "verdant_machinist",
+  "nodes": [
+    {
+      "id": "sproutingSockets",
+      "name": "Sprouting Sockets",
+      "description": "Maximum plants +1 (up to 4).",
+      "tier": 1,
+      "branch": "seed_swarm",
+      "exclusiveGroup": "seed_swarm_entry"
+    },
+    {
+      "id": "quickGermination",
+      "name": "Quick Germination",
+      "description": "First Summon each combat gains +1 Growth.",
+      "tier": 1,
+      "branch": "seed_swarm",
+      "exclusiveGroup": "seed_swarm_entry"
+    },
+    {
+      "id": "colonyInstinct",
+      "name": "Colony Instinct",
+      "description": "Plant attacks gain +1 damage per alive plant.",
+      "tier": 2,
+      "branch": "seed_swarm",
+      "minSpent": 2,
+      "requiresAny": ["sproutingSockets", "quickGermination"]
+    },
+    {
+      "id": "sporeMomentum",
+      "name": "Spore Momentum",
+      "description": "When a plant evolves, draw 1 card.",
+      "tier": 3,
+      "branch": "seed_swarm",
+      "minSpent": 5,
+      "requiresAny": ["colonyInstinct", "mycorrhizalNetwork"]
+    },
+    {
+      "id": "verdantLegion",
+      "name": "Verdant Legion",
+      "description": "If 3+ plants are alive, your turn-end plant cycle adds a free support pulse.",
+      "tier": 5,
+      "branch": "seed_swarm",
+      "minSpent": 12,
+      "requiresAny": ["sporeMomentum", "seedArchive"],
+      "keystone": true
+    },
+    {
+      "id": "barkPlating",
+      "name": "Bark Plating",
+      "description": "Newly summoned plants gain bonus Block.",
+      "tier": 1,
+      "branch": "ironbloom_bastion",
+      "exclusiveGroup": "ironbloom_entry"
+    },
+    {
+      "id": "rootedBulwark",
+      "name": "Rooted Bulwark",
+      "description": "Block-to-Plant effects grant 20% more Block.",
+      "tier": 1,
+      "branch": "ironbloom_bastion",
+      "exclusiveGroup": "ironbloom_entry"
+    },
+    {
+      "id": "symbioticAegis",
+      "name": "Symbiotic Aegis",
+      "description": "When you gain Block, your lowest-HP plant gains a mirrored portion.",
+      "tier": 2,
+      "branch": "ironbloom_bastion",
+      "minSpent": 2,
+      "requiresAny": ["barkPlating", "rootedBulwark"]
+    },
+    {
+      "id": "photosyntheticRepair",
+      "name": "Photosynthetic Repair",
+      "description": "Support plants heal extra each support action.",
+      "tier": 3,
+      "branch": "ironbloom_bastion",
+      "minSpent": 5,
+      "requiresAny": ["symbioticAegis", "adaptiveCanopy"]
+    },
+    {
+      "id": "citadelGrove",
+      "name": "Citadel Grove",
+      "description": "Once per turn, the first plant that would die survives at 1 HP and grants Artifact 1.",
+      "tier": 5,
+      "branch": "ironbloom_bastion",
+      "minSpent": 12,
+      "requiresAny": ["photosyntheticRepair", "seedArchive"],
+      "keystone": true
+    },
+    {
+      "id": "volatileSap",
+      "name": "Volatile Sap",
+      "description": "Cards that sacrifice plants deal 25% more attack damage.",
+      "tier": 1,
+      "branch": "overclocked_bloom",
+      "exclusiveGroup": "overclocked_entry"
+    },
+    {
+      "id": "predatoryRoots",
+      "name": "Predatory Roots",
+      "description": "First attack spell each turn applies Weak 1.",
+      "tier": 1,
+      "branch": "overclocked_bloom",
+      "exclusiveGroup": "overclocked_entry"
+    },
+    {
+      "id": "cannibalReactor",
+      "name": "Cannibal Reactor",
+      "description": "When a plant dies, gain +1 energy next turn (max once per turn).",
+      "tier": 2,
+      "branch": "overclocked_bloom",
+      "minSpent": 2,
+      "requiresAny": ["volatileSap", "predatoryRoots"]
+    },
+    {
+      "id": "toxicRecursion",
+      "name": "Toxic Recursion",
+      "description": "Sacrificing a Mature plant shuffles Thorn Jab into your draw pile.",
+      "tier": 3,
+      "branch": "overclocked_bloom",
+      "minSpent": 5,
+      "requiresAny": ["cannibalReactor", "adaptiveCanopy"]
+    },
+    {
+      "id": "apexProtocol",
+      "name": "Apex Protocol",
+      "description": "After sacrificing a plant, the next plant-targeting card resolves twice.",
+      "tier": 5,
+      "branch": "overclocked_bloom",
+      "minSpent": 12,
+      "requiresAny": ["toxicRecursion", "seedArchive"],
+      "keystone": true
+    },
+    {
+      "id": "adaptiveCanopy",
+      "name": "Adaptive Canopy",
+      "description": "Max hand size +1 on turns where a plant evolved.",
+      "tier": 2,
+      "branch": "utility",
+      "minSpent": 2,
+      "requiresAny": ["rootedBulwark", "predatoryRoots"]
+    },
+    {
+      "id": "mycorrhizalNetwork",
+      "name": "Mycorrhizal Network",
+      "description": "Support actions also grant minor attack bonus to a random attack plant.",
+      "tier": 3,
+      "branch": "utility",
+      "minSpent": 5,
+      "requiresAny": ["adaptiveCanopy", "colonyInstinct"]
+    },
+    {
+      "id": "seedArchive",
+      "name": "Seed Archive",
+      "description": "The first plant card you play each combat costs 1 less.",
+      "tier": 4,
+      "branch": "utility",
+      "minSpent": 9,
+      "requiresAny": ["mycorrhizalNetwork", "photosyntheticRepair", "toxicRecursion"]
+    }
+  ]
+}

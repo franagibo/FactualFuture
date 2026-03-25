@@ -238,6 +238,7 @@ export interface CombatViewEnemiesContext {
     startMs?: number
   ) => PIXI.Texture | null;
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
+  getEnemyAnimationTextureById?: (enemyId: string, nowMs: number) => PIXI.Texture | null;
   hoveredEnemyIndex: number | null;
   onEnemySpriteCreated?: (index: number, sprite: PIXI.Sprite) => void;
 }
@@ -296,6 +297,8 @@ export interface CombatViewContext {
   getPlayerTexture?: () => PIXI.Texture | null;
   /** @deprecated Use enemies.getEnemyTexture */
   getEnemyTexture?: (id: string) => PIXI.Texture | null;
+  /** @deprecated Use enemies.getEnemyAnimationTextureById */
+  getEnemyAnimationTextureById?: (enemyId: string, nowMs: number) => PIXI.Texture | null;
   /** @deprecated Use enemies.enemyVariants */
   enemyVariants?: number[];
   /** @deprecated Use enemies.enemyHurtStartMs */
@@ -1142,9 +1145,13 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
 
     // Determine texture
     let enemyTex: PIXI.Texture | null = null;
+    const getAnimTexById = ctx.getEnemyAnimationTextureById;
+    if (getAnimTexById) {
+      enemyTex = getAnimTexById(e.id, nowMs);
+    }
     const variant = ctx.enemyVariants?.[i];
     const getAnimTex = ctx.getEnemyAnimationTexture;
-    if (variant != null && (variant === 1 || variant === 2 || variant === 3) && getAnimTex) {
+    if (enemyTex == null && variant != null && (variant === 1 || variant === 2 || variant === 3) && getAnimTex) {
       const dyingStart = ctx.enemyDyingStartMs?.[i];
       const hurtStart = ctx.enemyHurtStartMs?.[i];
       if (e.hp <= 0) {

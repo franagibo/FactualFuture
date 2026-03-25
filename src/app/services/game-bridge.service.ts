@@ -19,15 +19,18 @@ import {
   advanceToNextAct as engineAdvanceToNextAct,
   usePotion as engineUsePotion,
   pickRandomPotionByRarity as enginePickRandomPotionByRarity,
-  type ShopPoolConfig
+  grantAct1BossTalentBonus as engineGrantAct1BossTalentBonus,
+  type ShopPoolConfig,
 } from '../../engine/run';
 import type { CharacterDef } from '../../engine/loadData';
 import { loadCharacters } from '../../engine/loadData';
 import type { GameState, MetaState, RunPhase } from '../../engine/types';
+import type { TalentTreeDef } from '../../engine/types';
 import type { CardDef } from '../../engine/cardDef';
 import type { EnemyDef, EncounterDef, EventDef, PotionDef, RelicDef } from '../../engine/loadData';
 import { loadEvents, loadPotions, loadRelics } from '../../engine/loadData';
 import { runRelics } from '../../engine/relicRunner';
+import { canSelectTalent, spendTalentPoint } from '../../engine/talents';
 import type { ActConfig } from '../../engine/map/mapGenerator';
 import { GAME_BALANCE } from '../constants/game-balance.constants';
 import { logger } from '../util/app-logger';
@@ -96,6 +99,7 @@ export class GameBridgeService {
   private shopPoolsByAct: Record<string, ShopPoolConfig> = {};
   private potionDefs: Map<string, PotionDef> = new Map();
   private charactersMap: Map<string, CharacterDef> = new Map();
+  private talentTrees: Map<string, TalentTreeDef> = new Map();
   private meta: MetaState = {
     unlockedCards: [],
     unlockedRelics: [],
@@ -208,8 +212,9 @@ export class GameBridgeService {
       shopPools: `${DATA_BASE}/shopPools.json`,
       potions: `${DATA_BASE}/potions.json`,
       characters: `${DATA_BASE}/characters.json`,
+      verdantTalents: `${DATA_BASE}/talents.verdant-machinist.json`,
     };
-    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData, potionsData, charactersData]: [
+    const [cards, enemies, encounters, mapConfig, eventsData, relicsData, shopPoolsData, potionsData, charactersData, verdantTalents]: [
       CardDef[],
       EnemyDef[],
       EncounterDef[],
@@ -219,6 +224,7 @@ export class GameBridgeService {
       Record<string, ShopPoolConfig>,
       PotionDef[],
       CharacterDef[],
+      TalentTreeDef,
     ] = await Promise.all([
       this.fetchJson<CardDef[]>(DATA_PATHS.cards),
       this.fetchJson<EnemyDef[]>(DATA_PATHS.enemies),
@@ -229,6 +235,10 @@ export class GameBridgeService {
       this.fetchJson<Record<string, ShopPoolConfig>>(DATA_PATHS.shopPools).catch((err) => { logger.warn('Shop pools load failed', DATA_PATHS.shopPools, err); return {}; }),
       this.fetchJson<PotionDef[]>(DATA_PATHS.potions).catch((err) => { logger.warn('Potions load failed', DATA_PATHS.potions, err); return []; }),
       this.fetchJson<CharacterDef[]>(DATA_PATHS.characters).catch((err) => { logger.warn('Characters load failed', DATA_PATHS.characters, err); return []; }),
+      this.fetchJson<TalentTreeDef>(DATA_PATHS.verdantTalents).catch((err) => {
+        logger.warn('Verdant talents load failed', DATA_PATHS.verdantTalents, err);
+        return { id: 'verdant_machinist', characterId: 'verdant_machinist', nodes: [] };
+      }),
     ]);
     this.cardsMap = loadCards(cards);
     this.enemyDefs = loadEnemies(enemies);
@@ -240,6 +250,7 @@ export class GameBridgeService {
     this.shopPoolsByAct = shopPoolsData;
     this.potionDefs = loadPotions(potionsData);
     this.charactersMap = loadCharacters(Array.isArray(charactersData) ? charactersData : []);
+    this.talentTrees = new Map<string, TalentTreeDef>([[verdantTalents.id, verdantTalents]]);
     await this.loadMeta();
   }
 
@@ -293,6 +304,36 @@ export class GameBridgeService {
 
   getCurrentCharacterId(): string | undefined {
     return this.state?.characterId;
+  }
+
+  getTalentTreeForCurrentCharacter(): TalentTreeDef | null {
+    if (!this.state?.characterId) return null;
+    return this.talentTrees.get(this.state.characterId) ?? null;
+  }
+
+  getTalentPoints(): number {
+    return this.state?.talentPoints ?? 0;
+  }
+
+  getSelectedTalents(): string[] {
+    return this.state?.talentsSelected ?? [];
+  }
+
+  canSelectTalent(talentId: string): { ok: boolean; reason?: string } {
+    if (!this.state) return { ok: false, reason: 'No active run.' };
+    const tree = this.getTalentTreeForCurrentCharacter();
+    if (!tree) return { ok: false, reason: 'No talent tree for this character.' };
+    return canSelectTalent(this.state, tree, talentId);
+  }
+
+  selectTalent(talentId: string): { ok: boolean; reason?: string } {
+    if (!this.state) return { ok: false, reason: 'No active run.' };
+    const tree = this.getTalentTreeForCurrentCharacter();
+    if (!tree) return { ok: false, reason: 'No talent tree for this character.' };
+    const { state, result } = spendTalentPoint(this.state, tree, talentId);
+    if (!result.ok) return result;
+    this.setState(state);
+    return result;
   }
 
   /** Set character to use when starting the next run (e.g. from character select). */
@@ -694,14 +735,14 @@ export class GameBridgeService {
     if (this.state.combatResult !== 'win' || this.state.runPhase !== 'combat') return;
     if (engineIsBossNode(this.state)) {
       const runPhase = engineGetRunPhaseAfterBossWin(this.state);
-      this.setState({
+      this.setState(engineGrantAct1BossTalentBonus({
         ...this.state,
         runPhase,
         currentEncounter: null,
         enemies: [],
         combatResult: null,
         rewardCardChoices: undefined,
-      });
+      }));
       const act = this.state.act ?? 1;
       if (act > this.meta.highestActReached) {
         this.meta = { ...this.meta, highestActReached: act };

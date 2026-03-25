@@ -26,6 +26,7 @@ const SHIELD_BAR_PROGRESS_PATH = `${SHIELD_BAR_PREFIX}BarV9_ProgressBar.png`;
 const SHIELD_BAR_BORDER_PATH = `${SHIELD_BAR_PREFIX}BarV6_ProgressBarBorder.png`;
 
 const PLAYER_CHARACTERS_PREFIX = '/assets/characters/';
+const BLOBBI_IDLE_SHEET_PATH = '/assets/characters/blobi/idle/blobbi.png';
 
 // Optional UI atlas (if present). We can migrate more UI to atlases over time.
 const UI_ATLAS_JSON = '/assets/UI/ui-atlas.json';
@@ -141,6 +142,9 @@ const GUNGIRL_IDLE_FRAME_MS = 60;
 const VM_IDLE_SHEET_COLS = 5;
 const VM_IDLE_SHEET_ROWS = 5;
 const VM_IDLE_FRAME_MS = 45;
+const BLOBBI_IDLE_SHEET_COLS = 5;
+const BLOBBI_IDLE_SHEET_ROWS = 5;
+const BLOBBI_IDLE_FRAME_MS = 60;
 
 /** Current player character id (one of many usable characters). Can later come from run state or selection. */
 const DEFAULT_PLAYER_CHARACTER_ID = 'gungirl';
@@ -220,6 +224,8 @@ export class CombatAssetsService {
     { idle: PIXI.Texture[]; hurt: PIXI.Texture[]; dying: PIXI.Texture[] }
   > = { 1: { idle: [], hurt: [], dying: [] }, 2: { idle: [], hurt: [], dying: [] }, 3: { idle: [], hurt: [], dying: [] } };
   private zombiePlaceholderLoadPromise: Promise<void> | null = null;
+  /** Acid slime uses the blobbi idle 5x5 sheet. */
+  private acidSlimeIdleTextures: PIXI.Texture[] = [];
 
   /** Load only global combat assets (fight-location config + default bg + empty card template). Call once at app/game start. Failures are cached (no retries). */
   async loadGlobalCombatAssets(): Promise<void> {
@@ -464,7 +470,26 @@ export class CombatAssetsService {
     for (const id of enemyIds ?? []) {
       await this.loadEnemyTexture(id);
     }
+    if ((enemyIds ?? []).some((id) => this.isAcidSlimeEnemy(id))) {
+      await this.loadAcidSlimeAssets();
+    }
     await this.loadZombiePlaceholderAssets();
+  }
+
+  /** Load acid slime idle animation frames from blobbi 5x5 sheet. */
+  private async loadAcidSlimeAssets(): Promise<void> {
+    if (this.acidSlimeIdleTextures.length > 0) return;
+    try {
+      const sheet = (await PIXI.Assets.load(this.resolveUrl(BLOBBI_IDLE_SHEET_PATH))) as PIXI.Texture;
+      this.acidSlimeIdleTextures = this.buildSheetFrames(
+        sheet,
+        BLOBBI_IDLE_SHEET_COLS,
+        BLOBBI_IDLE_SHEET_ROWS
+      );
+    } catch {
+      this.acidSlimeIdleTextures = [];
+      logger.warn('Acid slime idle sheet load failed', BLOBBI_IDLE_SHEET_PATH);
+    }
   }
 
   /** Load Idle, Hurt, Dying sequences for Zombie_Villager_1/2/3. Called from loadCombatAssets. Safe to call multiple times. */
@@ -951,6 +976,16 @@ export class CombatAssetsService {
     return frames[Math.max(0, frameIndex)] ?? frames[frames.length - 1];
   }
 
+  /**
+   * Returns enemy-specific animation frame when available.
+   * Acid slimes use blobbi 5x5 idle animation and ignore hurt/dying variants for now.
+   */
+  getEnemyAnimationTextureById(enemyId: string, nowMs: number): PIXI.Texture | null {
+    if (!this.isAcidSlimeEnemy(enemyId) || this.acidSlimeIdleTextures.length === 0) return null;
+    const frameIndex = Math.floor((nowMs / BLOBBI_IDLE_FRAME_MS) % this.acidSlimeIdleTextures.length);
+    return this.acidSlimeIdleTextures[frameIndex] ?? this.acidSlimeIdleTextures[0] ?? null;
+  }
+
   /** Returns texture for enemy by id if loaded (e.g. /assets/combat/enemies/slime.png). Load on demand. */
   getEnemyTexture(id: string): PIXI.Texture | null {
     return this.enemyTextures.get(id) ?? null;
@@ -971,5 +1006,9 @@ export class CombatAssetsService {
   private resolveUrl(path: string): string {
     if (typeof window === 'undefined') return path;
     return path.startsWith('/') ? window.location.origin + path : path;
+  }
+
+  private isAcidSlimeEnemy(enemyId: string): boolean {
+    return enemyId === 'acid_slime_s' || enemyId === 'acid_slime_m' || enemyId === 'acid_slime_l';
   }
 }

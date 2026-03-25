@@ -18,6 +18,7 @@ import {
   PLANT_SUPPORT_PLAYER_BLOCK,
   PLANT_SUPPORT_ENERGY_EVERY_N_TURNS,
 } from './plantConfig';
+import { hasTalent, isPlantCard } from './talents';
 
 const INITIAL_PLAYER_HP = 70;
 const INITIAL_MAX_ENERGY = 3;
@@ -195,6 +196,21 @@ function applyEnemyAttackHit(
         const hpDmg = Math.min(p.hp, remain);
         p.hp = Math.max(0, p.hp - hpDmg);
         remain -= hpDmg;
+        if (p.hp <= 0 && hasTalent(next, 'citadelGrove') && next.talentCitadelGroveTurn !== next.turnNumber) {
+          p.hp = 1;
+          next = {
+            ...next,
+            playerArtifactStacks: (next.playerArtifactStacks ?? 0) + 1,
+            talentCitadelGroveTurn: next.turnNumber,
+          };
+        }
+        if (p.hp <= 0 && hasTalent(next, 'cannibalReactor') && next.talentCannibalAwardTurn !== next.turnNumber) {
+          next = {
+            ...next,
+            talentEnergyNextTurn: (next.talentEnergyNextTurn ?? 0) + 1,
+            talentCannibalAwardTurn: next.turnNumber,
+          };
+        }
       }
     }
     next = { ...next, plants: plants.filter((x) => x.hp > 0) };
@@ -239,7 +255,9 @@ export function runPlantTurnActions(state: GameState, rng: Rng = defaultRng): Ga
     if (p.hp <= 0) continue;
     if (p.growthStage >= 2) {
       if (p.mode === 'attack') {
-        const dmg = PLANT_ATTACK_DAMAGE[p.growthStage as 2 | 3];
+        const aliveCountBonus = hasTalent(next, 'colonyInstinct') ? getAlivePlants(plants).length : 0;
+        const bonusAttack = p.bonusAttack ?? 0;
+        const dmg = PLANT_ATTACK_DAMAGE[p.growthStage as 2 | 3] + aliveCountBonus + bonusAttack;
         const hits = p.growthStage === 3 ? PLANT_ATTACK_HITS_MATURE : 1;
         const aliveEnemies = enemies.filter((e) => e.hp > 0);
         for (let h = 0; h < hits && aliveEnemies.length > 0; h++) {
@@ -260,6 +278,7 @@ export function runPlantTurnActions(state: GameState, rng: Rng = defaultRng): Ga
           aliveEnemies.length = 0;
           enemies.forEach((e) => e.hp > 0 && aliveEnemies.push(e));
         }
+        if (bonusAttack > 0) plants[i] = { ...plants[i], bonusAttack: 0 };
       }
       if (p.mode === 'defense') {
         next = { ...next, playerBlock: next.playerBlock + PLANT_DEFENSE_PLAYER_BLOCK[p.growthStage as 2 | 3] };
@@ -269,11 +288,24 @@ export function runPlantTurnActions(state: GameState, rng: Rng = defaultRng): Ga
       if (p.mode === 'support') {
         if (p.growthStage === 2) {
           next = { ...next, playerBlock: next.playerBlock + PLANT_SUPPORT_PLAYER_BLOCK };
+          const heal = hasTalent(next, 'photosyntheticRepair') ? 1 : 0;
+          if (heal > 0) {
+            plants[i] = { ...plants[i], hp: Math.min(plants[i].maxHp, plants[i].hp + heal) };
+          }
           const aliveEnemies = enemies.filter((e) => e.hp > 0);
           if (aliveEnemies.length > 0) {
             const target = aliveEnemies[Math.floor(rng() * aliveEnemies.length)];
             target.weakStacks = (target.weakStacks ?? 0) + PLANT_SUPPORT_WEAK;
             next = { ...next, enemies };
+          }
+          if (hasTalent(next, 'mycorrhizalNetwork')) {
+            const attackPlants = plants
+              .map((pl, idx) => ({ pl, idx }))
+              .filter(({ pl }) => pl.hp > 0 && pl.mode === 'attack');
+            if (attackPlants.length > 0) {
+              const pick = attackPlants[Math.floor(rng() * attackPlants.length)];
+              plants[pick.idx] = { ...plants[pick.idx], bonusAttack: (plants[pick.idx].bonusAttack ?? 0) + 1 };
+            }
           }
         } else {
           if (p.turnsAlive > 0 && (p.turnsAlive + 1) % PLANT_SUPPORT_ENERGY_EVERY_N_TURNS === 0) {
@@ -286,6 +318,13 @@ export function runPlantTurnActions(state: GameState, rng: Rng = defaultRng): Ga
   }
 
   next = { ...next, plants: plants.filter((p) => p.hp > 0) };
+  if (hasTalent(next, 'verdantLegion')) {
+    const alive = getAlivePlants(next.plants ?? []);
+    if (alive.length >= 3) {
+      const pulsedPlants = (next.plants ?? []).map((p) => ({ ...p, block: (p.block ?? 0) + 2 }));
+      next = { ...next, playerBlock: next.playerBlock + 3, plants: pulsedPlants };
+    }
+  }
   return next;
 }
 
@@ -501,6 +540,13 @@ export function startCombatFromRunState(
     combatResult: null,
     runPhase: 'combat',
     ...(plants !== undefined && { plants }),
+    talentApexProtocolCharges: 0,
+    talentSeedArchiveUsedCombat: false,
+    talentQuickGerminationUsedCombat: false,
+    talentPredatoryRootsTurn: undefined,
+    talentCitadelGroveTurn: undefined,
+    talentCannibalAwardTurn: undefined,
+    talentEvolvedTurn: undefined,
   };
 }
 
@@ -521,7 +567,15 @@ export function playCard(
       ? handIndexOverride
       : state.hand.indexOf(cardId);
   if (handIndex === -1) return state;
-  if (state.energy < card.cost) return state;
+  const isPlantTypedCard = isPlantCard(card.effects);
+  const seedArchiveDiscount =
+    hasTalent(state, 'seedArchive') &&
+    isPlantTypedCard &&
+    !state.talentSeedArchiveUsedCombat
+      ? 1
+      : 0;
+  const effectiveCost = Math.max(0, card.cost - seedArchiveDiscount);
+  if (state.energy < effectiveCost) return state;
 
   const newHand = state.hand.filter((_, i) => i !== handIndex);
   const exhaustPile = state.exhaustPile ?? [];
@@ -532,11 +586,19 @@ export function playCard(
     hand: newHand,
     discard: newDiscard,
     exhaustPile: newExhaustPile,
-    energy: state.energy - card.cost,
+    energy: state.energy - effectiveCost,
+    talentSeedArchiveUsedCombat: state.talentSeedArchiveUsedCombat || seedArchiveDiscount > 0,
   };
   next = runEffects(card, next, targetEnemyIndex, cardsMap, targetPlantIndex ?? null);
   if (next.playerNextCardPlayedTwice) {
     next = { ...next, playerNextCardPlayedTwice: false };
+    next = runEffects(card, next, targetEnemyIndex, cardsMap, targetPlantIndex ?? null);
+  }
+  if (isPlantTypedCard && (next.talentApexProtocolCharges ?? 0) > 0) {
+    next = {
+      ...next,
+      talentApexProtocolCharges: Math.max(0, (next.talentApexProtocolCharges ?? 0) - 1),
+    };
     next = runEffects(card, next, targetEnemyIndex, cardsMap, targetPlantIndex ?? null);
   }
   if (cardId === 'hex') {
@@ -715,7 +777,7 @@ export function endTurn(
   next = {
     ...next,
     phase: 'player',
-    energy: Math.max(0, next.maxEnergy - voidCount),
+    energy: Math.max(0, next.maxEnergy - voidCount) + (next.talentEnergyNextTurn ?? 0),
     turnNumber: next.turnNumber + 1,
     strengthStacks: Math.max(0, (next.strengthStacks ?? 0) - decayStrength) + strPerTurn,
     playerStrengthDecayAtEnd: 0,
@@ -726,6 +788,8 @@ export function endTurn(
     playerWeakStacks: Math.max(0, (next.playerWeakStacks ?? 0) - 1),
     playerVulnerableStacks: Math.max(0, (next.playerVulnerableStacks ?? 0) - 1),
     enemies: setEnemyIntents(decayedEnemies, enemyDefs, next.turnNumber + 1, next._simRng ?? defaultRng),
+    talentEnergyNextTurn: 0,
+    talentApexProtocolCharges: 0,
   };
   return next;
 }

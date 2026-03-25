@@ -88,6 +88,16 @@
               #{{ getRunSeed() }}
             </span>
           }
+          @if (getTalentTree()) {
+            <button
+              type="button"
+              class="combat-header-badge badge-talent"
+              [attr.title]="'Talent points: ' + getTalentPoints()"
+              (click)="openTalentTree()"
+            >
+              ✦ Talents: {{ getTalentPoints() }}
+            </button>
+          }
           <button type="button" class="combat-header-settings" (click)="onHeaderSettings()" title="Settings" aria-label="Settings">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
               <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z"/>
@@ -211,5 +221,68 @@
     } @else {
       <app-settings-modal closeButtonLabel="Back" (close)="closePauseSettings()" />
     }
+  }
+  @if (showTalentTree) {
+    <div class="quit-backdrop" (click)="closeTalentTree()"></div>
+    <div class="quit-modal talent-modal">
+      <div class="quit-title">Verdant Machinist Talents</div>
+      <div class="talent-header-row">
+        <span class="talent-points">Points: {{ getTalentPoints() }}</span>
+        <button type="button" class="btn-quit btn-pause btn-pause-back" (click)="closeTalentTree()">Close</button>
+      </div>
+      <div class="talent-legend-row" aria-label="Talent branch legend">
+        <span class="talent-legend-chip legend-seed">Seed</span>
+        <span class="talent-legend-chip legend-ironbloom">Ironbloom</span>
+        <span class="talent-legend-chip legend-overclocked">Overclocked</span>
+      </div>
+      @if (talentSelectionMessage()) {
+        <div class="talent-selection-message">{{ talentSelectionMessage() }}</div>
+      }
+      <div class="talent-tree-scroll">
+        <div class="talent-single-tree">
+          <svg class="talent-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            @for (edge of getTalentEdgePaths(); track edge.id) {
+              <path
+                class="talent-edge"
+                [class.active]="edge.active"
+                [class.edge-seed]="edge.branch === 'seed_swarm'"
+                [class.edge-ironbloom]="edge.branch === 'ironbloom_bastion'"
+                [class.edge-overclocked]="edge.branch === 'overclocked_bloom'"
+                [class.edge-utility]="edge.branch === 'utility'"
+                [attr.d]="edge.path"
+              />
+            }
+          </svg>
+          <div class="talent-node-grid">
+            @for (talent of getTalentNodesForSingleTree(); track talent.id) {
+              <button
+                type="button"
+                class="talent-node"
+                [style.left.%]="talent.x"
+                [style.top.%]="talent.y"
+                [class.selected]="getTalentNodeState(talent.id) === 'selected'"
+                [class.available]="getTalentNodeState(talent.id) === 'available'"
+                [class.locked]="getTalentNodeState(talent.id) === 'locked'"
+                [class.keystone]="talent.keystone"
+                [class.has-requires]="((talent.requires?.length ?? 0) + (talent.requiresAny?.length ?? 0)) > 0"
+                [disabled]="isTalentSelected(talent.id) || !canSelectTalentInUi(talent.id)"
+                [attr.title]="isTalentSelected(talent.id) ? 'Selected' : getTalentReason(talent.id)"
+                (click)="onSelectTalent(talent.id)"
+              >
+                <span class="talent-node-orb">{{ talent.keystone ? '✶' : '●' }}</span>
+                <span class="talent-node-title-row">
+                  <span class="talent-node-name">{{ talent.name }}</span>
+                  <span class="talent-node-tier">Tier {{ talent.tier }}</span>
+                </span>
+                @if ((talent.requires?.length ?? 0) + (talent.requiresAny?.length ?? 0) > 0) {
+                  <span class="talent-node-requires">{{ getTalentRequiresHint(talent) }}: {{ getTalentRequiresLabel(talent) }}</span>
+                }
+                <span class="talent-node-desc">{{ talent.description }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
   }
 </div>

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { getAvailableNextNodes, startRun, getNodeById } from './run';
+import { getAvailableNextNodes, startRun, getNodeById, chooseNode, grantAct1BossTalentBonus } from './run';
 import type { GameState, MapState } from './types';
+import { loadCards, loadEnemies, loadEncounters } from './loadData';
+import type { CardDef } from './cardDef';
+import type { EnemyDef, EncounterDef } from './loadData';
 
 const minimalActConfig = {
   combat: 4,
@@ -105,5 +108,76 @@ describe('run', () => {
     expect(getNodeById(map, 'a')?.type).toBe('combat');
     expect(getNodeById(map, 'b')?.type).toBe('rest');
     expect(getNodeById(map, 'c')).toBeUndefined();
+  });
+
+  it('chooseNode grants +1 talent point on node entry during act 1', () => {
+    const map: MapState = {
+      nodes: [{ id: 'root', type: 'rest', floor: 0 }],
+      edges: [],
+    };
+    const cards = loadCards([] as CardDef[]);
+    const enemies = loadEnemies([] as EnemyDef[]);
+    const encounters = loadEncounters([] as EncounterDef[]);
+    const state: GameState = {
+      playerHp: 70,
+      playerMaxHp: 70,
+      playerBlock: 0,
+      currentEncounter: null,
+      phase: 'player',
+      deck: [],
+      hand: [],
+      discard: [],
+      energy: 3,
+      maxEnergy: 3,
+      turnNumber: 1,
+      enemies: [],
+      combatResult: null,
+      runPhase: 'map',
+      map,
+      currentNodeId: null,
+      act: 1,
+      floor: 0,
+      talentPoints: 0,
+      talentsSelected: [],
+    };
+    const next = chooseNode(
+      state,
+      'root',
+      null,
+      cards,
+      enemies,
+      encounters,
+      [],
+      undefined,
+      []
+    );
+    expect(next.talentPoints).toBe(1);
+  });
+
+  it('grantAct1BossTalentBonus grants only once in act 1', () => {
+    const state: GameState = {
+      playerHp: 70,
+      playerMaxHp: 70,
+      playerBlock: 0,
+      currentEncounter: null,
+      phase: 'player',
+      deck: [],
+      hand: [],
+      discard: [],
+      energy: 3,
+      maxEnergy: 3,
+      turnNumber: 1,
+      enemies: [],
+      combatResult: null,
+      runPhase: 'combat',
+      act: 1,
+      talentPoints: 5,
+      talentAct1BossBonusGranted: false,
+    };
+    const once = grantAct1BossTalentBonus(state);
+    expect(once.talentPoints).toBe(6);
+    expect(once.talentAct1BossBonusGranted).toBe(true);
+    const twice = grantAct1BossTalentBonus(once);
+    expect(twice.talentPoints).toBe(6);
   });
 });

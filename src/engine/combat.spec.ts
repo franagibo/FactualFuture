@@ -302,4 +302,83 @@ describe('combat', () => {
     const after = playCard(stateWithBoth, 'strike', 0, cardsMap, vulnEnemyDefs);
     expect(after.enemies[0].hp).toBe(40 - 6);
   });
+
+  it('Seed Archive makes first plant card each combat cost 1 less', () => {
+    const state: GameState = {
+      playerHp: 66,
+      playerMaxHp: 66,
+      playerBlock: 0,
+      deck: ['strike', 'strike'],
+      hand: ['seed_pod'],
+      discard: [],
+      energy: 0,
+      maxEnergy: 3,
+      turnNumber: 1,
+      enemies: [{ id: 'test_enemy', name: 'Test', hp: 20, maxHp: 20, block: 0, intent: { type: 'none', value: 0 } }],
+      combatResult: null,
+      phase: 'player',
+      currentEncounter: 'test',
+      characterId: 'verdant_machinist',
+      plants: [],
+      talentTreeId: 'verdant_machinist',
+      talentsSelected: ['seedArchive'],
+      talentSeedArchiveUsedCombat: false,
+    };
+    const after = playCard(state, 'seed_pod', null, cardsMap, enemyDefs);
+    expect(after.energy).toBe(0);
+    expect(after.plants?.length).toBe(1);
+    expect(after.talentSeedArchiveUsedCombat).toBe(true);
+  });
+
+  it('Cannibal Reactor grants +1 next-turn energy when a plant dies', () => {
+    const state: GameState = {
+      playerHp: 66,
+      playerMaxHp: 66,
+      playerBlock: 0,
+      deck: ['strike', 'strike', 'strike', 'strike', 'strike'],
+      hand: ['strike'],
+      discard: [],
+      energy: 3,
+      maxEnergy: 3,
+      turnNumber: 1,
+      enemies: [{ id: 'test_enemy', name: 'Test', hp: 20, maxHp: 20, block: 0, intent: { type: 'attack', value: 9 } }],
+      combatResult: null,
+      phase: 'player',
+      currentEncounter: 'test',
+      characterId: 'verdant_machinist',
+      plants: [{ id: 'p0', hp: 3, maxHp: 9, block: 0, growth: 0, growthStage: 1, mode: 'defense', turnsAlive: 0 }],
+      talentTreeId: 'verdant_machinist',
+      talentsSelected: ['cannibalReactor'],
+      talentEnergyNextTurn: 0,
+    };
+    const after = endTurn(state, cardsMap, enemyDefs);
+    expect(after.plants?.length ?? 0).toBe(0);
+    expect(after.energy).toBe(4);
+  });
+
+  it('Citadel Grove saves first plant death each turn and grants Artifact', () => {
+    const state: GameState = {
+      playerHp: 66,
+      playerMaxHp: 66,
+      playerBlock: 0,
+      deck: ['strike', 'strike', 'strike', 'strike', 'strike'],
+      hand: ['strike'],
+      discard: [],
+      energy: 3,
+      maxEnergy: 3,
+      turnNumber: 1,
+      enemies: [{ id: 'test_enemy', name: 'Test', hp: 20, maxHp: 20, block: 0, intent: { type: 'attack', value: 9 } }],
+      combatResult: null,
+      phase: 'player',
+      currentEncounter: 'test',
+      characterId: 'verdant_machinist',
+      plants: [{ id: 'p0', hp: 3, maxHp: 9, block: 0, growth: 0, growthStage: 1, mode: 'defense', turnsAlive: 0 }],
+      talentTreeId: 'verdant_machinist',
+      talentsSelected: ['citadelGrove'],
+    };
+    const after = endTurn(state, cardsMap, enemyDefs);
+    expect(after.plants?.length).toBe(1);
+    expect(after.plants?.[0].hp).toBe(1);
+    expect(after.playerArtifactStacks).toBe(1);
+  });
 });
