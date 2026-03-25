@@ -2536,7 +2536,9 @@ function drawDeckDiscardCounter(ctx: CombatViewContext): void {
   const cardW     = 44;
   const cardH     = 60;
   const gap       = 14;            // gap between draw pile and discard pile
-  const yTop      = (L.padding + 68); // top anchor for mini-card widget row
+  // Keep deck widgets below header in a responsive way (avoid overlap on smaller windows).
+  const headerSafeTop = Math.max(72, Math.round(h * 0.09));
+  const yTop      = headerSafeTop + 4;
   const labelSize = 11;
   const countSize = 20;
   const cr        = 6;             // corner radius for mini cards

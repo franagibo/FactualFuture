@@ -611,7 +611,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.rootContainer = null;
   }
 
-  /** Update root container scale/offset to letterbox fixed internal resolution into host size. */
+  /** Update renderer and root container to fill host size responsively. */
   private updateViewTransform(): void {
     if (!this.app || !this.rootContainer) return;
     const host = this.canvasHostRef.nativeElement;
@@ -619,40 +619,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const hostH = host.clientHeight;
     if (hostW <= 0 || hostH <= 0) return;
 
-    // Map (and overlays rendered on top of map) are intentionally scrollable and can be taller than the viewport.
-    // In those phases, we want the Pixi renderer to match the host size (no letterboxing), otherwise the browser
-    // will stretch a 1080p render up to a huge scroll height (looks stretched and breaks scrolling).
-    if (this.isMapOrOverlayPhase(this._runPhase)) {
-      // Resize the renderer to match the scroll content.
-      this.app.renderer?.resize?.(hostW, hostH);
-      this.viewScale = 1;
-      this.viewOffsetX = 0;
-      this.viewOffsetY = 0;
-      this.rootContainer.scale.set(1);
-      this.rootContainer.position.set(0, 0);
-      this.rootContainer.filters = null; // keep map crisp; postFX is for combat feel
-      this.app.canvas.style.position = 'absolute';
-      this.app.canvas.style.left = '0px';
-      this.app.canvas.style.top = '0px';
-      this.app.canvas.style.width = `${hostW}px`;
-      this.app.canvas.style.height = `${hostH}px`;
-      return;
-    }
-
-    // Combat: fixed internal resolution, canvas letterboxed into host (no CSS stretch)
-    const baseW = CombatCanvasComponent.GAME_WIDTH;
-    const baseH = CombatCanvasComponent.GAME_HEIGHT;
-    const scale = Math.min(hostW / baseW, hostH / baseH);
-    const usedW = baseW * scale;
-    const usedH = baseH * scale;
-    const offsetX = Math.floor((hostW - usedW) / 2);
-    const offsetY = Math.floor((hostH - usedH) / 2);
-    // No additional coordinate transform needed for combat; the canvas itself is sized/positioned.
+    // Resize the renderer to match host size for all phases (combat + map).
+    this.app.renderer?.resize?.(hostW, hostH);
+    // No additional coordinate transform needed; draw in screen-space.
     this.viewScale = 1;
     this.viewOffsetX = 0;
     this.viewOffsetY = 0;
-    // Ensure renderer stays at fixed internal resolution for combat.
-    this.app.renderer?.resize?.(CombatCanvasComponent.GAME_WIDTH, CombatCanvasComponent.GAME_HEIGHT);
     this.rootContainer.scale.set(1);
     this.rootContainer.position.set(0, 0);
     // Apply post FX based on settings
@@ -670,12 +642,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     } else {
       this.rootContainer.filters = null;
     }
-    // Letterbox by sizing/positioning the canvas element itself.
+    // Fill host area.
     this.app.canvas.style.position = 'absolute';
-    this.app.canvas.style.left = `${offsetX}px`;
-    this.app.canvas.style.top = `${offsetY}px`;
-    this.app.canvas.style.width = `${Math.floor(usedW)}px`;
-    this.app.canvas.style.height = `${Math.floor(usedH)}px`;
+    this.app.canvas.style.left = '0px';
+    this.app.canvas.style.top = '0px';
+    this.app.canvas.style.width = `${hostW}px`;
+    this.app.canvas.style.height = `${hostH}px`;
   }
 
   private triggerHitstop(durationMs: number): void {
@@ -1032,8 +1004,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private async doRedrawBody(): Promise<void> {
     const state = this.bridge.getState();
     if (!state || !this.app) return;
-    const w = this.isMapOrOverlayPhase(this._runPhase) ? this.app.screen.width : CombatCanvasComponent.GAME_WIDTH;
-    const h = this.isMapOrOverlayPhase(this._runPhase) ? this.app.screen.height : CombatCanvasComponent.GAME_HEIGHT;
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
     if (w <= 0 || h <= 0) {
       requestAnimationFrame(() => this.redraw());
       return;
