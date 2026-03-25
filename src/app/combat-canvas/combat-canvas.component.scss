@@ -1317,8 +1317,8 @@
      ═══════════════════════════════════════ */
   
   .talent-modal {
-    width: min(1020px, 96vw);
-    max-height: min(90vh, 940px);
+    width: min(1240px, 99vw);
+    max-height: min(96vh, 1120px);
     overflow: hidden;
     padding: 0;
     background:
@@ -1454,8 +1454,7 @@
   
   /* ── Scroll container ── */
   .talent-tree-scroll {
-    padding: 34px 14px 14px;
-    max-height: min(68vh, 700px);
+    max-height: min(82vh, 920px);
     overflow: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(160, 120, 40, 0.5) rgba(12, 9, 4, 0.6);
@@ -1464,8 +1463,8 @@
   /* ── Tree canvas ── */
   .talent-single-tree {
     position: relative;
-    min-width: 960px;
-    height: 780px;
+    min-width: 1220px;
+    height: 980px;
     border: 1px solid rgba(120, 88, 24, 0.4);
     border-radius: 12px;
     overflow: visible;
@@ -1489,6 +1488,7 @@
   
   /* Branch column labels inside the tree */
   .talent-branch-col-headers {
+    padding: 34px 18px 18px;
     position: absolute;
     top: 0;
     left: 0;
@@ -1648,6 +1648,7 @@
     max-width: 78px;
     overflow: hidden;
     display: -webkit-box;
+    line-clamp: 2;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     letter-spacing: 0.01em;
@@ -1830,11 +1831,11 @@
     // bottom: calc(100% + 14px);
     left: 50%;
     transform: translateX(-50%);
-    width: 228px;
+    width: 360px;
     background: rgba(8, 6, 18, 0.97);
     border: 1px solid rgba(150, 112, 30, 0.7);
     border-radius: 10px;
-    padding: 11px 13px;
+    padding: 14px 16px;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.18s ease;
@@ -1853,7 +1854,7 @@
   
   .tnt-name {
     font-family: 'Cinzel', 'Palatino Linotype', Georgia, serif;
-    font-size: 0.9rem;
+    font-size: 1.14rem;
     font-weight: 700;
     color: #f2d97c;
     margin-bottom: 4px;
@@ -1862,7 +1863,7 @@
   
   .tnt-keystone-badge {
     display: inline-block;
-    font-size: 0.65rem;
+    font-size: 0.78rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -1875,7 +1876,7 @@
   }
   
   .tnt-tier {
-    font-size: 0.62rem;
+    font-size: 0.78rem;
     color: rgba(190, 160, 80, 0.65);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1883,24 +1884,24 @@
   }
   
   .tnt-desc {
-    font-size: 0.75rem;
+    font-size: 0.94rem;
     color: #ddd5b8;
-    line-height: 1.4;
-    margin-bottom: 7px;
+    line-height: 1.45;
+    margin-bottom: 9px;
   }
   
   .tnt-req {
-    font-size: 0.67rem;
+    font-size: 0.82rem;
     color: rgba(210, 180, 100, 0.7);
     font-style: italic;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     line-height: 1.3;
   }
   
   .tnt-status {
-    font-size: 0.7rem;
+    font-size: 0.84rem;
     font-weight: 600;
-    padding: 3px 7px;
+    padding: 5px 9px;
     border-radius: 5px;
     margin-top: 4px;
     border: 1px solid transparent;
@@ -1926,7 +1927,7 @@
   
   @media (max-width: 780px) {
     .talent-single-tree {
-      min-width: 920px;
-      height: 760px;
+      min-width: 1080px;
+      height: 900px;
     }
   }
