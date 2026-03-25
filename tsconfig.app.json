@@ -5,5 +5,11 @@
     "types": []
   },
   "files": ["src/main.ts"],
-  "include": ["src/**/*.d.ts", "src/**/*.ts"]
+  "include": ["src/**/*.d.ts", "src/**/*.ts"],
+  "exclude": [
+    "src/engine/simulator/**",
+    "src/**/*.spec.ts",
+    "src/engine/talents.spec.ts",
+    "bot-training/**"
+  ]
 }

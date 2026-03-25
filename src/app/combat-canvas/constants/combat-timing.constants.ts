@@ -8,9 +8,9 @@ export const COMBAT_TIMING = {
   /** Card return-to-hand animation duration. */
   returnDurationMs: 260,
   /** Hover lift/scale lerp: exponential decay coefficient (higher = snappier). ~10 gives a fluid ~6–8 frame settle. */
-  hoverLerpSpeed: 10,
+  hoverLerpSpeed: 18,
   /** Neighbor spread lerp: exponential decay coefficient. Slightly slower than hover for a staggered feel. */
-  spreadLerpSpeed: 8,
+  spreadLerpSpeed: 14,
   /** Delay before calling endTurn() after "Enemy turn" banner. */
   enemyTurnBannerDelayMs: 1200,
   /** Delay before transitioning after reward selection feedback. */
@@ -20,7 +20,7 @@ export const COMBAT_TIMING = {
   /** Map load timeout; on expiry show error and Retry. */
   mapLoadTimeoutMs: 10_000,
   /** Card position/rotation/scale lerp per second (exponential decay). Higher = snappier hand relaxation. */
-  cardLerpSpeed: 12,
+  cardLerpSpeed: 18,
 } as const;
 
 /** Enemy placeholder (Zombie_Villager) animation timing. Same folder names (Idle, Hurt, Dying) used for future per-enemy folders. */

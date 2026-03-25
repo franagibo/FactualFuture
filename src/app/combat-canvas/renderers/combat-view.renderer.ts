@@ -980,10 +980,17 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     const container = c(ctx);
     container.sortableChildren = true;
 
+   
     const shadow = g(ctx);
+    // Black drop shadow
     shadow.roundRect(L.shadowOffset, L.shadowOffset, cardWidth, cardHeight, L.cardCornerRadius)
-      .fill({ color: 0x000000, alpha: 0.35 });
-    shadow.alpha = applyHover ? 1 : 0.18 / 0.35;
+      .fill({ color: 0x000000, alpha: applyHover ? 0.55 : 0.28 });
+    // Colored glow underneath the card when hovered/selected (purple or gold)
+    if (applyHover) {
+      const glowColor = isSelected ? 0xffcc22 : 0x6633cc;
+      shadow.roundRect(4, 6, cardWidth, cardHeight, L.cardCornerRadius)
+        .fill({ color: glowColor, alpha: 0.28 });
+    }
     container.addChild(shadow);
 
     // Card image is the full card (cardId.png or empty_card_template); text and cost are drawn on top.
@@ -998,19 +1005,64 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
     } else {
       const cardBody = g(ctx);
       const cr = L.cardCornerRadius;
-      const accentColor = playable ? 0x4a3880 : 0x2a2050;
-      const dividerY = 93;
-      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).fill({ color: 0x14102a });
-      cardBody.roundRect(0, 0, cardWidth, dividerY, cr).fill({ color: 0x1c1840, alpha: 0.7 });
-      cardBody.rect(0, dividerY - cr, cardWidth, cr).fill({ color: 0x1c1840, alpha: 0.7 });
-      cardBody.rect(8, dividerY, cardWidth - 16, 1).fill({ color: accentColor, alpha: 0.5 });
-      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 1.5, color: accentColor, alpha: 0.88 });
-      cardBody.roundRect(2, 2, cardWidth - 4, cardHeight - 4, cr - 1).stroke({ width: 1, color: 0xffffff, alpha: 0.07 });
-      for (let ci = 0; ci < 4; ci++) {
-        const cx2 = ci % 2 === 0 ? 4 : cardWidth - 11;
-        const cy2 = ci < 2 ? 4 : cardHeight - 11;
-        cardBody.roundRect(cx2, cy2, 7, 7, 1.5).fill({ color: playable ? 0x6a4aaa : 0x3a2860, alpha: 0.7 });
+      // Color palette — richer purple/blue-dark for playable, muted for unplayable
+      const frameColor   = playable ? 0x7755cc : 0x443377;
+      const artBg        = playable ? 0x0d1423 : 0x080d16;
+      const nameBg       = playable ? 0x1c1640 : 0x120f2a;
+      const dividerColor = playable ? 0x8844dd : 0x4a2d88;
+      const bodyBg       = playable ? 0x100e22 : 0x0a0816;
+      const gemColor     = playable ? 0x9966ff : 0x553399;
+      // Layout zones (card is 160×240, pivot at bottom)
+      const artH   = 90;            // art occupies top 90px (cost gem floats here)
+      const nameH  = 28;            // name band
+      const divH   = 4;             // accent divider strip
+      const nameY  = artH;          // y=90
+      const divY   = nameY + nameH; // y=118
+      const bodyY  = divY + divH;   // y=122
+
+      // ── Base card background ──
+      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).fill({ color: 0x07050f });
+
+      // ── Art zone (full-width, rounded corners on top only) ──
+      cardBody.roundRect(0, 0, cardWidth, artH + cr, cr).fill({ color: artBg });
+      cardBody.rect(0, artH, cardWidth, cr).fill({ color: artBg });
+      // Subtle diagonal stripe pattern in art zone
+      for (let si = 0; si < 8; si++) {
+        const sx = si * 22 - 4;
+        cardBody.rect(sx, 0, 11, artH).fill({ color: playable ? 0x6633bb : 0x331d66, alpha: 0.09 });
       }
+      // Corner shine highlight in art zone
+      cardBody.roundRect(5, 5, 32, 12, 3).fill({ color: 0xffffff, alpha: 0.04 });
+      // Art zone bottom edge: subtle inner shadow line
+      cardBody.rect(0, artH - 1, cardWidth, 1).fill({ color: 0x000000, alpha: 0.35 });
+
+      // ── Name band ──
+      cardBody.rect(0, nameY, cardWidth, nameH).fill({ color: nameBg });
+      // Slight inner highlight at top of name band
+      cardBody.rect(2, nameY, cardWidth - 4, 1).fill({ color: 0xffffff, alpha: 0.07 });
+
+      // ── Divider accent strip ──
+      cardBody.rect(0, divY, cardWidth, divH).fill({ color: dividerColor, alpha: 0.9 });
+      cardBody.rect(0, divY, cardWidth, 1).fill({ color: playable ? 0xbbaaff : 0x7755bb, alpha: 0.65 });
+
+      // ── Body zone (description area) ──
+      cardBody.rect(0, bodyY, cardWidth, cardHeight - bodyY - cr).fill({ color: bodyBg });
+      // Subtle vignette at bottom of body
+      cardBody.roundRect(0, cardHeight - cr * 3, cardWidth, cr * 3, cr).fill({ color: 0x000000, alpha: 0.18 });
+
+      // ── Outer border: soft glow ring + crisp edge ──
+      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 5, color: frameColor, alpha: 0.18 });
+      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 2, color: frameColor, alpha: 0.95 });
+      // Inner bevel line
+      cardBody.roundRect(2, 2, cardWidth - 4, cardHeight - 4, cr - 1).stroke({ width: 1, color: 0xffffff, alpha: 0.09 });
+
+      // ── Corner gem ornaments ──
+      const corners = [[3, 3], [cardWidth - 9, 3], [3, cardHeight - 9], [cardWidth - 9, cardHeight - 9]] as const;
+      for (const [gx, gy] of corners) {
+        cardBody.roundRect(gx, gy, 6, 6, 1.5).fill({ color: gemColor, alpha: 0.85 });
+        cardBody.roundRect(gx, gy, 6, 6, 1.5).stroke({ width: 0.5, color: 0xffffff, alpha: 0.3 });
+      }
+
       container.addChild(cardBody);
     }
 
@@ -1023,46 +1075,57 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
 
     const costRadius = L.costRadius;
     const costBg = g(ctx);
-    const costColor = playable ? 0x88ff88 : 0xff8888;
+    const costColor = playable ? 0x88ffaa : 0xff7777;
     const costCenterX = L.cardCostCenterX ?? (costRadius + L.costCenterOffset);
     const costCenterY = L.cardCostCenterY ?? (costRadius + L.costCenterOffset);
-    costBg.circle(costCenterX, costCenterY, costRadius).fill({ color: 0x1a1a2a }).stroke({ width: 2, color: costColor });
+    // Outer glow ring
+    costBg.circle(costCenterX, costCenterY, costRadius + 3).fill({ color: costColor, alpha: 0.12 });
+    // Main cost gem: dark fill + colored ring
+    costBg.circle(costCenterX, costCenterY, costRadius).fill({ color: 0x0a0818 });
+    costBg.circle(costCenterX, costCenterY, costRadius).stroke({ width: 2.5, color: costColor, alpha: 0.95 });
+    // Inner highlight
+    costBg.circle(costCenterX - 3, costCenterY - 4, 4).fill({ color: 0xffffff, alpha: 0.1 });
     container.addChild(costBg);
-    const costFontSize = scaledFontSize(32, ctx);
+    const costFontSize = scaledFontSize(30, ctx);
     const costText = t(ctx);
     costText.text = String(cost);
-    costText.style = { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor };
+    costText.style = { fontFamily: 'system-ui', fontSize: costFontSize, fill: costColor, fontWeight: 'bold' };
     costText.anchor.set(0.5, 0.5);
     costText.x = costCenterX;
     costText.y = costCenterY;
     container.addChild(costText);
 
     const name = ctx.getCardName(cardId);
-    const nameDisplay = name.length > 16 ? name.slice(0, 16) + '…' : name;
+    const nameDisplay = name.length > 14 ? name.slice(0, 14) + '…' : name;
     const nameText = t(ctx);
     nameText.text = nameDisplay;
-    nameText.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(20, ctx), fill: 0xeeeeee, fontWeight: 'bold' };
-    nameText.anchor.set(0.5, 0);
+    nameText.style = {
+      fontFamily: 'system-ui',
+      fontSize: scaledFontSize(18, ctx),
+      fill: playable ? 0xeeddff : 0x9988bb,
+      fontWeight: 'bold',
+    };
+    nameText.anchor.set(0.5, 0.5);
     nameText.x = L.cardNameCenterX ?? (cardWidth / 2);
-    nameText.y = L.cardNameY ?? 84;
+    nameText.y = (L.cardNameY ?? 93) + 14;
     container.addChild(nameText);
 
     const effectDesc = ctx.getCardEffectDescription(cardId);
     if (effectDesc) {
-      const fs = scaledFontSize(22, ctx);
+      const fs = scaledFontSize(15, ctx);
       const effectText = t(ctx);
       const maxChars = L.cardDescriptionMaxChars ?? 0;
       effectText.text = maxChars > 0 && effectDesc.length > maxChars ? effectDesc.slice(0, maxChars - 1) + '…' : effectDesc;
       effectText.style = {
         fontFamily: 'system-ui',
         fontSize: fs,
-        fill: 0xcccccc,
+        fill: playable ? 0xddccff : 0x887799,
         wordWrap: true,
         wordWrapWidth: L.cardDescriptionWidth ?? (cardWidth - L.cardTextPadding),
-        lineHeight: Math.round(fs * 1.25),
+        lineHeight: Math.round(fs * 1.45),
       };
-      effectText.x = L.cardDescriptionX ?? 24;
-      effectText.y = L.cardDescriptionY ?? (cardHeight - 120);
+      effectText.x = L.cardDescriptionX ?? 10;
+      effectText.y = L.cardDescriptionY ?? 126;
       container.addChild(effectText);
     }
 

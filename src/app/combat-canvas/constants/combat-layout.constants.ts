@@ -23,8 +23,8 @@ export const COMBAT_LAYOUT = {
   overlapRatio: 0.6,
   arcAmplitude: 90,
   cardRotationRad: 0.02,
-  hoverLift: 32,
-  hoverScale: 1.06,
+  hoverLift: 52,
+  hoverScale: 1.12,
   /** Arc-based hand: max fan angle in degrees (narrowed for large hands). */
   baseFanAngleDeg: 34,
   /** Horizontal spread of the fan (px). */
@@ -42,25 +42,25 @@ export const COMBAT_LAYOUT = {
    * Hand baseline uses the card's bottom pivot and sits below the screen so cards are half-hidden at rest.
    * Visible portion (peek) of a 240px card should be ~120px (Slay the Spire feel).
    */
-  handPeekHeight: 120,
+  handPeekHeight: 108,
   /** Additional hand Y offset in pixels (positive pushes the hand further down). */
   handYOffset: 0,
   /** Horizontal padding on both sides of the scene. */
   padding: 20,
-  costRadius: 22,
+  costRadius: 20,
   shadowOffset: 12,
   cardCornerRadius: 12,
   enemyCornerRadius: 10,
   /** Neon border when card is hovered (Slay the Spire style). */
-  neonBorderHoverColor: 0xa0ddff,
-  neonBorderHoverWidths: [10, 5, 2],
-  neonBorderHoverAlphas: [0.2, 0.5, 0.95],
+  neonBorderHoverColor: 0xbb88ff,
+  neonBorderHoverWidths: [14, 7, 2],
+  neonBorderHoverAlphas: [0.22, 0.55, 1.0],
   /** Horizontal inset (px each side) so neon border width matches card frame; height unchanged. */
   neonBorderWidthInset: 0,
   /** Larger, different color when card is selected (ready to play/drop). */
-  neonBorderSelectedColor: 0xffdd44,
-  neonBorderSelectedWidths: [14, 7, 3],
-  neonBorderSelectedAlphas: [0.35, 0.6, 1],
+  neonBorderSelectedColor: 0xffee44,
+  neonBorderSelectedWidths: [18, 9, 3],
+  neonBorderSelectedAlphas: [0.38, 0.65, 1.0],
   /** Y ratio (0–1) for non-target card play line: drop above this line to play (e.g. 0.55 = higher from hand). */
   nonTargetPlayLineRatio: 0.55,
   /** Intent icon size (px) next to enemy placeholder. */
@@ -82,14 +82,14 @@ export const COMBAT_LAYOUT = {
   costCenterOffset: 18,
   /** Card UI layout (relative to card top-left, in px). Tuned for /assets/cards/empty_card.png. */
   // Tuned for current cardWidth/cardHeight (160×240).
-  cardCostCenterX: 26,
-  cardCostCenterY: 26,
+  cardCostCenterX: 22,
+  cardCostCenterY: 22,
   cardNameCenterX: 80,
-  cardNameY: 14,
-  cardDescriptionX: 16,
-  cardDescriptionY: 160,
-  cardDescriptionWidth: 128,
-  cardDescriptionMaxChars: 100,
+  cardNameY: 90,
+  cardDescriptionX: 10,
+  cardDescriptionY: 126,
+  cardDescriptionWidth: 140,
+  cardDescriptionMaxChars: 90,
   /** Enemy target border (when dragging a targeting card): valid target. */
   enemyTargetBorderColor: 0xc9a227,
   enemyTargetBorderWidths: [6, 3, 1.5],

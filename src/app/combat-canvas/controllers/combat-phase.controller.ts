@@ -147,8 +147,10 @@ export class CombatPhaseController {
       if (i === excludedIndex) {
         p.targetX = dragX;
         p.targetY = dragY;
-        p.targetRotation = 0;
-        p.targetScale = 1.08;
+        // Slight drag tilt based on horizontal distance from press origin
+        const dragDeltaX = dragX - c.pressStartX;
+        p.targetRotation = Math.max(-0.35, Math.min(0.35, dragDeltaX * 0.003));
+        p.targetScale = 1.1;
       } else {
         const t = layoutTargets[i];
         if (t) setTargetsFromLayout(p, t.x, t.y, t.rotation, t.scale, t.spreadOffsetX);
