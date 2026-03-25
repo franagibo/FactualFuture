@@ -9,7 +9,7 @@ import type { GameState } from '../../../engine/types';
     <div class="reward-title">⚙ Merchant</div>
       <div class="shop-gold">{{ gold() }} Credits</div>
       @if (shopState(); as shop) {
-        @if (shop.cardIds?.length) {
+        @if (shop.cardIds.length) {
           <div class="shop-section-label">Cards</div>
           <div class="shop-cards">
             @for (cardId of shop.cardIds; track cardId) {
@@ -34,7 +34,7 @@ import type { GameState } from '../../../engine/types';
             }
           </div>
         }
-        @if (shop.relicIds?.length) {
+        @if (shop.relicIds.length) {
           <div class="shop-section-label">Relics</div>
           <div class="shop-relics">
             @for (relicId of shop.relicIds; track relicId) {

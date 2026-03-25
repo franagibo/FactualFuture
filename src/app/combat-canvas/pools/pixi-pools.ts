@@ -4,6 +4,8 @@
  */
 import * as PIXI from 'pixi.js';
 
+const TEXT_DPR = typeof window !== 'undefined' ? Math.max(1, window.devicePixelRatio || 1) : 1;
+
 export interface PixiPools {
   getGraphics(): PIXI.Graphics;
   getText(): PIXI.Text;
@@ -77,6 +79,8 @@ export class CombatPools implements PixiPools {
     t.alpha = 1;
     t.x = 0;
     t.y = 0;
+    t.resolution = TEXT_DPR;
+    t.roundPixels = true;
     return t;
   }
 

@@ -509,12 +509,16 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.combatAssets.loadGlobalCombatAssets().catch((err) => { logger.warn('Global combat assets load failed', err); });
 
     const host = this.canvasHostRef.nativeElement;
+    const dpr = typeof window !== 'undefined' ? Math.max(1, window.devicePixelRatio || 1) : 1;
     this.app = new PIXI.Application();
     await this.app.init({
       width: CombatCanvasComponent.GAME_WIDTH,
       height: CombatCanvasComponent.GAME_HEIGHT,
       background: 0x1a1a2e,
       antialias: true,
+      autoDensity: true,
+      resolution: dpr,
+      roundPixels: true,
     });
     host.appendChild(this.app.canvas);
     this.app.stage.eventMode = 'passive' as PIXI.EventMode;

@@ -574,17 +574,34 @@
 }
 
 .result {
-  font-size: 1.35rem;
-  font-weight: 700;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  font-size: 1.55rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 20px currentColor;
+  padding: 8px 20px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .result.win {
-  color: #8f8;
+  color: #44ff88;
+  background: rgba(20, 80, 40, 0.55);
+  border: 1px solid rgba(60, 220, 120, 0.4);
+  box-shadow:
+    0 0 24px rgba(60, 220, 120, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .result.lose {
-  color: #f88;
+  color: #ff5555;
+  background: rgba(80, 20, 20, 0.55);
+  border: 1px solid rgba(220, 60, 60, 0.4);
+  box-shadow:
+    0 0 24px rgba(220, 60, 60, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .reward-panel,
