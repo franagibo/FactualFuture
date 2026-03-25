@@ -25,6 +25,11 @@ import type { CharacterDef } from '../../engine/loadData';
               class="char-card"
               (click)="onSelect(char)"
             >
+            @if (getCharacterImageUrl(char.id)) {
+                <div class="char-card-art-wrap">
+                  <img class="char-card-art" [src]="getCharacterImageUrl(char.id)" alt="{{ char.name }}" />
+                </div>
+              }
               <div class="char-card-name">{{ char.name }}</div>
               <div class="char-card-desc">{{ char.description || 'No description.' }}</div>
               <div class="char-card-meta">
@@ -133,17 +138,43 @@ import type { CharacterDef } from '../../engine/loadData';
         padding: 1.25rem;
         border: 1px solid rgba(180, 140, 255, 0.35);
         border-radius: 12px;
-        background: linear-gradient(180deg, rgba(60, 50, 90, 0.6) 0%, rgba(35, 28, 55, 0.8) 100%);
+        background: linear-gradient(180deg, rgba(50, 42, 78, 0.75) 0%, rgba(28, 22, 48, 0.9) 100%);
         cursor: pointer;
+        overflow: hidden;
         transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
       }
       .char-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 24px rgba(100, 70, 180, 0.35);
-        border-color: rgba(180, 140, 255, 0.6);
+        transform: translateY(-4px) scale(1.015);
+        box-shadow: 0 12px 32px rgba(100, 70, 180, 0.45), 0 0 24px rgba(160, 120, 255, 0.2);
+        border-color: rgba(200, 160, 255, 0.65);
       }
       .char-card:active {
         transform: translateY(-1px);
+      }
+      .char-card-art-wrap {
+        width: 100%;
+        height: 160px;
+        overflow: hidden;
+        border-radius: 8px 8px 0 0;
+        margin: -1.25rem -1.25rem 0.75rem -1.25rem;
+        width: calc(100% + 2.5rem);
+        background: rgba(10, 8, 20, 0.8);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+      }
+      .char-card-art {
+        height: 160px;
+        width: auto;
+        object-fit: contain;
+        object-position: bottom center;
+        display: block;
+        filter: drop-shadow(0 0 12px rgba(180, 140, 255, 0.3));
+        transition: transform 0.2s ease, filter 0.2s ease;
+      }
+      .char-card:hover .char-card-art {
+        transform: scale(1.04) translateY(-3px);
+        filter: drop-shadow(0 0 20px rgba(200, 160, 255, 0.5));
       }
       .char-card-name {
         font-size: 1.2rem;
@@ -225,6 +256,14 @@ export class CharacterSelectComponent implements OnInit {
 
   getRelicName(relicId: string): string {
     return this.bridge.getRelicName(relicId);
+  }
+
+  private static readonly CHARACTER_ART: Record<string, string> = {
+    gungirl: '/assets/characters/gungirl/gungirl_idle.png',
+    verdant_machinist: '/assets/characters/verdant_machinist/munui.png',
+  };
+  getCharacterImageUrl(charId: string): string {
+    return CharacterSelectComponent.CHARACTER_ART[charId] ?? '';
   }
 
   onSelect(char: CharacterDef): void {

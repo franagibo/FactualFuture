@@ -50,9 +50,10 @@ export function runEffects(
 
   const applyDamageToEnemy = (enemy: EnemyState, dmg: number, addStrength = true): void => {
     let total = dmg + (addStrength ? (next.strengthStacks ?? 0) : 0);
+     // Player Weak reduces the player's outgoing attack damage by 25% (STS: flat 0.75, floor).
+     if ((next.playerWeakStacks ?? 0) > 0) total = Math.floor(total * 0.75);
+     // Enemy Vulnerable increases damage taken by 50% (STS: 1.5×, ceil). Stacks track turns remaining, not hits.
     if ((enemy.vulnerableStacks ?? 0) > 0) total = Math.ceil(total * 1.5);
-    const weak = (enemy.weakStacks ?? 0) > 0 ? 1 + 0.25 * (enemy.weakStacks ?? 0) : 1;
-    total = Math.ceil(total * weak);
     total = Math.min(total, enemy.block + enemy.hp);
     let remain = total;
     if (enemy.block > 0) {
@@ -61,7 +62,7 @@ export function runEffects(
       remain -= blockReduce;
     }
     if (remain > 0) enemy.hp = Math.max(0, enemy.hp - remain);
-    if ((enemy.vulnerableStacks ?? 0) > 0) enemy.vulnerableStacks = Math.max(0, (enemy.vulnerableStacks ?? 0) - 1);
+    // Vulnerable stacks decay only at end of turn (in endTurn), NOT per-hit.
   };
 
   for (const effect of card.effects) {
@@ -119,7 +120,10 @@ export function runEffects(
               }
             }
           }
-          next = { ...next, playerBlock: next.playerBlock + effect.value };
+          // Frail reduces player block gain by 25% (STS: floor). Plant block is not affected.
+          let blockGain = effect.value;
+          if ((next.frailStacks ?? 0) > 0) blockGain = Math.floor(blockGain * 0.75);
+          next = { ...next, playerBlock: next.playerBlock + blockGain };
         }
         break;
       case 'doubleBlock':

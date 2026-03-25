@@ -162,10 +162,13 @@ function applyEnemyAttackHit(
   rng: Rng = defaultRng
 ): GameState {
   dmg += enemy.strengthStacks ?? 0;
-  const frail = (next.frailStacks ?? 0) > 0 ? 1 + 0.25 * (next.frailStacks ?? 0) : 1;
-  const weak = (next.playerWeakStacks ?? 0) > 0 ? 1 + 0.25 * (next.playerWeakStacks ?? 0) : 1;
+  // Enemy Weak reduces that enemy's attack damage by 25% (STS: flat 0.75, floor).
+  if ((enemy.weakStacks ?? 0) > 0) dmg = Math.floor(dmg * 0.75);
+  // Player Vulnerable increases incoming attack damage by 50% (STS: 1.5×, ceil).
   const vuln = (next.playerVulnerableStacks ?? 0) > 0 ? 1.5 : 1;
-  dmg = Math.ceil(dmg * frail * weak * vuln);
+  dmg = Math.ceil(dmg * vuln);
+  // Note: player Frail reduces block *gain* (handled in effectRunner block case), not incoming damage.
+  // Note: player Weak reduces the player's *outgoing* damage (handled in effectRunner applyDamageToEnemy).
   let remain = dmg;
 
   const plants = (next.plants ?? []).map((p) => ({ ...p }));

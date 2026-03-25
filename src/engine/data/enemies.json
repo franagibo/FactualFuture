@@ -30,6 +30,7 @@
   ]},
   { "id": "jaw_worm", "name": "Jaw Worm", "maxHp": 40, "intents": [
     { "weight": 25, "intent": { "type": "attack", "value": 11 } },
+    { "weight": 25, "intent": { "type": "attack", "value": 11 } },
     { "weight": 30, "intent": { "type": "attack_and_block", "value": 7, "value2": 5 } },
     { "weight": 45, "intent": { "type": "buff", "value": 0, "strength": 3, "block": 6 } }
   ]},
@@ -88,6 +89,7 @@
     { "weight": 1, "intent": { "type": "attack_and_block", "value": 6, "value2": 9 } }
   ]},
   { "id": "chosen", "name": "Chosen", "maxHp": 72, "intents": [
+    { "weight": 1, "intent": { "type": "attack_multi", "value": 1, "times": 5, "firstTurnOnly": true } },
     { "weight": 1, "intent": { "type": "attack_multi", "value": 1, "times": 5 } },
     { "weight": 1, "intent": { "type": "hex", "value": 0 } },
     { "weight": 1, "intent": { "type": "attack_vulnerable", "value": 7, "value2": 2 } },

@@ -214,4 +214,92 @@ describe('combat', () => {
     const after3 = endTurn(after2, cardsMap, wizardDefs);
     expect(after3.playerHp).toBe(70 - 25);
   });
+  it('Jaw Worm: always uses Chomp (attack 11) on turn 1', () => {
+    const jawDefs = loadEnemies([
+      { id: 'jaw_worm', name: 'Jaw Worm', maxHp: 40, intents: [
+        { weight: 25, intent: { type: 'attack', value: 11, firstTurnOnly: true } },
+        { weight: 25, intent: { type: 'attack', value: 11 } },
+        { weight: 30, intent: { type: 'attack_and_block', value: 7, value2: 5 } },
+        { weight: 45, intent: { type: 'buff', value: 0, strength: 3, block: 6 } },
+      ]},
+    ] as EnemyDef[]);
+    const enc = loadEncounters([{ id: 'jaw', enemies: ['jaw_worm'] }]);
+    // rng always returns 0.99 — without firstTurnOnly the high weight of 'buff' (45/100) would be picked;
+    // with firstTurnOnly, only the Chomp is eligible on turn 1 regardless of rng.
+    const state = createInitialState(cardsMap, jawDefs, enc, 'jaw', undefined, () => 0.99);
+    expect(state.enemies[0].intent?.type).toBe('attack');
+    expect(state.enemies[0].intent?.value).toBe(11);
+  });
+  it('Chosen: always uses Poke (attack_multi 1×5) on turn 1, Hex on turn 2', () => {
+    const chosenDefs = loadEnemies([
+      { id: 'chosen', name: 'Chosen', maxHp: 72, intents: [
+        { weight: 1, intent: { type: 'attack_multi', value: 1, times: 5, firstTurnOnly: true } },
+        { weight: 1, intent: { type: 'attack_multi', value: 1, times: 5 } },
+        { weight: 1, intent: { type: 'hex', value: 0 } },
+        { weight: 1, intent: { type: 'attack_vulnerable', value: 7, value2: 2 } },
+        { weight: 1, intent: { type: 'drain', value: 2, value2: 2 } },
+        { weight: 1, intent: { type: 'attack', value: 10 } },
+      ]},
+    ] as EnemyDef[]);
+    const enc = loadEncounters([{ id: 'ch', enemies: ['chosen'] }]);
+    // rng returning 0.99 would skip to the last intent without firstTurnOnly guard.
+    const state = createInitialState(cardsMap, chosenDefs, enc, 'ch', undefined, () => 0.99);
+    expect(state.enemies[0].intent?.type).toBe('attack_multi');
+    expect(state.enemies[0].intent?.times).toBe(5);
+    // After turn 1, turn 2 should always be Hex (hardcoded in pickIntent).
+    const after1 = endTurn(state, cardsMap, chosenDefs);
+    expect(after1.enemies[0].intent?.type).toBe('hex');
+  });
+  it('Enemy Vulnerable: stacks do not decrement per-hit (multi-hit attack preserves bonus for all hits)', () => {
+    const multiHitCard: CardDef = { id: 'rapid', name: 'Rapid', cost: 1, effects: [{ type: 'multiHit', value: 4, target: 'enemy', times: 3 }] };
+    const cMap = loadCards([multiHitCard]);
+    const vulnEnemyDefs = loadEnemies([{ id: 'vuln_enemy', name: 'Vuln', maxHp: 40, intents: [{ weight: 1, intent: { type: 'none', value: 0 } }] }]);
+    const vulnEnc = loadEncounters([{ id: 'v', enemies: ['vuln_enemy'] }]);
+    const state = createInitialState(cMap, vulnEnemyDefs, vulnEnc, 'v', ['rapid', 'rapid', 'rapid', 'rapid', 'rapid']);
+    // Manually give the enemy 1 vulnerable stack.
+    const stateWithVuln = { ...state, enemies: [{ ...state.enemies[0], vulnerableStacks: 1 }] };
+    // Play rapid: 3 hits × 4 base × 1.5 vuln = 6 per hit (Math.ceil(4 * 1.5) = 6), total 18 damage.
+    const after = playCard(stateWithVuln, 'rapid', 0, cMap, vulnEnemyDefs);
+    // Vulnerable should apply to ALL 3 hits (stacks don't decrement per-hit).
+    expect(after.enemies[0].hp).toBe(40 - 18);
+    // Vulnerable stack is still 1 (only decays at end of turn).
+    expect(after.enemies[0].vulnerableStacks).toBe(1);
+  });
+  it('Enemy Weak: reduces enemy outgoing attack damage by 25%', () => {
+    const weakEnemyDefs = loadEnemies([
+      { id: 'weak_enemy', name: 'Weak', maxHp: 20, intents: [{ weight: 1, intent: { type: 'attack', value: 12 } }] },
+    ] as EnemyDef[]);
+    const enc = loadEncounters([{ id: 'we', enemies: ['weak_enemy'] }]);
+    const state = createInitialState(cardsMap, weakEnemyDefs, enc, 'we', undefined, () => 0);
+    // Give enemy 1 Weak stack; attack 12 × 0.75 = floor(9).
+    const stateWithWeak = { ...state, enemies: [{ ...state.enemies[0], weakStacks: 1, intent: { type: 'attack' as const, value: 12 } }] };
+    const after = endTurn(stateWithWeak, cardsMap, weakEnemyDefs);
+    expect(after.playerHp).toBe(70 - 9);
+  });
+  it('Player Frail: reduces block gain by 25% (floor), does NOT increase incoming damage', () => {
+    const defCard: CardDef = { id: 'def_card', name: 'Def', cost: 1, effects: [{ type: 'block', value: 8, target: 'player' }] };
+    const cMap = loadCards([defCard]);
+    const enc = loadEncounters([{ id: 'f', enemies: ['test_enemy'] }]);
+    const state = createInitialState(cMap, enemyDefs, enc, 'f', ['def_card', 'def_card', 'def_card', 'def_card', 'def_card']);
+    // With 1 frail stack, block 8 → Math.floor(8 * 0.75) = 6.
+    const stateWithFrail = { ...state, frailStacks: 1 };
+    const after = playCard(stateWithFrail, 'def_card', null, cMap, enemyDefs);
+    expect(after.playerBlock).toBe(6);
+  });
+  it('Player Weak: reduces player outgoing attack damage by 25% (floor)', () => {
+    const state = createInitialState(cardsMap, enemyDefs, encountersMap, 'test');
+    // strike deals 6 dmg base. With 1 playerWeak: Math.floor(6 * 0.75) = 4.
+    const stateWithWeak = { ...state, playerWeakStacks: 1 };
+    const after = playCard(stateWithWeak, 'strike', 0, cardsMap, enemyDefs);
+    expect(after.enemies[0].hp).toBe(20 - 4);
+  });
+  it('Player Weak + enemy Vulnerable: both modifiers stack correctly', () => {
+    const vulnEnemyDefs = loadEnemies([{ id: 'vuln_enemy', name: 'Vuln', maxHp: 40, intents: [{ weight: 1, intent: { type: 'none', value: 0 } }] }]);
+    const enc = loadEncounters([{ id: 'combo', enemies: ['vuln_enemy'] }]);
+    const state = createInitialState(cardsMap, vulnEnemyDefs, enc, 'combo', ['strike', 'strike', 'strike', 'strike', 'strike']);
+    // strike=6, player weak → floor(6 × 0.75) = 4, then enemy vuln → ceil(4 × 1.5) = 6.
+    const stateWithBoth = { ...state, playerWeakStacks: 1, enemies: [{ ...state.enemies[0], vulnerableStacks: 1 }] };
+    const after = playCard(stateWithBoth, 'strike', 0, cardsMap, vulnEnemyDefs);
+    expect(after.enemies[0].hp).toBe(40 - 6);
+  });
 });

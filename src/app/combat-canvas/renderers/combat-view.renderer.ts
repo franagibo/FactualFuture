@@ -22,6 +22,56 @@ export type { FloatingNumber };
 // Intent icon (attack/block/debuff/vulnerable/none)
 // ---------------------------------------------------------------------------
 
+const intentBadgeColor = (type: EnemyIntent['type']): number => {
+  switch (type) {
+    case 'attack': case 'attack_multi': case 'attack_frail': case 'attack_vulnerable': case 'attack_and_block':
+      return 0xcc2222;
+    case 'block': case 'block_ally':
+      return 0x2255bb;
+    case 'debuff': case 'drain': case 'hex':
+      return 0x7733aa;
+    case 'vulnerable':
+      return 0xaa3399;
+    case 'ritual': case 'buff':
+      return 0x997700;
+    default:
+      return 0x445566;
+  }
+};
+const intentSymbol = (type: EnemyIntent['type']): string => {
+  switch (type) {
+    case 'attack': case 'attack_multi': case 'attack_frail': case 'attack_vulnerable': case 'attack_and_block':
+      return '\u2694';
+    case 'block': case 'block_ally':
+      return '\u25a0';
+    case 'debuff':
+      return '\u2716';
+    case 'drain':
+      return '\u25bc';
+    case 'hex':
+      return '\u2726';
+    case 'vulnerable':
+      return '\u25bc';
+    case 'ritual': case 'buff':
+      return '\u2605';
+    default:
+      return '?';
+  }
+};
+const lightenIntentHex = (color: number, factor: number): number => {
+  const r2 = Math.min(255, Math.round(((color >> 16) & 0xff) + (255 - ((color >> 16) & 0xff)) * factor));
+  const g2 = Math.min(255, Math.round(((color >> 8) & 0xff) + (255 - ((color >> 8) & 0xff)) * factor));
+  const b2 = Math.min(255, Math.round((color & 0xff) + (255 - (color & 0xff)) * factor));
+  return (r2 << 16) | (g2 << 8) | b2;
+};
+const darkenIntentHex = (color: number, factor: number): number => {
+  const r2 = Math.floor(((color >> 16) & 0xff) * factor);
+  const g2 = Math.floor(((color >> 8) & 0xff) * factor);
+  const b2 = Math.floor((color & 0xff) * factor);
+  return (r2 << 16) | (g2 << 8) | b2;
+};
+
+
 /** B12: Draw intent icon into container at x,y. intentExtras: times, value2, strength, block for labels. */
 function drawIntentIcon(
   ctx: CombatViewContext,
@@ -33,49 +83,32 @@ function drawIntentIcon(
   addStatus?: { cardId: string; count: number; to: 'draw' | 'discard' }[],
   intentExtras?: { times?: number; value2?: number; strength?: number; block?: number }
 ): void {
-  const gr = g(ctx);
-  gr.x = x;
-  gr.y = y;
-  const c = 0xffaa00;
-  const fill = { color: c, alpha: 0.9 };
-  const stroke = { width: 1.5, color: 0xffcc66 };
+  const badgeColor = intentBadgeColor(type);
+  const badgeDark = darkenIntentHex(badgeColor, 0.45);
+  const badgeLight = lightenIntentHex(badgeColor, 0.45);
   const half = INTENT_ICON_SIZE / 2;
-  const attackShape = () => gr.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, INTENT_ICON_SIZE).lineTo(0, INTENT_ICON_SIZE).closePath().fill(fill).stroke(stroke);
-  const blockShape = () => gr.roundRect(0, 2, INTENT_ICON_SIZE, INTENT_ICON_SIZE - 4, 4).fill(fill).stroke(stroke);
-  const debuffShape = () => gr.moveTo(half, 0).lineTo(INTENT_ICON_SIZE, half).lineTo(half, INTENT_ICON_SIZE).lineTo(0, half).closePath().fill(fill).stroke(stroke);
-  const vulnShape = () => gr.rect(2, 2, INTENT_ICON_SIZE - 4, INTENT_ICON_SIZE - 4).fill(fill).stroke(stroke);
-  const noneShape = () => gr.circle(half, half, half - 2).fill(fill).stroke(stroke);
-
-  switch (type) {
-    case 'attack':
-    case 'attack_multi':
-    case 'attack_frail':
-    case 'attack_vulnerable':
-    case 'attack_and_block':
-      attackShape();
-      break;
-    case 'block':
-    case 'block_ally':
-      blockShape();
-      break;
-    case 'debuff':
-    case 'drain':
-    case 'hex':
-      debuffShape();
-      break;
-    case 'vulnerable':
-      vulnShape();
-      break;
-    case 'ritual':
-    case 'buff':
-      noneShape();
-      break;
-    case 'none':
-    default:
-      noneShape();
-      break;
-  }
-  container.addChild(gr);
+  
+  const badgeGr = g(ctx);
+  badgeGr.x = x;
+  badgeGr.y = y;
+  badgeGr.circle(half + 1.5, half + 2, half + 1).fill({ color: 0x000000, alpha: 0.45 });
+  badgeGr.circle(half, half, half + 1).fill({ color: badgeDark });
+  badgeGr.circle(half, half, half - 1).fill({ color: badgeColor });
+  badgeGr.circle(half - 2, half - 3, half * 0.38).fill({ color: 0xffffff, alpha: 0.14 });
+  badgeGr.circle(half, half, half - 1).stroke({ width: 1.5, color: badgeLight, alpha: 0.85 });
+  container.addChild(badgeGr);
+  const symText = t(ctx);
+  symText.text = intentSymbol(type);
+  symText.style = {
+    fontFamily: 'system-ui, serif',
+    fontSize: Math.round(INTENT_ICON_SIZE * 0.52),
+    fill: 0xffffff,
+    fontWeight: '700',
+  };
+  symText.anchor.set(0.5, 0.5);
+  symText.x = x + half;
+  symText.y = y + half;
+  container.addChild(symText);
 
   let label = '?';
   if (type === 'attack' || type === 'attack_multi' || type === 'attack_frail' || type === 'attack_vulnerable' || type === 'attack_and_block') {
@@ -101,8 +134,8 @@ function drawIntentIcon(
   const valueText = t(ctx);
   valueText.text = label;
   valueText.style = { fontFamily: 'system-ui', fontSize: 10, fill: 0xffdd88, fontWeight: 'bold' };
-  valueText.x = INTENT_ICON_SIZE + L.intentLabelOffset;
-  valueText.y = 2;
+  valueText.x = x + INTENT_ICON_SIZE + L.intentLabelOffset;
+  valueText.y = y + 2;
   container.addChild(valueText);
 }
 
@@ -709,14 +742,23 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   energyContainer.x = centerX + gap;
   energyContainer.y = baseY;
   const energyBg = g(ctx);
-  energyBg.roundRect(-iconSize / 2, 0, iconSize, iconSize, 8).fill(0x2a3544).stroke({ width: 2, color: 0x88aacc });
+  const orbR = iconSize / 2;
+  const orbCX = 0;
+  const orbCY = orbR;
+  energyBg.circle(orbCX + 2, orbCY + 3, orbR + 2).fill({ color: 0x000000, alpha: 0.45 });
+  energyBg.circle(orbCX, orbCY, orbR + 2).fill({ color: 0x060f1a });
+  energyBg.circle(orbCX, orbCY, orbR).fill({ color: 0x0d2238 });
+  energyBg.circle(orbCX, orbCY, orbR - 2).fill({ color: 0x113355 });
+  energyBg.circle(orbCX, orbCY, orbR).stroke({ width: 2.5, color: 0x44aaff, alpha: 0.95 });
+  energyBg.circle(orbCX, orbCY, orbR + 3).stroke({ width: 1, color: 0x44aaff, alpha: 0.3 });
+  energyBg.circle(orbCX - orbR * 0.22, orbCY - orbR * 0.28, orbR * 0.32).fill({ color: 0xffffff, alpha: 0.15 });
   energyContainer.addChild(energyBg);
   const energyText = t(ctx);
   energyText.text = `${state.energy}/${state.maxEnergy}`;
-  energyText.style = { fontFamily: 'system-ui', fontSize, fill: 0xeeeeee, fontWeight: 'bold' };
+  energyText.style = { fontFamily: 'system-ui', fontSize, fill: 0xaadcff, fontWeight: 'bold' };
   energyText.anchor.set(0.5, 0.5);
   energyText.x = 0;
-  energyText.y = iconSize / 2;
+  energyText.y = orbCY;
   energyContainer.addChild(energyText);
   stage.addChild(energyContainer);
 
@@ -865,6 +907,23 @@ function drawHand(ctx: CombatViewContext): PIXI.Container {
       cardSprite.height = cardHeight;
       cardSprite.roundPixels = true;
       container.addChild(cardSprite);
+    } else {
+      const cardBody = g(ctx);
+      const cr = L.cardCornerRadius;
+      const accentColor = playable ? 0x4a3880 : 0x2a2050;
+      const dividerY = 93;
+      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).fill({ color: 0x14102a });
+      cardBody.roundRect(0, 0, cardWidth, dividerY, cr).fill({ color: 0x1c1840, alpha: 0.7 });
+      cardBody.rect(0, dividerY - cr, cardWidth, cr).fill({ color: 0x1c1840, alpha: 0.7 });
+      cardBody.rect(8, dividerY, cardWidth - 16, 1).fill({ color: accentColor, alpha: 0.5 });
+      cardBody.roundRect(0, 0, cardWidth, cardHeight, cr).stroke({ width: 1.5, color: accentColor, alpha: 0.88 });
+      cardBody.roundRect(2, 2, cardWidth - 4, cardHeight - 4, cr - 1).stroke({ width: 1, color: 0xffffff, alpha: 0.07 });
+      for (let ci = 0; ci < 4; ci++) {
+        const cx2 = ci % 2 === 0 ? 4 : cardWidth - 11;
+        const cy2 = ci < 2 ? 4 : cardHeight - 11;
+        cardBody.roundRect(cx2, cy2, 7, 7, 1.5).fill({ color: playable ? 0x6a4aaa : 0x3a2860, alpha: 0.7 });
+      }
+      container.addChild(cardBody);
     }
 
     const neonBorder = g(ctx);

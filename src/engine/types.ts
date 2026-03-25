@@ -160,13 +160,13 @@ export interface GameState {
   seed?: number;
   /** Potion IDs (max 3). One-time use in combat. */
   potions?: string[];
-  /** Frail stacks on player; damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
+  /** Frail stacks on player; reduces block gain by 25% (STS: Math.floor × 0.75), decay by 1 per turn. */
   frailStacks?: number;
   /** Strength: extra damage per stack when dealing attack damage (per combat). */
   strengthStacks?: number;
   /** Strength to subtract at end of current turn (e.g. Flex potion). */
   playerStrengthDecayAtEnd?: number;
-  /** Weak on player: attack damage taken multiplied by 1 + 0.25*stacks, decay by 1 per turn. */
+   /** Weak on player: player's outgoing attack damage reduced by 25% (STS: Math.floor × 0.75), decay by 1 per turn. */
   playerWeakStacks?: number;
   /** Vulnerable on player: damage taken multiplied by 1.5, decay by 1 per turn. */
   playerVulnerableStacks?: number;

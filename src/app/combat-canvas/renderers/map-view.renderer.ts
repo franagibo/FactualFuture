@@ -241,10 +241,10 @@ export function drawMapView(
     stage.addChild(containerShape);
   }
 
-  const strokeColor = 0x8899aa;
-  const pathBorderColor = 0x0c0c18;
-
-  const drawEdgePath = (g: PIXI.Graphics, lineWidth: number, color: number) => {
+  const strokeColor = 0xaabccc;
+  const pathBorderColor = 0x080612;
+  const pathGlowColor = 0x5577aa;
+  const drawEdgePath = (g: PIXI.Graphics, lineWidth: number, color: number, alpha = 1) => {
     for (const [from, to] of edges) {
       const fromPos = posById.get(from);
       const toPos = posById.get(to);
@@ -266,19 +266,25 @@ export function drawMapView(
         const b = Math.min(dist + ML.dashLen, segLen - ML.arrowBaseOffset);
         g.moveTo(startX + ux * a, startY + uy * a);
         g.lineTo(startX + ux * b, startY + uy * b);
-        g.stroke({ width: lineWidth, color });
+        g.stroke({ width: lineWidth, color, alpha });
         dist += ML.dashLen + ML.gapLen;
       }
       const arrowBase = segLen - ML.arrowBaseOffset;
       const baseX = startX + ux * arrowBase;
       const baseY = startY + uy * arrowBase;
-      const arrowLen = ML.arrowLen;
-      g.moveTo(baseX - uy * arrowLen * 0.5, baseY + ux * arrowLen * 0.5);
+      const arrowLen = ML.arrowLen * 1.2;
+      g.moveTo(baseX - uy * arrowLen * 0.55, baseY + ux * arrowLen * 0.55);
       g.lineTo(endX, endY);
-      g.lineTo(baseX + uy * arrowLen * 0.5, baseY - ux * arrowLen * 0.5);
-      g.stroke({ width: lineWidth, color });
+      g.lineTo(baseX + uy * arrowLen * 0.55, baseY - ux * arrowLen * 0.55);
+      g.stroke({ width: lineWidth * 1.1, color, alpha });
+
     }
   };
+
+  const edgeGlow = new PIXI.Graphics();
+  drawEdgePath(edgeGlow, ML.pathBorderWidth * 2.5, pathGlowColor, 0.18);
+  edgeGlow.zIndex = 2;
+  stage.addChild(edgeGlow);
 
   const edgeGraphics = new PIXI.Graphics();
   drawEdgePath(edgeGraphics, ML.pathBorderWidth, pathBorderColor);
@@ -312,6 +318,40 @@ export function drawMapView(
     }
   };
 
+  const hexPts = (r: number): number[] => {
+    const pts: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      pts.push(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    return pts;
+  };
+  const darkenHex = (color: number, factor: number): number => {
+    const r2 = Math.floor(((color >> 16) & 0xff) * factor);
+    const g2 = Math.floor(((color >> 8) & 0xff) * factor);
+    const b2 = Math.floor((color & 0xff) * factor);
+    return (r2 << 16) | (g2 << 8) | b2;
+  };
+  const lightenHex = (color: number, factor: number): number => {
+    const r2 = Math.min(255, Math.round(((color >> 16) & 0xff) + (255 - ((color >> 16) & 0xff)) * factor));
+    const g2 = Math.min(255, Math.round(((color >> 8) & 0xff) + (255 - ((color >> 8) & 0xff)) * factor));
+    const b2 = Math.min(255, Math.round((color & 0xff) + (255 - (color & 0xff)) * factor));
+    return (r2 << 16) | (g2 << 8) | b2;
+  };
+  const nodeVisualCfg = (type: MapNodeType): { main: number; inner: number; rim: number; icon: string } => {
+    switch (type) {
+      case 'combat': return { main: 0x6b1515, inner: 0xb03030, rim: 0x300808, icon: '\u2694' };
+      case 'elite': return { main: 0x6a3a00, inner: 0xb86a20, rim: 0x321a00, icon: '\u2620' };
+      case 'rest': return { main: 0x0d4d2e, inner: 0x1e8a50, rim: 0x062815, icon: '\u2665' };
+      case 'shop': return { main: 0x0a3d58, inner: 0x1570a8, rim: 0x05202e, icon: '\u25c6' };
+      case 'event': return { main: 0x26186a, inner: 0x4432b0, rim: 0x100a34, icon: '?' };
+      case 'treasure': return { main: 0x6a4d00, inner: 0xc89010, rim: 0x342700, icon: '\u2606' };
+      case 'boss': return { main: 0x3a0660, inner: 0x6810aa, rim: 0x180328, icon: '\u2620' };
+      default: return { main: 0x303040, inner: 0x505065, rim: 0x181820, icon: '?' };
+    }
+  };
+
+
   for (const n of nodes) {
     const pos = posById.get(n.id);
     if (!pos) continue;
@@ -319,7 +359,7 @@ export function drawMapView(
     const isAvailable = availableNext.includes(n.id);
     const nodeTex = context.getNodeTexture(n.type);
     const size = n.type === 'boss' ? BOSS_ICON_SIZE : NODE_ICON_SIZE;
-    const r = n.type === 'boss' ? NODE_RADIUS + 6 : NODE_RADIUS;
+    const r = n.type === 'boss' ? NODE_RADIUS + 8 : NODE_RADIUS;
 
     const container = new PIXI.Container();
     container.x = pos.x;
@@ -327,6 +367,22 @@ export function drawMapView(
     container.zIndex = 3;
 
     if (nodeTex) {
+      if (isCurrent || isAvailable) {
+        const glowColor = isCurrent ? 0x44aaff : 0xffdd44;
+        const ringR = size / 2 + 8;
+        for (let gi = 3; gi >= 1; gi--) {
+          const haloGr = new PIXI.Graphics();
+          haloGr.circle(0, 0, ringR + gi * 6).fill({ color: glowColor, alpha: 0.07 * gi });
+          container.addChildAt(haloGr, 0);
+        }
+        const ring = new PIXI.Graphics();
+        if (isCurrent) {
+          ring.circle(0, 0, ringR).stroke({ width: 4, color: 0x55aaff, alpha: 0.95 });
+        } else {
+          ring.circle(0, 0, ringR).stroke({ width: 3, color: 0xffdd44, alpha: 0.9 });
+        }
+        container.addChildAt(ring, 0);
+      }
       const whiteBg = new PIXI.Graphics();
       whiteBg.circle(0, 0, size / 2 + 4).fill(0xffffff);
       container.addChild(whiteBg);
@@ -336,37 +392,70 @@ export function drawMapView(
       sprite.height = size;
       container.addChild(sprite);
     } else {
-      const circle = new PIXI.Graphics();
-      circle.circle(0, 0, r + 2).fill(0x2a2a35);
-      circle.circle(0, 0, r).fill({ color: isAvailable ? 0xe8e8a0 : nodeColor(n.type) });
-      if (isCurrent) {
-        circle.circle(0, 0, r + 8).stroke({ width: 5, color: 0x55aaff });
-      } else {
-        circle.circle(0, 0, r).stroke({ width: 2.5, color: 0x333344 });
+      const cfg = nodeVisualCfg(n.type);
+      const isBoss = n.type === 'boss';
+      const glowColor = isCurrent ? 0x55aaff : 0xffdd44;
+      if (isCurrent || isAvailable) {
+        for (let gi = 4; gi >= 1; gi--) {
+          const haloGr = new PIXI.Graphics();
+          haloGr.poly(hexPts(r + 8 + gi * 7)).fill({ color: glowColor, alpha: 0.05 * gi });
+          container.addChild(haloGr);
+        }
       }
-      container.addChild(circle);
-      const labelText = n.type === 'event' ? '?' : n.type === 'shop' ? '$' : n.type.slice(0, 1).toUpperCase();
-      const label = new PIXI.Text({
-        text: labelText,
-        style: { fontFamily: 'system-ui', fontSize: n.type === 'boss' ? 16 : 12, fill: 0xffffff, fontWeight: 'bold' },
+      const shadowGr = new PIXI.Graphics();
+      shadowGr.poly(hexPts(r + 2)).fill({ color: 0x000000, alpha: 0.6 });
+      shadowGr.x = 3;
+      shadowGr.y = 5;
+      container.addChild(shadowGr);
+      const rimGr = new PIXI.Graphics();
+      rimGr.poly(hexPts(r + 1)).fill({ color: cfg.rim });
+      container.addChild(rimGr);
+      const mainGr = new PIXI.Graphics();
+      mainGr.poly(hexPts(r - 2)).fill({ color: cfg.main });
+      container.addChild(mainGr);
+      const innerGr = new PIXI.Graphics();
+      innerGr.poly(hexPts(r - 6)).fill({ color: cfg.inner });
+      container.addChild(innerGr);
+      const sheenGr = new PIXI.Graphics();
+      sheenGr.poly(hexPts(r - 9)).fill({ color: 0xffffff, alpha: 0.10 });
+      container.addChild(sheenGr);
+      const borderColor = isCurrent ? 0x66bbff : (isAvailable ? 0xffdd44 : lightenHex(cfg.inner, 0.3));
+      const borderWidth = (isCurrent || isAvailable) ? 3 : 1.5;
+      const borderAlpha = (isCurrent || isAvailable) ? 1 : 0.65;
+      const borderGr = new PIXI.Graphics();
+      borderGr.poly(hexPts(r + 1)).stroke({ width: borderWidth, color: borderColor, alpha: borderAlpha });
+      container.addChild(borderGr);
+      const innerBorderGr = new PIXI.Graphics();
+      innerBorderGr.poly(hexPts(r - 5)).stroke({ width: 1, color: 0xffffff, alpha: 0.1 });
+      container.addChild(innerBorderGr);
+      if (isAvailable && !isCurrent) {
+        const pulseGr = new PIXI.Graphics();
+        pulseGr.poly(hexPts(r + 3)).stroke({ width: 1.5, color: 0xffdd44, alpha: 0.35 });
+        container.addChild(pulseGr);
+      }
+      const iconSize = isBoss ? Math.round(r * 1.05) : Math.round(r * 0.75);
+      const iconText = new PIXI.Text({
+        text: cfg.icon,
+        style: {
+          fontFamily: 'system-ui, serif',
+          fontSize: iconSize,
+          fill: isBoss ? darkenHex(0xffffff, 0.85) : 0xffffff,
+          fontWeight: '700',
+        },
       });
-      label.anchor.set(0.5, 0.5);
-      container.addChild(label);
-    }
-
-    if (nodeTex && (isCurrent || isAvailable)) {
-      const ring = new PIXI.Graphics();
-      const ringR = size / 2 + 6;
-      if (isCurrent) {
-        ring.circle(0, 0, ringR).stroke({ width: 5, color: 0x55aaff });
-      } else {
-        ring.circle(0, 0, ringR).stroke({ width: 3, color: 0xe8e8a0 });
+      iconText.anchor.set(0.5, 0.5);
+      iconText.y = 1;
+      container.addChild(iconText);
+      if (isBoss) {
+        const bossRingGr = new PIXI.Graphics();
+        bossRingGr.poly(hexPts(r + 4)).stroke({ width: 2, color: 0xcc44ff, alpha: 0.5 });
+        container.addChild(bossRingGr);
       }
-      container.addChildAt(ring, 0);
+
     }
 
     container.eventMode = 'static';
-    container.hitArea = new PIXI.Circle(0, 0, Math.max(size / 2, r) + 8);
+    container.hitArea = new PIXI.Circle(0, 0, Math.max(size / 2, r) + 10);
     const nodeId = n.id;
     container.on('pointerover', () => context.onNodePointerOver(nodeId));
     container.on('pointerout', () => context.onNodePointerOut());
@@ -381,16 +470,30 @@ export function drawMapView(
     const hovered = nodes.find((x) => x.id === context.hoveredNodeId);
     const pos = hovered ? posById.get(hovered.id) : null;
     if (hovered && pos) {
+      const cfg = nodeVisualCfg(hovered.type);
       const label = nodeTypeLabel(hovered.type);
-      const tooltip = new PIXI.Text({
+      const tooltipContainer = new PIXI.Container();
+      tooltipContainer.zIndex = 20;
+      const labelText = new PIXI.Text({
         text: label,
-        style: { fontFamily: 'system-ui', fontSize: 12, fill: 0xffffff, fontWeight: 'bold' },
+        style: { fontFamily: 'system-ui', fontSize: 13, fill: 0xffffff, fontWeight: '700' },
       });
-      tooltip.anchor.set(0.5, 1);
-      tooltip.x = pos.x;
-      tooltip.y = pos.y - (hovered.type === 'boss' ? BOSS_ICON_SIZE : NODE_ICON_SIZE) / 2 - 6;
-      tooltip.zIndex = 10;
-      stage.addChild(tooltip);
+      labelText.anchor.set(0.5, 0.5);
+      const padH = 12;
+      const padV = 6;
+      const boxW = labelText.width + padH * 2;
+      const boxH = labelText.height + padV * 2;
+      const tooltipBg = new PIXI.Graphics();
+      tooltipBg.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 7)
+        .fill({ color: 0x080614, alpha: 0.96 })
+        .stroke({ width: 1.5, color: lightenHex(cfg.inner, 0.15), alpha: 0.9 });
+      tooltipContainer.addChild(tooltipBg);
+      tooltipContainer.addChild(labelText);
+      const nodeR = hovered.type === 'boss' ? NODE_RADIUS + 8 : NODE_RADIUS;
+      const nodeSize = hovered.type === 'boss' ? BOSS_ICON_SIZE : NODE_ICON_SIZE;
+      tooltipContainer.x = pos.x;
+      tooltipContainer.y = pos.y - Math.max(nodeSize / 2, nodeR) - 22;
+      stage.addChild(tooltipContainer);
     }
   }
 }
