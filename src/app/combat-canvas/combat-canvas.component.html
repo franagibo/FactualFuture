@@ -225,21 +225,33 @@
   @if (showTalentTree) {
     <div class="quit-backdrop" (click)="closeTalentTree()"></div>
     <div class="quit-modal talent-modal">
-      <div class="quit-title">Verdant Machinist Talents</div>
-      <div class="talent-header-row">
-        <span class="talent-points">Points: {{ getTalentPoints() }}</span>
-        <button type="button" class="btn-quit btn-pause btn-pause-back" (click)="closeTalentTree()">Close</button>
+      <div class="talent-panel-header">
+        <div class="talent-panel-title">Verdant Machinist Talents</div>
+        <div class="talent-panel-meta">
+          <span class="talent-points-badge">
+            <span class="talent-points-icon">◆</span>
+            <span class="talent-points-val">{{ getTalentPoints() }}</span>
+            <span class="talent-points-label">unspent</span>
+          </span>
+          <button type="button" class="talent-close-btn" (click)="closeTalentTree()" aria-label="Close talent tree">✕</button>
+        </div>
       </div>
       <div class="talent-legend-row" aria-label="Talent branch legend">
-        <span class="talent-legend-chip legend-seed">Seed</span>
-        <span class="talent-legend-chip legend-ironbloom">Ironbloom</span>
-        <span class="talent-legend-chip legend-overclocked">Overclocked</span>
+        <span class="talent-legend-chip legend-seed">⬡ Seed Swarm</span>
+        <span class="talent-legend-chip legend-ironbloom">◈ Ironbloom</span>
+        <span class="talent-legend-chip legend-overclocked">◉ Overclocked</span>
+        <span class="talent-legend-chip legend-utility">◆ Utility</span>
       </div>
       @if (talentSelectionMessage()) {
         <div class="talent-selection-message">{{ talentSelectionMessage() }}</div>
       }
       <div class="talent-tree-scroll">
         <div class="talent-single-tree">
+          <div class="talent-branch-col-headers">
+            <span class="talent-branch-header header-seed">Seed Swarm</span>
+            <span class="talent-branch-header header-ironbloom">Ironbloom Bastion</span>
+            <span class="talent-branch-header header-overclocked">Overclocked Bloom</span>
+          </div>
           <svg class="talent-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             @for (edge of getTalentEdgePaths(); track edge.id) {
               <path
@@ -264,20 +276,35 @@
                 [class.available]="getTalentNodeState(talent.id) === 'available'"
                 [class.locked]="getTalentNodeState(talent.id) === 'locked'"
                 [class.keystone]="talent.keystone"
-                [class.has-requires]="((talent.requires?.length ?? 0) + (talent.requiresAny?.length ?? 0)) > 0"
+                [class.branch-seed]="talent.branch === 'seed_swarm'"
+                [class.branch-ironbloom]="talent.branch === 'ironbloom_bastion'"
+                [class.branch-overclocked]="talent.branch === 'overclocked_bloom'"
+                [class.branch-utility]="talent.branch === 'utility'"
                 [disabled]="isTalentSelected(talent.id) || !canSelectTalentInUi(talent.id)"
-                [attr.title]="isTalentSelected(talent.id) ? 'Selected' : getTalentReason(talent.id)"
                 (click)="onSelectTalent(talent.id)"
               >
-                <span class="talent-node-orb">{{ talent.keystone ? '✶' : '●' }}</span>
-                <span class="talent-node-title-row">
-                  <span class="talent-node-name">{{ talent.name }}</span>
-                  <span class="talent-node-tier">Tier {{ talent.tier }}</span>
-                </span>
-                @if ((talent.requires?.length ?? 0) + (talent.requiresAny?.length ?? 0) > 0) {
-                  <span class="talent-node-requires">{{ getTalentRequiresHint(talent) }}: {{ getTalentRequiresLabel(talent) }}</span>
-                }
-                <span class="talent-node-desc">{{ talent.description }}</span>
+                <div class="talent-node-frame">
+                  <span class="talent-node-icon" aria-hidden="true">{{ talent.keystone ? '✦' : '●' }}</span>
+                  <span class="talent-node-check" aria-hidden="true">✓</span>
+                </div>
+                <span class="talent-node-label">{{ talent.name }}</span>
+                <div class="talent-node-tooltip" role="tooltip">
+                  <div class="tnt-name">{{ talent.name }}</div>
+                  @if (talent.keystone) {
+                    <div class="tnt-keystone-badge">✦ Keystone Talent</div>
+                  }
+                  <div class="tnt-tier">Tier {{ talent.tier }}</div>
+                  <div class="tnt-desc">{{ talent.description }}</div>
+                  @if ((talent.requires?.length ?? 0) + (talent.requiresAny?.length ?? 0) > 0) {
+                    <div class="tnt-req">{{ getTalentRequiresHint(talent) }}: {{ getTalentRequiresLabel(talent) }}</div>
+                  }
+                  <div class="tnt-status"
+                    [class.tnt-ok]="canSelectTalentInUi(talent.id) && !isTalentSelected(talent.id)"
+                    [class.tnt-done]="isTalentSelected(talent.id)"
+                    [class.tnt-locked]="!canSelectTalentInUi(talent.id) && !isTalentSelected(talent.id)">
+                    {{ isTalentSelected(talent.id) ? '✓ Selected' : canSelectTalentInUi(talent.id) ? 'Click to learn' : getTalentReason(talent.id) }}
+                  </div>
+                </div>
               </button>
             }
           </div>

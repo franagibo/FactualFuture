@@ -280,33 +280,33 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
    * instead of separate branch sections.
    */
   private readonly talentNodeLayout: Record<string, { x: number; y: number }> = {
-    // Entry layer (bottom)
-    sproutingSockets: { x: 12, y: 88 },
-    quickGermination: { x: 24, y: 88 },
-    barkPlating: { x: 36, y: 88 },
-    rootedBulwark: { x: 48, y: 88 },
-    volatileSap: { x: 62, y: 88 },
-    predatoryRoots: { x: 76, y: 88 },
+    // ── Tier 1: Entry nodes (bottom row) ──
+    sproutingSockets:    { x: 9,  y: 85 },
+    quickGermination:    { x: 22, y: 85 },
+    barkPlating:         { x: 37, y: 85 },
+    rootedBulwark:       { x: 50, y: 85 },
+    volatileSap:         { x: 65, y: 85 },
+    predatoryRoots:      { x: 78, y: 85 },
 
-    // Mid layer
-    colonyInstinct: { x: 24, y: 70 },
-    symbioticAegis: { x: 44, y: 70 },
-    adaptiveCanopy: { x: 56, y: 70 },
-    cannibalReactor: { x: 68, y: 70 },
+    // ── Tier 2: Mid nodes ──
+    colonyInstinct:      { x: 16, y: 66 },
+    symbioticAegis:      { x: 43, y: 66 },
+    adaptiveCanopy:      { x: 57, y: 66 },
+    cannibalReactor:     { x: 72, y: 66 },
 
-    // Higher layer
-    sporeMomentum: { x: 24, y: 52 },
-    mycorrhizalNetwork: { x: 40, y: 52 },
-    photosyntheticRepair: { x: 52, y: 52 },
-    toxicRecursion: { x: 68, y: 52 },
+    // ── Tier 3: Upper nodes ──
+    sporeMomentum:       { x: 16, y: 47 },
+    mycorrhizalNetwork:  { x: 39, y: 47 },
+    photosyntheticRepair:{ x: 54, y: 47 },
+    toxicRecursion:      { x: 72, y: 47 },
 
-    // Keystone gateway
-    seedArchive: { x: 46, y: 34 },
+    // ── Tier 4: Gateway ──
+    seedArchive:         { x: 50, y: 29 },
 
-    // Keystones (top)
-    verdantLegion: { x: 28, y: 14 },
-    citadelGrove: { x: 46, y: 14 },
-    apexProtocol: { x: 64, y: 14 },
+    // ── Tier 5: Keystones (top) ──
+    verdantLegion:       { x: 16, y: 11 },
+    citadelGrove:        { x: 50, y: 11 },
+    apexProtocol:        { x: 84, y: 11 },
   };
 
   getTalentNodesForSingleTree(): (TalentNodeDef & { x: number; y: number })[] {
