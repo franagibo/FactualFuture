@@ -1,19 +1,65 @@
+/* ── CSS custom properties ── */
+:root {
+  --clr-bg:          #07050f;
+  --clr-surface:     #10091f;
+  --clr-surface-2:   #170e30;
+  --clr-border:      rgba(140, 100, 220, 0.38);
+  --clr-border-hi:   rgba(200, 160, 255, 0.65);
+  --clr-purple:      #8c64dc;
+  --clr-purple-hi:   #b48cff;
+  --clr-gold:        #f0c040;
+  --clr-gold-dim:    #c99a20;
+  --clr-hp:          #e05555;
+  --clr-hp-low:      #ff2222;
+  --clr-hp-mid:      #e09020;
+  --clr-shield:      #4ab0f0;
+  --clr-text:        #e8e0ff;
+  --clr-text-dim:    #9a90b8;
+  --clr-text-muted:  #5a5070;
+  --font-title:      'Cinzel', 'Palatino Linotype', Georgia, serif;
+  --font-ui:         'Exo 2', system-ui, sans-serif;
+  --radius-sm:       8px;
+  --radius-md:       12px;
+  --radius-lg:       16px;
+}
+
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 html, body {
-  margin: 0;
+
   height: 100%;
-  font-family: system-ui, sans-serif;
-  background: #1a1a2e;
-  color: #eee;
+  font-family: var(--font-ui);
+  background: var(--clr-bg);
+  color: var(--clr-text);
   cursor: url('/assets/cursor_h.svg') 2 2, auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 html {
   overflow: hidden;
 }
 body {
   overflow: auto;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 100, 220, 0.45);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 140, 255, 0.65);
 }
 app-root {
   display: block;
@@ -23,4 +69,11 @@ app-root::ng-deep router-outlet + * {
   display: block;
   height: 100%;
   width: 100%;
+}
+
+
+/* Selection */
+::selection {
+  background: rgba(140, 100, 220, 0.4);
+  color: #fff;
 }

@@ -5,7 +5,7 @@ import { Component, input, output } from '@angular/core';
   standalone: true,
   template: `
     <div class="reward-panel">
-      <div class="reward-title">Choose salvage</div>
+    <div class="reward-title">✦ Choose a Card ✦</div>
       <div class="reward-cards">
         @for (cardId of choices(); track cardId; let i = $index) {
           <button
@@ -17,7 +17,10 @@ import { Component, input, output } from '@angular/core';
             [attr.aria-label]="'Choose card: ' + getCardName()(cardId) + ', option ' + (i + 1) + ' of ' + choices().length"
             (click)="chooseReward.emit(cardId)"
           >
-            <img class="reward-card-art" [src]="getCardArtUrl()(cardId)" alt="" />
+          <div class="reward-card-art-wrap">
+              <img class="reward-card-art" [src]="getCardArtUrl()(cardId)" alt="" />
+              <div class="reward-card-shimmer"></div>
+            </div>
             <span class="reward-card-name">{{ getCardName()(cardId) }}</span>
             @if (getCardEffectDescriptionText()(cardId)) {
               <span class="reward-card-desc">{{ getCardEffectDescriptionText()(cardId) }}</span>
