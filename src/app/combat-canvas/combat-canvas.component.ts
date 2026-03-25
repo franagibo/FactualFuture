@@ -90,6 +90,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   eventStateSignal = signal<GameState['eventState']>(undefined);
   restRemovableCardsSignal = signal<string[]>([]);
   talentPointsSignal = signal(0);
+  private lastSeenTalentPoints: number | null = null;
   selectedTalentsSignal = signal<string[]>([]);
   /** Short-lived feedback message (e.g. "New card: Overdrive") shown in overlay. */
   feedbackMessage = signal<string | null>(null);
@@ -199,8 +200,42 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.shopStateSignal.set(state.shopState);
     this.eventStateSignal.set(state.eventState);
     this.restRemovableCardsSignal.set(this._runPhase === 'rest' ? Array.from(new Set(state.deck ?? [])) : []);
-    this.talentPointsSignal.set(this.bridge.getTalentPoints());
+    const nextTalentPoints = this.bridge.getTalentPoints();
+    const prevTalentPoints = this.lastSeenTalentPoints;
+    this.talentPointsSignal.set(nextTalentPoints);
     this.selectedTalentsSignal.set(this.bridge.getSelectedTalents());
+    // Auto-open talent tree only when points increase after initial sync.
+    if (
+      prevTalentPoints != null &&
+      nextTalentPoints > prevTalentPoints &&
+      nextTalentPoints > 0 &&
+      !!this.getTalentTree() &&
+      !this.showTalentTree
+    ) {
+      this.showTalentTree = true;
+      this.talentSelectionMessage.set(null);
+      this.pauseCombatInteractionForModal(false);
+    }
+    this.lastSeenTalentPoints = nextTalentPoints;
+  }
+
+  private isCombatInteractionBlocked(): boolean {
+    return this.showTalentTree;
+  }
+
+  private pauseCombatInteractionForModal(requestUpdate = true): void {
+    if (this._runPhase !== 'combat') return;
+    const state = this.bridge.getState();
+    const handCount = state?.hand?.length ?? 0;
+    this.combatController.hoveredCardIndex = null;
+    this.combatController.hoveredEnemyIndex = null;
+    this.combatController.targetLerp = Array.from({ length: handCount }, () => 0);
+    this.combatController.cardInteractionState = 'idle';
+    this.combatController.cardInteractionCardIndex = null;
+    this.combatController.cardInteractionCardId = null;
+    this.clearDragListeners();
+    this.redraw();
+    if (requestUpdate) this.requestTemplateUpdate();
   }
 
   @HostListener('document:keydown.escape')
@@ -257,6 +292,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   openTalentTree(): void {
     this.showTalentTree = true;
     this.talentSelectionMessage.set(null);
+    this.pauseCombatInteractionForModal(false);
     this.requestTemplateUpdate();
   }
 
@@ -1668,7 +1704,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Hover: only highlight the card whose visual bounds contain the cursor. Use rest layout (no hover) for hit-test so the lifted card does not move its AABB and clear hover. Throttled to ~30fps. */
   private resolveHover(clientX: number, clientY: number): void {
-    if (this._runPhase !== 'combat' || !this.app) return;
+    if (this._runPhase !== 'combat' || !this.app || this.isCombatInteractionBlocked()) return;
     const now = performance.now();
     if (now - this.lastResolveHoverTime < 32) return;
     this.lastResolveHoverTime = now;
@@ -1717,7 +1753,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Card pointer over: set hover so focused lift/scale applies on hover (not only on click). */
   onCardPointerOver(handIndex: number): void {
-    if (this._runPhase !== 'combat' || !this.app) return;
+    if (this._runPhase !== 'combat' || !this.app || this.isCombatInteractionBlocked()) return;
     const state = this.bridge.getState();
     if (!state) return;
     const hand = state.hand;
@@ -1733,7 +1769,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Card pointer out: clear hover so cards move back in place. */
   onCardPointerOut(): void {
-    if (this._runPhase !== 'combat' || !this.app) return;
+    if (this._runPhase !== 'combat' || !this.app || this.isCombatInteractionBlocked()) return;
     const state = this.bridge.getState();
     if (!state) return;
     const hand = state.hand;
@@ -1753,6 +1789,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /** Card pointer down: enter Pressed; Dragging after threshold; play or Returning on release. */
   onCardPointerDown(cardId: string, handIndex: number, stageX: number, stageY: number): void {
+    if (this.isCombatInteractionBlocked()) return;
     // Renderer passes Pixi global coordinates; convert to fixed game coordinates for logic/layout.
     const p = this.screenToGame(stageX, stageY);
     stageX = p.x;
