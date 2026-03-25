@@ -64,20 +64,20 @@ export const COMBAT_LAYOUT = {
   /** Y ratio (0–1) for non-target card play line: drop above this line to play (e.g. 0.55 = higher from hand). */
   nonTargetPlayLineRatio: 0.55,
   /** Intent icon size (px) next to enemy placeholder. */
-  intentIconSize: 16,
+  intentIconSize: 38,
   /** HP/Block/Energy icon size (px) under player. */
   hpBlockEnergyIconSize: 48,
   /** Gap between HP/Block/Energy icons (px). */
   hpBlockEnergyGap: 56,
   /** HP bar (BarV5) display size when using 3-part bar assets. */
   hpBarWidth: 240,
-  hpBarHeight: 24,
+  hpBarHeight: 26,
   /** Shield bar display size when using 3-part bar assets. */
   shieldBarWidth: 240,
   shieldBarHeight: 24,
   /** Enemy HP/Shield bars (smaller, inside enemy frame). */
-  enemyBarWidth: 120,
-  enemyBarHeight: 18,
+  enemyBarWidth: 234,
+  enemyBarHeight: 22,
   /** Offset from cost circle center for cost text (costCenter = costRadius + costCenterOffset). */
   costCenterOffset: 18,
   /** Card UI layout (relative to card top-left, in px). Tuned for /assets/cards/empty_card.png. */
@@ -101,9 +101,9 @@ export const COMBAT_LAYOUT = {
   /** Intent icon X position relative to enemy placeholder. */
   intentPosX: 8,
   /** Intent icon Y position relative to enemy placeholder. */
-  intentPosY: 46,
+  intentPosY: 8,
   /** Intent value label offset from icon (px). */
-  intentLabelOffset: 4,
+  intentLabelOffset: 6,
   /** Card name/description horizontal padding for word wrap width. */
   cardTextPadding: 48,
   /** Plants (Verdant Machinist): width/height per plant slot. */

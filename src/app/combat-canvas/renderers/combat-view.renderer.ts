@@ -25,35 +25,55 @@ export type { FloatingNumber };
 const intentBadgeColor = (type: EnemyIntent['type']): number => {
   switch (type) {
     case 'attack': case 'attack_multi': case 'attack_frail': case 'attack_vulnerable': case 'attack_and_block':
-      return 0xcc2222;
+      return 0xc42222;
     case 'block': case 'block_ally':
-      return 0x2255bb;
-    case 'debuff': case 'drain': case 'hex':
-      return 0x7733aa;
+      return 0x1a55bb;
+    case 'debuff': case 'hex':
+      return 0x7722aa;
+    case 'drain':
+      return 0x552288;
     case 'vulnerable':
-      return 0xaa3399;
+      return 0x991177;
     case 'ritual': case 'buff':
-      return 0x997700;
+      return 0x886600;
     default:
-      return 0x445566;
+      return 0x334455;
+  }
+};
+const intentTypeName = (type: EnemyIntent['type']): string => {
+  switch (type) {
+    case 'attack':           return 'ATTACK';
+    case 'attack_multi':     return 'ATTACK';
+    case 'attack_frail':     return 'ATTACK';
+    case 'attack_vulnerable':return 'ATTACK';
+    case 'attack_and_block': return 'ATTACK';
+    case 'block':            return 'DEFEND';
+    case 'block_ally':       return 'DEFEND';
+    case 'debuff':           return 'DEBUFF';
+    case 'drain':            return 'DRAIN';
+    case 'hex':              return 'HEX';
+    case 'vulnerable':       return 'VULNERABLE';
+    case 'ritual':           return 'RITUAL';
+    case 'buff':             return 'BUFF';
+    default:                 return 'UNKNOWN';
   }
 };
 const intentSymbol = (type: EnemyIntent['type']): string => {
   switch (type) {
     case 'attack': case 'attack_multi': case 'attack_frail': case 'attack_vulnerable': case 'attack_and_block':
-      return '\u2694';
+      return '\u2694';   // ⚔ crossed swords
     case 'block': case 'block_ally':
-      return '\u25a0';
+      return '\u25a0';   // ■ shield
     case 'debuff':
-      return '\u2716';
+      return '\u2716';   // ✖
     case 'drain':
-      return '\u25bc';
+      return '\u25bc';   // ▼
     case 'hex':
-      return '\u2726';
+      return '\u2726';   // ✦ star
     case 'vulnerable':
-      return '\u25bc';
+      return '\u25bc';   // ▼
     case 'ritual': case 'buff':
-      return '\u2605';
+      return '\u2605';   // ★ star
     default:
       return '?';
   }
@@ -72,7 +92,10 @@ const darkenIntentHex = (color: number, factor: number): number => {
 };
 
 
-/** B12: Draw intent icon into container at x,y. intentExtras: times, value2, strength, block for labels. */
+/**
+ * Draws a Slay-the-Spire-style intent badge: large circle icon + value panel to the right.
+ * The badge is prominent and legible at a glance.
+ */
 function drawIntentIcon(
   ctx: CombatViewContext,
   container: PIXI.Container,
@@ -84,92 +107,135 @@ function drawIntentIcon(
   intentExtras?: { times?: number; value2?: number; strength?: number; block?: number }
 ): void {
   const badgeColor = intentBadgeColor(type);
-  const badgeDark = darkenIntentHex(badgeColor, 0.38);
-  const badgeLight = lightenIntentHex(badgeColor, 0.55);
-  const badgeVeryLight = lightenIntentHex(badgeColor, 0.78);
-  const half = INTENT_ICON_SIZE / 2;
+  const badgeDark   = darkenIntentHex(badgeColor, 0.32);
+  const badgeLight  = lightenIntentHex(badgeColor, 0.52);
+  const badgeShine  = lightenIntentHex(badgeColor, 0.82);
+  const iconR = INTENT_ICON_SIZE / 2;           // radius of the circle badge
+  const cx    = x + iconR;
+  const cy    = y + iconR;
 
-  // Outer glow / drop shadow
-  const badgeGr = g(ctx);
-  badgeGr.x = x;
-  badgeGr.y = y;
-  // Large soft glow ring
-  badgeGr.circle(half, half, half + 5).fill({ color: badgeColor, alpha: 0.18 });
-  badgeGr.circle(half, half, half + 3).fill({ color: badgeColor, alpha: 0.22 });
-  // Drop shadow
-  badgeGr.circle(half + 2, half + 3, half + 1).fill({ color: 0x000000, alpha: 0.55 });
-  // Dark outer ring
-  badgeGr.circle(half, half, half + 1).fill({ color: badgeDark });
-  // Main body gradient (simulate with two circles)
-  badgeGr.circle(half, half, half - 0.5).fill({ color: badgeColor });
-  // Top highlight (inner shimmer)
-  badgeGr.circle(half - half * 0.2, half - half * 0.28, half * 0.42).fill({ color: 0xffffff, alpha: 0.22 });
-  // Crisp edge stroke
-  badgeGr.circle(half, half, half - 0.5).stroke({ width: 1.5, color: badgeVeryLight, alpha: 0.9 });
+  // ── Outer soft glow rings ──────────────────────────────────────────────
+  const glowGr = g(ctx);
+  glowGr.circle(cx, cy, iconR + 10).fill({ color: badgeColor, alpha: 0.12 });
+  glowGr.circle(cx, cy, iconR + 6).fill({ color: badgeColor, alpha: 0.20 });
+  // Drop shadow offset
+  glowGr.circle(cx + 2, cy + 3, iconR + 1).fill({ color: 0x000000, alpha: 0.50 });
+  container.addChild(glowGr);
+
+  // ── Circle background (dark rim → colored face → top highlight) ───────
+  const circleGr = g(ctx);
+  circleGr.circle(cx, cy, iconR + 1.5).fill({ color: badgeDark });
+  circleGr.circle(cx, cy, iconR).fill({ color: badgeColor });
+  // Radial shine at top-left quadrant
+  circleGr.circle(cx - iconR * 0.22, cy - iconR * 0.26, iconR * 0.48).fill({ color: 0xffffff, alpha: 0.16 });
+  // Crisp bright edge stroke
+  circleGr.circle(cx, cy, iconR).stroke({ width: 2, color: badgeShine, alpha: 0.92 });
   // Inner accent ring
-  badgeGr.circle(half, half, half - 3).stroke({ width: 0.75, color: badgeLight, alpha: 0.4 });
-  container.addChild(badgeGr);
+  circleGr.circle(cx, cy, iconR - 4).stroke({ width: 1, color: badgeLight, alpha: 0.35 });
+  container.addChild(circleGr);
 
-  // Symbol text (centered in the circle)
+  // ── Intent symbol ──────────────────────────────────────────────────────
   const symText = t(ctx);
   symText.text = intentSymbol(type);
   symText.style = {
     fontFamily: 'system-ui, serif',
-    fontSize: Math.round(INTENT_ICON_SIZE * 0.54),
+    fontSize: Math.round(iconR * 1.08),
     fill: 0xffffff,
     fontWeight: '700',
+    dropShadow: { color: 0x000000, blur: 4, distance: 1, alpha: 0.8 },
   };
   symText.anchor.set(0.5, 0.5);
-  symText.x = x + half;
-  symText.y = y + half;
+  symText.x = cx;
+  symText.y = cy;
   container.addChild(symText);
 
-  // Intent label (pill-style badge to the right of the icon)
-  let label = '?';
+  // ── Value panel (to the right of the circle) ───────────────────────────
+  // Line 1: intent type name (small caps)
+  // Line 2: damage / effect value (bold, larger)
+  const panelX   = x + INTENT_ICON_SIZE + L.intentLabelOffset;
+  const panelW   = 108;   // enough for "ATTACK\n15 ×2"
+  const panelH   = INTENT_ICON_SIZE;
+  const panelY   = y;
+  const panelR   = 8;
+
+  const panelBg = g(ctx);
+  panelBg.roundRect(panelX, panelY, panelW, panelH, panelR)
+    .fill({ color: badgeDark, alpha: 0.88 })
+    .stroke({ width: 1.5, color: badgeLight, alpha: 0.65 });
+  // Left accent bar
+  panelBg.roundRect(panelX, panelY + 4, 3, panelH - 8, 2).fill({ color: badgeShine, alpha: 0.85 });
+  container.addChild(panelBg);
+
+  // --- Build value string ---
+  let valLine = '?';
   if (type === 'attack' || type === 'attack_multi' || type === 'attack_frail' || type === 'attack_vulnerable' || type === 'attack_and_block') {
     const times = intentExtras?.times ?? 1;
-    label = times > 1 ? `${value} ×${times}` : `${value}`;
-    if (type === 'attack_frail' && intentExtras?.value2) label += ` +${intentExtras.value2} Frail`;
-    if (type === 'attack_vulnerable' && intentExtras?.value2) label += ` +${intentExtras.value2} Vuln`;
-    if (type === 'attack_and_block' && intentExtras?.value2) label += ` +${intentExtras.value2} Blk`;
+    valLine = times > 1 ? `${value} \u00d7${times}` : `${value}`;
   } else if (type === 'block' || type === 'block_ally') {
-    label = `+${intentExtras?.strength ?? value}`;
-  } else if (type === 'debuff') label = `×${value}`;
-  else if (type === 'vulnerable') label = `×${value}`;
-  else if (type === 'ritual') label = `+${value}`;
-  else if (type === 'buff') label = intentExtras?.strength ? `+${intentExtras.strength}` : (intentExtras?.block ? `+${intentExtras.block}` : `!`);
-  else if (type === 'drain') label = `Drain`;
-  else if (type === 'hex') label = `Hex`;
-  else if (type === 'none') label = `?`;
+    valLine = `+${intentExtras?.strength ?? value}`;
+  } else if (type === 'debuff')    valLine = `\u00d7${value}`;
+  else if (type === 'vulnerable')  valLine = `\u00d7${value}`;
+  else if (type === 'ritual')      valLine = `+${value} STR`;
+  else if (type === 'buff')        valLine = intentExtras?.strength ? `+${intentExtras.strength} STR` : (intentExtras?.block ? `+${intentExtras.block} BLK` : '!');
+  else if (type === 'drain')       valLine = 'Drain';
+  else if (type === 'hex')         valLine = 'Hex';
+  else if (type === 'none')        valLine = '???';
   if (addStatus?.length) {
     const n = addStatus.reduce((s, a) => s + a.count, 0);
-    label += ` +${n}`;
+    valLine += ` +${n}`;
   }
 
-  // Pill background for the label
-  const labelFontSize = Math.max(10, Math.round(INTENT_ICON_SIZE * 0.48));
-  const pillPadX = 6;
-  const pillH = INTENT_ICON_SIZE * 0.72;
-  const pillX = x + INTENT_ICON_SIZE + L.intentLabelOffset;
-  const pillY = y + (INTENT_ICON_SIZE - pillH) / 2;
+  // Type name (small, muted)
+  const typeFontSize = Math.max(9, Math.round(INTENT_ICON_SIZE * 0.25));
+  const typeText = t(ctx);
+  typeText.text = intentTypeName(type);
+  typeText.style = {
+    fontFamily: 'system-ui',
+    fontSize: typeFontSize,
+    fill: badgeLight,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  };
+  typeText.anchor.set(0, 0);
+  typeText.x = panelX + 8;
+  typeText.y = panelY + 4;
+  container.addChild(typeText);
 
-  const pillBg = g(ctx);
-  pillBg.roundRect(pillX - pillPadX, pillY, label.length * labelFontSize * 0.62 + pillPadX * 2, pillH, pillH / 2)
-    .fill({ color: badgeDark, alpha: 0.88 })
-    .stroke({ width: 1, color: badgeLight, alpha: 0.7 });
-  container.addChild(pillBg);
-
+  // Value (bold, prominent)
+  const valFontSize = Math.max(14, Math.round(INTENT_ICON_SIZE * 0.48));
   const valueText = t(ctx);
-  valueText.text = label;
+  valueText.text = valLine;
   valueText.style = {
     fontFamily: 'system-ui',
-    fontSize: labelFontSize,
-    fill: badgeVeryLight,
+    fontSize: valFontSize,
+    fill: 0xffffff,
     fontWeight: 'bold',
+    dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.7 },
   };
-  valueText.x = pillX;
-  valueText.y = pillY + pillH / 2 - labelFontSize * 0.55;
+  valueText.anchor.set(0, 1);
+  valueText.x = panelX + 8;
+  valueText.y = panelY + panelH - 4;
   container.addChild(valueText);
+
+  // Secondary effect label (e.g., "+ 2 Frail", "+ 3 Vuln") right-aligned inside panel
+  let secondaryLabel = '';
+  if (type === 'attack_frail'      && intentExtras?.value2) secondaryLabel = `+${intentExtras.value2} Frail`;
+  if (type === 'attack_vulnerable' && intentExtras?.value2) secondaryLabel = `+${intentExtras.value2} Vuln`;
+  if (type === 'attack_and_block'  && intentExtras?.value2) secondaryLabel = `+${intentExtras.value2} Blk`;
+  if (secondaryLabel) {
+    const secText = t(ctx);
+    secText.text = secondaryLabel;
+    secText.style = {
+      fontFamily: 'system-ui',
+      fontSize: Math.max(8, typeFontSize - 1),
+      fill: badgeShine,
+      fontWeight: '600',
+    };
+    secText.anchor.set(1, 1);
+    secText.x = panelX + panelW - 6;
+    secText.y = panelY + panelH - 4;
+    container.addChild(secText);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,99 +1078,242 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   const playerBounds = getCombatSlotBounds('player', w, h);
   const hpBounds = getCombatSlotBounds('hpBlockEnergy', w, h);
   const centerX = playerBounds.x + playerBounds.width / 2;
-  const baseY = hpBounds.y;
-  const fontSize = scaledFontSize(14, ctx);
-  const verticalGap = 6;
-  const barW = L.hpBarWidth;
-  const barH = Math.max(18, Math.round(L.hpBarHeight * 0.64));
-  const barX = centerX - barW / 2;
+  const baseY   = hpBounds.y;
+
+  const hpBarH  = Math.max(20, L.hpBarHeight);
+  const hpBarW  = L.hpBarWidth;
+  const hpBarX  = centerX - hpBarW / 2;
+
+  const hpRatio = state.playerMaxHp > 0 ? Math.max(0, Math.min(1, state.playerHp / state.playerMaxHp)) : 0;
+  const blockVal = state.playerBlock ?? 0;
+  const curEnergy = state.energy;
+  const maxEnergy = state.maxEnergy;
+
+  // Height of optional rows
+  const blockRowH  = blockVal > 0 ? 26 : 0;
+  const orbSize    = 20;
+  const totalPanelH = hpBarH + 8 + blockRowH + (blockRowH ? 4 : 0) + orbSize + 10;
+
   const barsContainer = c(ctx);
   barsContainer.zIndex = 20;
 
-  const hpRatio = state.playerMaxHp > 0 ? Math.max(0, Math.min(1, state.playerHp / state.playerMaxHp)) : 0;
-  const hpPalette: StatBarPalette = hpRatio < 0.3
-    ? { fill: 0xd01818, glow: 0xff3030, border: 0xff6a6a }
+  // ── Frosted-glass background panel ────────────────────────────────────
+  const panelBg = g(ctx);
+  panelBg.roundRect(hpBarX - 14, baseY - 6, hpBarW + 28, totalPanelH, 10)
+    .fill({ color: 0x04020b, alpha: 0.82 });
+  panelBg.roundRect(hpBarX - 14, baseY - 6, hpBarW + 28, totalPanelH, 10)
+    .stroke({ width: 1, color: 0x3a2255, alpha: 0.55 });
+  panelBg.roundRect(hpBarX - 14, baseY - 6, hpBarW + 28, 2, 10)
+    .fill({ color: 0x5a3a80, alpha: 0.70 });
+  barsContainer.addChild(panelBg);
+
+  // ── HP bar ──────────────────────────────────────────────────────────
+  const hpBarY = baseY;
+  const hpR    = Math.max(4, Math.round(hpBarH / 2));
+  const hpPalette = hpRatio < 0.3
+    ? { fill: 0xc01818, glow: 0xff3030, border: 0xff6a6a }
     : hpRatio < 0.6
-      ? { fill: 0xe08020, glow: 0xf0b040, border: 0xf2b66b }
-      : { fill: 0xe05555, glow: 0xf07070, border: 0xff8c8c };
-  drawStyledStatBar(ctx, barsContainer, {
-    x: barX,
-    y: baseY,
-    width: barW,
-    height: barH,
-    ratio: hpRatio,
-    label: `HP ${state.playerHp}/${state.playerMaxHp}`,
-    palette: hpPalette,
-    fontSize,
-  });
+      ? { fill: 0xbb5510, glow: 0xf08830, border: 0xf2aa6b }
+      : { fill: 0xb02828, glow: 0xe04444, border: 0xf07070 };
 
-  const blockY = baseY + barH + verticalGap;
-  const blockVal = state.playerBlock ?? 0;
-  const blockRatio = Math.max(0, Math.min(1, blockVal / Math.max(1, state.playerMaxHp)));
-  drawStyledStatBar(ctx, barsContainer, {
-    x: barX,
-    y: blockY,
-    width: barW,
-    height: barH,
-    ratio: blockRatio,
-    label: `Shield ${blockVal}`,
-    palette: { fill: 0x2f7ccf, glow: 0x59b0ff, border: 0x80c6ff },
-    fontSize,
-  });
+  // Track
+  const hpTrack = g(ctx);
+  hpTrack.roundRect(hpBarX, hpBarY, hpBarW, hpBarH, hpR)
+    .fill({ color: 0x000000, alpha: 0.65 });
+  hpTrack.roundRect(hpBarX, hpBarY, hpBarW, hpBarH, hpR)
+    .stroke({ width: 1, color: hpPalette.border, alpha: 0.22 });
+  barsContainer.addChild(hpTrack);
 
-  const energyY = blockY + barH + verticalGap;
-  const energyRatio = state.maxEnergy > 0 ? Math.max(0, Math.min(1, state.energy / state.maxEnergy)) : 0;
-  drawStyledStatBar(ctx, barsContainer, {
-    x: barX,
-    y: energyY,
-    width: barW,
-    height: barH,
-    ratio: energyRatio,
-    label: `Energy ${state.energy}/${state.maxEnergy}`,
-    palette: { fill: 0x1f86b8, glow: 0x6fd7ff, border: 0x8fdfff },
-    fontSize,
-  });
+  // Fill
+  const hpFillW = Math.max(0, hpBarW * hpRatio);
+  if (hpFillW > 0) {
+    const hpFill = g(ctx);
+    hpFill.roundRect(hpBarX, hpBarY, hpFillW, hpBarH, hpR)
+      .fill({ color: hpPalette.fill, alpha: 0.96 });
+    if (hpFillW > 8) {
+      hpFill.roundRect(hpBarX + 2, hpBarY + 2, hpFillW - 4, Math.max(2, hpBarH * 0.30), Math.max(2, hpBarH * 0.15))
+        .fill({ color: 0xffffff, alpha: 0.15 });
+      for (let seg = 1; seg <= 4; seg++) {
+        const segX = hpBarX + hpBarW * seg * 0.2;
+        if (segX < hpBarX + hpFillW - 3) {
+          hpFill.rect(segX, hpBarY + 2, 1, hpBarH - 4).fill({ color: 0x000000, alpha: 0.18 });
+        }
+      }
+    }
+    hpFill.roundRect(hpBarX, hpBarY, hpFillW, hpBarH, hpR)
+      .stroke({ width: 1, color: hpPalette.glow, alpha: 0.55 });
+    barsContainer.addChild(hpFill);
+    const hpGlow = g(ctx);
+    hpGlow.roundRect(hpBarX - 1, hpBarY - 1, hpFillW + 2, hpBarH + 2, hpR + 1)
+      .stroke({ width: 1.5, color: hpPalette.glow, alpha: 0.20 });
+    barsContainer.addChild(hpGlow);
+  }
+
+  // "X / Y" text
+  const hpLabelT = t(ctx);
+  hpLabelT.text = `${state.playerHp} / ${state.playerMaxHp}`;
+  hpLabelT.style = {
+    fontFamily: 'system-ui',
+    fontSize: scaledFontSize(13, ctx),
+    fill: 0xffffff,
+    fontWeight: 'bold',
+    dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.95 },
+  };
+  hpLabelT.anchor.set(0.5, 0.5);
+  hpLabelT.x = hpBarX + hpBarW / 2;
+  hpLabelT.y = hpBarY + hpBarH / 2;
+  barsContainer.addChild(hpLabelT);
+
+  let nextY = hpBarY + hpBarH + 8;
+
+  // ── Block badge (only when block > 0) ──────────────────────────────
+  if (blockVal > 0) {
+    const badgeW = 78;
+    const badgeH = 22;
+    const badgeX = centerX - badgeW / 2;
+    const badgeR = 11;
+
+    const bdGlow = g(ctx);
+    bdGlow.roundRect(badgeX - 3, nextY - 3, badgeW + 6, badgeH + 6, badgeR + 3)
+      .fill({ color: 0x2255cc, alpha: 0.20 });
+    barsContainer.addChild(bdGlow);
+
+    const bdBg = g(ctx);
+    bdBg.roundRect(badgeX, nextY, badgeW, badgeH, badgeR)
+      .fill({ color: 0x08122a, alpha: 0.94 })
+      .stroke({ width: 1.5, color: 0x3399ff, alpha: 0.88 });
+    bdBg.roundRect(badgeX + 3, nextY + 3, 3, badgeH - 6, 2)
+      .fill({ color: 0x55aaff, alpha: 0.70 });
+    barsContainer.addChild(bdBg);
+
+    const bdText = t(ctx);
+    bdText.text = `\u25a3  ${blockVal}`;
+    bdText.style = {
+      fontFamily: 'system-ui',
+      fontSize: scaledFontSize(13, ctx),
+      fill: 0x88ddff,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000022, blur: 3, distance: 1, alpha: 0.9 },
+    };
+    bdText.anchor.set(0.5, 0.5);
+    bdText.x = badgeX + badgeW / 2;
+    bdText.y = nextY + badgeH / 2;
+    barsContainer.addChild(bdText);
+    nextY += badgeH + 4;
+  }
+
+  // ── Energy orbs row ──────────────────────────────────────────────────
+  const orbGap   = 5;
+  const totalOrbW = maxEnergy * orbSize + (maxEnergy - 1) * orbGap;
+  let orbX = centerX - totalOrbW / 2;
+  for (let ei = 0; ei < maxEnergy; ei++) {
+    const filled = ei < curEnergy;
+    const cx = orbX + orbSize / 2;
+    const cy = nextY + orbSize / 2;
+    const orbGr = g(ctx);
+    if (filled) orbGr.circle(cx, cy, orbSize * 0.64).fill({ color: 0x1a8acc, alpha: 0.20 });
+    orbGr.circle(cx, cy, orbSize / 2).fill({ color: filled ? 0x1877b8 : 0x0a1520, alpha: filled ? 0.96 : 0.75 });
+    orbGr.circle(cx, cy, orbSize / 2).stroke({ width: 1.5, color: filled ? 0x55ddff : 0x1a3344, alpha: 0.88 });
+    if (filled) {
+      orbGr.circle(cx - orbSize * 0.20, cy - orbSize * 0.22, orbSize * 0.18)
+        .fill({ color: 0xffffff, alpha: 0.25 });
+    }
+    barsContainer.addChild(orbGr);
+    if (filled) {
+      const orbDot = g(ctx);
+      orbDot.circle(cx, cy, orbSize * 0.18).fill({ color: 0x88eeff, alpha: 0.70 });
+      barsContainer.addChild(orbDot);
+    }
+    orbX += orbSize + orbGap;
+  }
+  // Energy label to the right of orbs
+  const energyLabelT = t(ctx);
+  energyLabelT.text = `ENERGY`;
+  energyLabelT.style = {
+    fontFamily: 'system-ui',
+    fontSize: scaledFontSize(9, ctx),
+    fill: 0x4488aa,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  };
+  energyLabelT.anchor.set(0, 0.5);
+  energyLabelT.x = centerX + totalOrbW / 2 + 7;
+  energyLabelT.y = nextY + orbSize / 2;
+  barsContainer.addChild(energyLabelT);
+  nextY += orbSize + 8;
 
   stage.addChild(barsContainer);
 
-  const playerStr = state.strengthStacks ?? 0;
-  const playerWeak = state.playerWeakStacks ?? 0;
-  const playerVuln = state.playerVulnerableStacks ?? 0;
-  const playerFrail = state.frailStacks ?? 0;
-  const playerArtifact = state.playerArtifactStacks ?? 0;
-  const hexInHand = state.hand.filter((id) => id === 'hex').length;
-  const statusPills: { label: string; color: number; stroke: number }[] = [];
-  if (playerStr > 0) statusPills.push({ label: `Str ${playerStr}`, color: 0xcc4444, stroke: 0xff6666 });
-  if (playerWeak > 0) statusPills.push({ label: `Weak ${playerWeak}`, color: 0x6a6a44, stroke: 0x999966 });
-  if (playerVuln > 0) statusPills.push({ label: `Vuln ${playerVuln}`, color: 0x9944aa, stroke: 0xcc66dd });
-  if (playerFrail > 0) statusPills.push({ label: `Frail ${playerFrail}`, color: 0x5a5a6a, stroke: 0x8888aa });
-  if (playerArtifact > 0) statusPills.push({ label: `Art ${playerArtifact}`, color: 0x44aa88, stroke: 0x66ccaa });
-  if (hexInHand > 0) statusPills.push({ label: `Hex ${hexInHand}`, color: 0x663366, stroke: 0x996699 });
-  if (statusPills.length > 0) {
-    const pillH = 16;
-    const pillGap = 4;
-    const barsBottomY = energyY + barH;
-    const pillsY = barsBottomY + 6;
-    const totalPillsW = statusPills.length * 44 + (statusPills.length - 1) * pillGap;
-    let pillX = centerX - totalPillsW / 2;
-    const smallFont = Math.max(10, scaledFontSize(12, ctx));
-    for (const pill of statusPills) {
-      const pillContainer = c(ctx);
-      pillContainer.zIndex = 20;
-      pillContainer.x = pillX;
-      pillContainer.y = pillsY;
-      const pillBg = g(ctx);
-      pillBg.roundRect(0, 0, 44, pillH, 4).fill({ color: pill.color, alpha: 0.92 }).stroke({ width: 1, color: pill.stroke });
-      pillContainer.addChild(pillBg);
-      const pillText = t(ctx);
-      pillText.text = pill.label;
-      pillText.style = { fontFamily: 'system-ui', fontSize: smallFont, fill: 0xffffff, fontWeight: 'bold' };
-      pillText.anchor.set(0.5, 0.5);
-      pillText.x = 22;
-      pillText.y = pillH / 2;
-      pillContainer.addChild(pillText);
-      stage.addChild(pillContainer);
-      pillX += 44 + pillGap;
+  // ── Player status badges ────────────────────────────────────────────
+  const playerStr      = state.strengthStacks        ?? 0;
+  const playerWeak     = state.playerWeakStacks       ?? 0;
+  const playerVuln     = state.playerVulnerableStacks ?? 0;
+  const playerFrail    = state.frailStacks            ?? 0;
+  const playerArtifact = state.playerArtifactStacks   ?? 0;
+  const hexInHand      = state.hand.filter((id) => id === 'hex').length;
+
+  interface PlayerBadgeDef {
+    icon: string; label: string; count: string;
+    bg: number; border: number; glow: number;
+  }
+  const playerBadges: PlayerBadgeDef[] = [];
+  if (playerStr > 0)      playerBadges.push({ icon: '\u2694', label: 'STR',   count: `${playerStr}`,      bg: 0x8a1a1a, border: 0xff5555, glow: 0xff3333 });
+  if (playerWeak > 0)     playerBadges.push({ icon: '\u223c', label: 'WEAK',  count: `${playerWeak}`,     bg: 0x333300, border: 0x888800, glow: 0xcccc00 });
+  if (playerVuln > 0)     playerBadges.push({ icon: '\u25bd', label: 'VULN',  count: `${playerVuln}`,     bg: 0x550033, border: 0xcc1177, glow: 0xff44aa });
+  if (playerFrail > 0)    playerBadges.push({ icon: '\u2248', label: 'FRAIL', count: `${playerFrail}`,    bg: 0x333355, border: 0x6666aa, glow: 0x8888cc });
+  if (playerArtifact > 0) playerBadges.push({ icon: '\u25c6', label: 'ART',   count: `${playerArtifact}`, bg: 0x004433, border: 0x00bb77, glow: 0x00ffaa });
+  if (hexInHand > 0)      playerBadges.push({ icon: '\u2726', label: 'HEX',   count: `${hexInHand}`,      bg: 0x330033, border: 0x9922aa, glow: 0xcc33dd });
+
+  if (playerBadges.length > 0) {
+    const bdSz  = 30;
+    const bdGap = 5;
+    const totalBW = playerBadges.length * bdSz + (playerBadges.length - 1) * bdGap;
+    let bx = centerX - totalBW / 2;
+
+    for (const badge of playerBadges) {
+      const bc = c(ctx);
+      bc.zIndex = 22;
+      const bcx = bx + bdSz / 2;
+      const bcy = nextY + bdSz / 2;
+
+      const glGr = g(ctx);
+      glGr.circle(bcx, bcy, bdSz * 0.72).fill({ color: badge.glow, alpha: 0.14 });
+      bc.addChild(glGr);
+
+      const ciGr = g(ctx);
+      ciGr.circle(bcx, bcy, bdSz / 2 + 1).fill({ color: 0x000000, alpha: 0.50 });
+      ciGr.circle(bcx, bcy, bdSz / 2).fill({ color: badge.bg, alpha: 0.96 });
+      ciGr.circle(bcx, bcy, bdSz / 2).stroke({ width: 2, color: badge.border, alpha: 0.92 });
+      ciGr.circle(bcx - bdSz * 0.20, bcy - bdSz * 0.22, bdSz * 0.18).fill({ color: 0xffffff, alpha: 0.20 });
+      bc.addChild(ciGr);
+
+      const icT = t(ctx);
+      icT.text = badge.icon;
+      icT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(12, ctx), fill: 0xffffff, fontWeight: 'bold',
+        dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.8 } };
+      icT.anchor.set(0.5, 0.5);
+      icT.x = bcx;
+      icT.y = bcy - 5;
+      bc.addChild(icT);
+
+      const ctT = t(ctx);
+      ctT.text = badge.count;
+      ctT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(10, ctx), fill: 0xffffff, fontWeight: 'bold' };
+      ctT.anchor.set(0.5, 0);
+      ctT.x = bcx;
+      ctT.y = bcy + 4;
+      bc.addChild(ctT);
+
+      const lbT = t(ctx);
+      lbT.text = badge.label;
+      lbT.style = { fontFamily: 'system-ui', fontSize: Math.max(8, scaledFontSize(8, ctx)), fill: badge.border, fontWeight: '600' };
+      lbT.anchor.set(0.5, 0);
+      lbT.x = bcx;
+      lbT.y = nextY + bdSz + 2;
+      bc.addChild(lbT);
+
+      stage.addChild(bc);
+      bx += bdSz + bdGap;
     }
   }
 }
@@ -1472,67 +1681,138 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       container.addChild(ph);
     }
 
-    // --- HP + Shield bars (below the character) ---
-    const barW = L.enemyBarWidth ?? 140;
-    const barH = L.enemyBarHeight ?? 20;
-    const barX = Math.floor((enemyPlaceholderW - barW) / 2);
-    const hpY = enemyPlaceholderH - barH * 2 - 20;
-    const shieldY = hpY + barH + 5;
+    // ─── Bottom info panel: name → HP bar → block badge ─────────────────────
+    const barW    = L.enemyBarWidth ?? 234;
+    const barH    = L.enemyBarHeight ?? 22;
+    const barX    = Math.floor((enemyPlaceholderW - barW) / 2);
+    const blockVal= e.block ?? 0;
     const hpRatio = e.maxHp > 0 ? Math.max(0, Math.min(1, e.hp / e.maxHp)) : 0;
-    const blockVal = e.block ?? 0;
 
-    const hpPalette: StatBarPalette = hpRatio < 0.3
-      ? { fill: 0xd01818, glow: 0xff3030, border: 0xff6a6a }
-      : hpRatio < 0.6
-        ? { fill: 0xe08020, glow: 0xf0b040, border: 0xf2b66b }
-        : { fill: 0xe05555, glow: 0xf07070, border: 0xff8c8c };
-    drawStyledStatBar(ctx, container, {
-      x: barX,
-      y: hpY,
-      width: barW,
-      height: barH,
-      ratio: hpRatio,
-      label: `HP ${e.hp}/${e.maxHp}`,
-      palette: hpPalette,
-      fontSize: scaledFontSize(10, ctx),
-    });
-    if (blockVal > 0) {
-      const blockRatio = e.maxHp > 0 ? Math.max(0, Math.min(1, blockVal / e.maxHp)) : 0;
-      drawStyledStatBar(ctx, container, {
-        x: barX,
-        y: shieldY,
-        width: barW,
-        height: barH - 2,
-        ratio: blockRatio,
-        label: `Shield ${blockVal}`,
-        palette: { fill: 0x2f7ccf, glow: 0x59b0ff, border: 0x80c6ff },
-        fontSize: scaledFontSize(9, ctx),
-      });
-    }
+    // How tall is the block badge row? (only when block > 0)
+    const blockRowH = blockVal > 0 ? 24 : 0;
+    const bottomPanelH = 26 + barH + 6 + blockRowH + 6;   // name + spacing + bar + spacing + block + padding
 
-    // --- Name plate (below bars, above bottom edge) ---
-    const namePlatePadX = 10;
-    const namePlateH = 22;
-    const namePlateY = enemyPlaceholderH - namePlateH - 4;
-    const namePlateW = enemyPlaceholderW - 8;
-    const namePlateX = 4;
-    const namePlateBg = g(ctx);
-    namePlateBg.roundRect(namePlateX, namePlateY, namePlateW, namePlateH, namePlateH / 2)
-      .fill({ color: 0x0a0518, alpha: 0.85 })
-      .stroke({ width: 1, color: 0x6a4a9a, alpha: 0.6 });
-    container.addChild(namePlateBg);
+    // Dark frosted-glass panel behind everything
+    const panelX = 4;
+    const panelW = enemyPlaceholderW - 8;
+    const panelY = enemyPlaceholderH - bottomPanelH;
+    const panelBg = g(ctx);
+    panelBg.roundRect(panelX, panelY, panelW, bottomPanelH, 8)
+      .fill({ color: 0x05030c, alpha: 0.82 });
+    panelBg.roundRect(panelX, panelY, panelW, bottomPanelH, 8)
+      .stroke({ width: 1, color: 0x3a2255, alpha: 0.55 });
+    // Thin gold top edge accent
+    panelBg.roundRect(panelX, panelY, panelW, 2, 8).fill({ color: 0x5a3a80, alpha: 0.7 });
+    container.addChild(panelBg);
+
+    // ── Enemy name ──────────────────────────────────────────────────────
+    const nameFontSz = scaledFontSize(14, ctx);
     const nameT = t(ctx);
     nameT.text = e.name;
     nameT.style = {
       fontFamily: 'system-ui',
-      fontSize: scaledFontSize(13, ctx),
-      fill: 0xeeddff,
-      fontWeight: '700',
+      fontSize: nameFontSz,
+      fill: 0xf2eaff,
+      fontWeight: '800',
+      dropShadow: { color: 0x000000, blur: 4, distance: 1, alpha: 0.9 },
     };
-    nameT.anchor.set(0.5, 0.5);
-    nameT.x = namePlateX + namePlateW / 2;
-    nameT.y = namePlateY + namePlateH / 2;
+    nameT.anchor.set(0.5, 0);
+    nameT.x = enemyPlaceholderW / 2;
+    nameT.y = panelY + 4;
     container.addChild(nameT);
+
+    // ── HP bar ──────────────────────────────────────────────────────────
+    const hpY = panelY + 26;
+    const hpPalette: StatBarPalette = hpRatio < 0.3
+      ? { fill: 0xc01818, glow: 0xff3030, border: 0xff6a6a }
+      : hpRatio < 0.6
+        ? { fill: 0xbb5510, glow: 0xf08830, border: 0xf2aa6b }
+        : { fill: 0xb02828, glow: 0xe04444, border: 0xf07070 };
+
+    // Track (dark background)
+    const hpTrack = g(ctx);
+    const hpR = Math.max(4, Math.round(barH / 2));
+    hpTrack.roundRect(barX, hpY, barW, barH, hpR).fill({ color: 0x000000, alpha: 0.65 });
+    hpTrack.roundRect(barX, hpY, barW, barH, hpR).stroke({ width: 1, color: hpPalette.border ?? 0x886666, alpha: 0.22 });
+    container.addChild(hpTrack);
+
+    // Fill
+    const hpFillW = Math.max(0, barW * hpRatio);
+    if (hpFillW > 0) {
+      const hpFill = g(ctx);
+      hpFill.roundRect(barX, hpY, hpFillW, barH, hpR).fill({ color: hpPalette.fill, alpha: 0.96 });
+      // Segmented shine stripe
+      if (hpFillW > 8) {
+        hpFill.roundRect(barX + 2, hpY + 2, hpFillW - 4, Math.max(2, barH * 0.30), Math.max(2, barH * 0.15))
+          .fill({ color: 0xffffff, alpha: 0.15 });
+        // Segment tick marks every ~20% across fill
+        for (let seg = 1; seg <= 4; seg++) {
+          const segX = barX + (barW * seg * 0.2);
+          if (segX < barX + hpFillW - 3) {
+            hpFill.rect(segX, hpY + 2, 1, barH - 4).fill({ color: 0x000000, alpha: 0.18 });
+          }
+        }
+      }
+      hpFill.roundRect(barX, hpY, hpFillW, barH, hpR)
+        .stroke({ width: 1, color: hpPalette.glow, alpha: 0.55 });
+      container.addChild(hpFill);
+      // Glow halo
+      const hpGlow = g(ctx);
+      hpGlow.roundRect(barX - 1, hpY - 1, hpFillW + 2, barH + 2, hpR + 1)
+        .stroke({ width: 1.5, color: hpPalette.glow, alpha: 0.20 });
+      container.addChild(hpGlow);
+    }
+
+    // HP text centered in bar: "X / Y"
+    const hpLabelT = t(ctx);
+    hpLabelT.text = `${e.hp} / ${e.maxHp}`;
+    hpLabelT.style = {
+      fontFamily: 'system-ui',
+      fontSize: scaledFontSize(11, ctx),
+      fill: 0xffffff,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.95 },
+    };
+    hpLabelT.anchor.set(0.5, 0.5);
+    hpLabelT.x = barX + barW / 2;
+    hpLabelT.y = hpY + barH / 2;
+    container.addChild(hpLabelT);
+
+    // ── Block badge (below HP bar when block > 0) ──────────────────────
+    if (blockVal > 0) {
+      const blockBadgeY = hpY + barH + 5;
+      const badgeW = 74;
+      const badgeH = 20;
+      const badgeX = barX + barW / 2 - badgeW / 2;
+      const badgeRad = 10;
+
+      const badgeGlowGr = g(ctx);
+      badgeGlowGr.roundRect(badgeX - 3, blockBadgeY - 3, badgeW + 6, badgeH + 6, badgeRad + 3)
+        .fill({ color: 0x2255cc, alpha: 0.20 });
+      container.addChild(badgeGlowGr);
+
+      const badgeBg = g(ctx);
+      badgeBg.roundRect(badgeX, blockBadgeY, badgeW, badgeH, badgeRad)
+        .fill({ color: 0x08122a, alpha: 0.94 })
+        .stroke({ width: 1.5, color: 0x3399ff, alpha: 0.88 });
+      badgeBg.roundRect(badgeX + 3, blockBadgeY + 3, 3, badgeH - 6, 2)
+        .fill({ color: 0x55aaff, alpha: 0.70 });
+      container.addChild(badgeBg);
+
+      const shieldT = t(ctx);
+      shieldT.text = `\u25a3  ${blockVal}`;   // ▣ shield
+      shieldT.style = {
+        fontFamily: 'system-ui',
+        fontSize: scaledFontSize(12, ctx),
+        fill: 0x88ddff,
+        fontWeight: 'bold',
+        dropShadow: { color: 0x000022, blur: 3, distance: 1, alpha: 0.9 },
+      };
+      shieldT.anchor.set(0.5, 0.5);
+      shieldT.x = badgeX + badgeW / 2;
+      shieldT.y = blockBadgeY + badgeH / 2;
+      container.addChild(shieldT);
+    }
 
     // --- Intent icon (top-left) ---
     if (e.intent) {
@@ -1546,83 +1826,112 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       drawIntentIcon(ctx, container, 'none', 0, L.intentPosX, L.intentPosY);
     }
 
-    // --- Status effect pills (stacked below intent, top-right for debuffs) ---
-    const vulnerableStacks = (e as { vulnerableStacks?: number }).vulnerableStacks ?? 0;
-    const weakStacks = (e as { weakStacks?: number }).weakStacks ?? 0;
-    const strengthStacks = (e as { strengthStacks?: number }).strengthStacks ?? 0;
-    const ritualStacks = (e as { ritualStacks?: number }).ritualStacks ?? 0;
+    // ─── Status effect badges (below intent, horizontal centred row) ──────────
+    const vulnerableStacks = e.vulnerableStacks ?? 0;
+    const weakStacks       = e.weakStacks       ?? 0;
+    const strengthStacks   = e.strengthStacks   ?? 0;
+    const ritualStacks     = e.ritualStacks     ?? 0;
+    const artifactStacks   = e.artifactStacks   ?? 0;
 
-    // Buff pills (bottom-left row): Str, Ritual
-    const buffPills: { label: string; icon: string; bg: number; border: number }[] = [];
-    if (strengthStacks > 0) buffPills.push({ label: `${strengthStacks}`, icon: '⚔', bg: 0xaa2222, border: 0xff6666 });
-    if (ritualStacks > 0) buffPills.push({ label: `${ritualStacks}`, icon: '★', bg: 0x7733aa, border: 0xaa66cc });
-
-    // Debuff pills (bottom-right row): Vuln, Weak
-    const debuffPills: { label: string; icon: string; bg: number; border: number }[] = [];
-    if (vulnerableStacks > 0) debuffPills.push({ label: `${vulnerableStacks}`, icon: '▼', bg: 0x881166, border: 0xcc44aa });
-    if (weakStacks > 0) debuffPills.push({ label: `${weakStacks}`, icon: '~', bg: 0x55551a, border: 0x999944 });
-
-    const pillSize = 28;
-    const pillGap = 4;
-    const pillRowY = L.intentPosY + INTENT_ICON_SIZE + 8;
-
-    // Draw buff pills on left side
-    for (let pi = 0; pi < buffPills.length; pi++) {
-      const pill = buffPills[pi];
-      const px = L.intentPosX + pi * (pillSize + pillGap);
-      const py = pillRowY;
-      const pillGr = g(ctx);
-      // Glow
-      pillGr.circle(px + pillSize / 2, py + pillSize / 2, pillSize * 0.72).fill({ color: pill.bg, alpha: 0.18 });
-      // Background circle
-      pillGr.circle(px + pillSize / 2, py + pillSize / 2, pillSize / 2).fill({ color: pill.bg, alpha: 0.9 });
-      pillGr.circle(px + pillSize / 2, py + pillSize / 2, pillSize / 2).stroke({ width: 1.5, color: pill.border, alpha: 0.9 });
-      // Shine
-      pillGr.circle(px + pillSize * 0.35, py + pillSize * 0.3, pillSize * 0.18).fill({ color: 0xffffff, alpha: 0.22 });
-      container.addChild(pillGr);
-      // Icon
-      const iconT = t(ctx);
-      iconT.text = pill.icon;
-      iconT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(10, ctx), fill: 0xffffff, fontWeight: 'bold' };
-      iconT.anchor.set(0.5, 0.5);
-      iconT.x = px + pillSize / 2;
-      iconT.y = py + pillSize * 0.38;
-      container.addChild(iconT);
-      // Count badge
-      const countT = t(ctx);
-      countT.text = pill.label;
-      countT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' };
-      countT.anchor.set(0.5, 0);
-      countT.x = px + pillSize / 2;
-      countT.y = py + pillSize * 0.56;
-      container.addChild(countT);
+    interface StatusBadgeDef {
+      icon: string; label: string; count: string;
+      bg: number; border: number; glow: number; isBuff: boolean;
     }
+    const allBadges: StatusBadgeDef[] = [];
+    // ── Buffs (warm/orange/red tones) ─────────────────────────────────────
+    if (strengthStacks > 0) allBadges.push({
+      icon: '\u2694', label: 'STR', count: `${strengthStacks}`,
+      bg: 0x8a1a1a, border: 0xff5555, glow: 0xff3333, isBuff: true,
+    });
+    if (ritualStacks > 0) allBadges.push({
+      icon: '\u2605', label: 'RITL', count: `${ritualStacks}`,
+      bg: 0x5a3300, border: 0xcc8800, glow: 0xffaa00, isBuff: true,
+    });
+    if (artifactStacks > 0) allBadges.push({
+      icon: '\u25c6', label: 'ART', count: `${artifactStacks}`,
+      bg: 0x004433, border: 0x00bb77, glow: 0x00ffaa, isBuff: true,
+    });
+    // ── Debuffs (purple/green tones) ────────────────────────────────────
+    if (vulnerableStacks > 0) allBadges.push({
+      icon: '\u25bd', label: 'VULN', count: `${vulnerableStacks}`,
+      bg: 0x550033, border: 0xcc1177, glow: 0xff44aa, isBuff: false,
+    });
+    if (weakStacks > 0) allBadges.push({
+      icon: '\u223c', label: 'WEAK', count: `${weakStacks}`,
+      bg: 0x333300, border: 0x888800, glow: 0xcccc00, isBuff: false,
+    });
 
-    // Draw debuff pills on right side
-    for (let pi = 0; pi < debuffPills.length; pi++) {
-      const pill = debuffPills[pi];
-      const px = enemyPlaceholderW - L.intentPosX - pillSize - pi * (pillSize + pillGap);
-      const py = pillRowY;
-      const pillGr = g(ctx);
-      pillGr.circle(px + pillSize / 2, py + pillSize / 2, pillSize * 0.72).fill({ color: pill.bg, alpha: 0.18 });
-      pillGr.circle(px + pillSize / 2, py + pillSize / 2, pillSize / 2).fill({ color: pill.bg, alpha: 0.9 });
-      pillGr.circle(px + pillSize / 2, py + pillSize / 2, pillSize / 2).stroke({ width: 1.5, color: pill.border, alpha: 0.9 });
-      pillGr.circle(px + pillSize * 0.35, py + pillSize * 0.3, pillSize * 0.18).fill({ color: 0xffffff, alpha: 0.22 });
-      container.addChild(pillGr);
-      const iconT = t(ctx);
-      iconT.text = pill.icon;
-      iconT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(10, ctx), fill: 0xffffff, fontWeight: 'bold' };
-      iconT.anchor.set(0.5, 0.5);
-      iconT.x = px + pillSize / 2;
-      iconT.y = py + pillSize * 0.38;
-      container.addChild(iconT);
-      const countT = t(ctx);
-      countT.text = pill.label;
-      countT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(9, ctx), fill: 0xffffff, fontWeight: 'bold' };
-      countT.anchor.set(0.5, 0);
-      countT.x = px + pillSize / 2;
-      countT.y = py + pillSize * 0.56;
-      container.addChild(countT);
+    if (allBadges.length > 0) {
+      const badgeSize = 32;          // circle diameter
+      const badgeGap  = 5;
+      const pillRowY  = L.intentPosY + INTENT_ICON_SIZE + 8;
+      const totalW    = allBadges.length * badgeSize + (allBadges.length - 1) * badgeGap;
+      let bx          = Math.floor((enemyPlaceholderW - totalW) / 2);
+
+      for (const badge of allBadges) {
+        const cx = bx + badgeSize / 2;
+        const cy = pillRowY + badgeSize / 2;
+
+        // Outer glow
+        const glowGr = g(ctx);
+        glowGr.circle(cx, cy, badgeSize * 0.72).fill({ color: badge.glow, alpha: 0.14 });
+        container.addChild(glowGr);
+
+        // Circle body
+        const circleGr = g(ctx);
+        circleGr.circle(cx, cy, badgeSize / 2 + 1).fill({ color: 0x000000, alpha: 0.50 });
+        circleGr.circle(cx, cy, badgeSize / 2).fill({ color: badge.bg, alpha: 0.96 });
+        circleGr.circle(cx, cy, badgeSize / 2).stroke({ width: 2, color: badge.border, alpha: 0.92 });
+        // Top-left shine
+        circleGr.circle(cx - badgeSize * 0.20, cy - badgeSize * 0.22, badgeSize * 0.18)
+          .fill({ color: 0xffffff, alpha: 0.20 });
+        container.addChild(circleGr);
+
+        // Icon symbol (upper half of circle)
+        const iconT = t(ctx);
+        iconT.text = badge.icon;
+        iconT.style = {
+          fontFamily: 'system-ui',
+          fontSize: scaledFontSize(13, ctx),
+          fill: 0xffffff,
+          fontWeight: 'bold',
+          dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.8 },
+        };
+        iconT.anchor.set(0.5, 0.5);
+        iconT.x = cx;
+        iconT.y = cy - 5;
+        container.addChild(iconT);
+
+        // Stack count (lower half, bold)
+        const countT = t(ctx);
+        countT.text = badge.count;
+        countT.style = {
+          fontFamily: 'system-ui',
+          fontSize: scaledFontSize(10, ctx),
+          fill: 0xffffff,
+          fontWeight: 'bold',
+        };
+        countT.anchor.set(0.5, 0);
+        countT.x = cx;
+        countT.y = cy + 5;
+        container.addChild(countT);
+
+        // Label tooltip strip below the circle (very small, muted)
+        const labelT = t(ctx);
+        labelT.text = badge.label;
+        labelT.style = {
+          fontFamily: 'system-ui',
+          fontSize: Math.max(8, scaledFontSize(9, ctx)),
+          fill: badge.border,
+          fontWeight: '600',
+        };
+        labelT.anchor.set(0.5, 0);
+        labelT.x = cx;
+        labelT.y = pillRowY + badgeSize + 2;
+        container.addChild(labelT);
+
+        bx += badgeSize + badgeGap;
+      }
     }
 
     // --- Hit flash overlay ---
