@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 
 @Component({
   selector: 'app-rest-panel',
@@ -6,10 +6,16 @@ import { Component, input, output } from '@angular/core';
   template: `
     <div class="rest-panel">
     <div class="rest-title">⚕️ Repair Bay</div>
+    @if (playerHp() > 0 && playerMaxHp() > 0) {
+        <div class="rest-hp-bar-wrap">
+          <div class="rest-hp-bar" [style.width.%]="hpPercent()"></div>
+          <span class="rest-hp-label">{{ playerHp() }} / {{ playerMaxHp() }} Hull</span>
+        </div>
+      }
       <div class="rest-actions">
        
-      <button type="button" class="btn-rest" (click)="restHeal.emit()">
-          Restore Hull
+      <button type="button" class="btn-rest" [disabled]="playerHp() >= playerMaxHp()" (click)="restHeal.emit()">
+      ⚕ Restore Hull
         </button>
       </div>
       @if (removableCards().length > 0) {
@@ -40,4 +46,11 @@ export class RestPanelComponent {
 
   restHeal = output<void>();
   removeCard = output<string>();
+  
+  playerHp = input<number>(0);
+  playerMaxHp = input<number>(0);
+  hpPercent = computed(() => {
+    const max = this.playerMaxHp();
+    return max > 0 ? Math.round((this.playerHp() / max) * 100) : 0;
+  });
 }

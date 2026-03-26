@@ -785,8 +785,46 @@
     transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease, opacity 0.25s ease;
     overflow: hidden;
     min-width: 100px;
+    animation: rewardCardEnter 0.35s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+  }
+  @keyframes rewardCardEnter {
+    from { opacity: 0; transform: translateY(20px) scale(0.92); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
   
+   /* ── Rest panel HP bar ── */
+   .rest-hp-bar-wrap {
+    position: relative;
+    margin: 0 24px 14px;
+    height: 22px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(180, 50, 50, 0.28);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .rest-hp-bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: linear-gradient(90deg, #6e1a1a 0%, #c03030 50%, #e05050 100%);
+    border-radius: 12px;
+    transition: width 0.4s ease;
+    min-width: 4px;
+    max-width: 100%;
+  }
+  .rest-hp-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #ffe8e8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    letter-spacing: 0.04em;
+  }
+
+
   .reward-card-art {
     width: 100px;
     height: 100%;
@@ -887,7 +925,8 @@
     font-weight: 600;
     font-size: 0.95rem;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(180, 128, 24, 0.25);
-    animation: feedbackFadeIn 0.2s ease;
+    animation: feedbackFadeIn 0.2s ease, feedbackFadeOut 0.3s 2.4s ease forwards;
+    pointer-events: none;
   }
 
   .hand-card-preview {
@@ -991,6 +1030,12 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+  }
+  
+  
+  @keyframes feedbackFadeOut {
+    from { opacity: 1; transform: translateX(-50%) translateY(0); }
+    to   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   }
   
   .rest-actions {
@@ -2325,4 +2370,266 @@
   80%  { transform: translate(2px, -1px) rotate(0.2deg); }
   90%  { transform: translate(-1px, 1px) rotate(-0.1deg); }
   100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+/* ═══════════════════════════════════════════════════
+   NEW POLISH EFFECTS
+   ═══════════════════════════════════════════════════ */
+/* ── Combat result overlay ── */
+.combat-result-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 800;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: resultOverlayIn 0.6s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+}
+@keyframes resultOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.combat-result-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 48px 60px 40px;
+  border-radius: 24px;
+  text-align: center;
+  animation: resultCardIn 0.55s cubic-bezier(0.34, 1.35, 0.64, 1) 0.1s both;
+}
+@keyframes resultCardIn {
+  from { opacity: 0; transform: scale(0.6) translateY(40px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.combat-result-overlay.result-win .combat-result-inner {
+  background: linear-gradient(160deg, rgba(12, 50, 28, 0.97) 0%, rgba(8, 30, 18, 0.99) 100%);
+  border: 1px solid rgba(80, 220, 140, 0.5);
+  box-shadow:
+    0 0 80px rgba(60, 200, 120, 0.4),
+    0 0 200px rgba(40, 160, 90, 0.2),
+    0 24px 60px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(100, 255, 180, 0.12);
+}
+.combat-result-overlay.result-lose .combat-result-inner {
+  background: linear-gradient(160deg, rgba(50, 8, 8, 0.97) 0%, rgba(30, 4, 4, 0.99) 100%);
+  border: 1px solid rgba(200, 60, 60, 0.5);
+  box-shadow:
+    0 0 80px rgba(180, 40, 40, 0.4),
+    0 0 200px rgba(140, 20, 20, 0.2),
+    0 24px 60px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 100, 100, 0.08);
+}
+.combat-result-title {
+  font-family: var(--font-title, 'Cinzel', serif);
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+}
+.result-win .combat-result-title {
+  color: #70ffb0;
+  text-shadow: 0 0 30px rgba(100, 255, 160, 0.7), 0 4px 12px rgba(0, 0, 0, 0.8);
+  animation: winTitlePulse 2s ease-in-out infinite;
+}
+@keyframes winTitlePulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(100, 255, 160, 0.6), 0 4px 12px rgba(0, 0, 0, 0.8); }
+  50%       { text-shadow: 0 0 50px rgba(100, 255, 160, 0.95), 0 0 100px rgba(60, 220, 120, 0.5), 0 4px 12px rgba(0, 0, 0, 0.8); }
+}
+.result-lose .combat-result-title {
+  color: #ff7070;
+  text-shadow: 0 0 30px rgba(255, 60, 60, 0.7), 0 4px 12px rgba(0, 0, 0, 0.8);
+}
+.combat-result-sub {
+  font-family: var(--font-ui, 'Exo 2', sans-serif);
+  font-size: 0.95rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+.result-win .combat-result-sub { color: #a0ffcc; }
+.result-lose .combat-result-sub { color: #ffaaaa; }
+.btn-result-action {
+  margin-top: 8px;
+  padding: 14px 36px;
+  font-family: var(--font-title, 'Cinzel', serif);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  border-radius: 12px;
+  border: none;
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.2s ease;
+  animation: resultBtnIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s both;
+}
+@keyframes resultBtnIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.result-win .btn-result-action {
+  background: linear-gradient(160deg, #2a8f52 0%, #1a6038 100%);
+  color: #c0ffd8;
+  box-shadow: 0 4px 0 #0e3820, 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(60, 200, 120, 0.35);
+  &:hover { transform: translateY(-3px); filter: brightness(1.15); box-shadow: 0 6px 0 #0e3820, 0 12px 32px rgba(0,0,0,0.5), 0 0 32px rgba(80,220,140,0.5); }
+  &:active { transform: translateY(0); }
+}
+.result-lose .btn-result-action {
+  background: linear-gradient(160deg, #8f2a2a 0%, #601818 100%);
+  color: #ffd0d0;
+  box-shadow: 0 4px 0 #3e0e0e, 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(200, 60, 60, 0.35);
+  &:hover { transform: translateY(-3px); filter: brightness(1.15); box-shadow: 0 6px 0 #3e0e0e, 0 12px 32px rgba(0,0,0,0.5), 0 0 32px rgba(220,80,80,0.5); }
+  &:active { transform: translateY(0); }
+}
+/* Defeat glitch effect */
+.defeat-glitch {
+  animation: defeatGlitch 0.75s steps(1) forwards !important;
+}
+@keyframes defeatGlitch {
+  0%   { filter: none; }
+  10%  { filter: hue-rotate(90deg) contrast(1.5) brightness(1.4); }
+  20%  { filter: none; }
+  30%  { filter: hue-rotate(-40deg) saturate(2) brightness(0.8); }
+  40%  { filter: none; }
+  50%  { filter: contrast(2) brightness(1.2) hue-rotate(180deg); }
+  60%  { filter: none; }
+  70%  { filter: hue-rotate(-90deg) brightness(1.5); }
+  80%  { filter: none; }
+  100% { filter: none; }
+}
+/* ── End turn button pulse when ready ── */
+.btn-end-ready {
+  animation: endTurnReady 1.8s ease-in-out infinite;
+}
+@keyframes endTurnReady {
+  0%, 100% {
+    box-shadow:
+      0 4px 0 #180f02,
+      0 6px 20px rgba(0, 0, 0, 0.45),
+      0 0 16px rgba(170, 120, 24, 0.24),
+      inset 0 1px 0 rgba(255, 240, 160, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 4px 0 #180f02,
+      0 8px 28px rgba(0, 0, 0, 0.4),
+      0 0 36px rgba(210, 160, 44, 0.55),
+      inset 0 1px 0 rgba(255, 240, 160, 0.28);
+  }
+}
+/* ── Turn banner ── */
+.turn-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 950;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  animation: turnBannerAnim 1.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+.turn-banner-bg {
+  position: absolute;
+  inset: -20px -60px;
+  border-radius: 8px;
+  opacity: 0.12;
+}
+.turn-player .turn-banner-bg {
+  background: radial-gradient(ellipse at center, rgba(60, 220, 140, 0.8) 0%, transparent 70%);
+}
+.turn-enemy .turn-banner-bg {
+  background: radial-gradient(ellipse at center, rgba(220, 60, 60, 0.8) 0%, transparent 70%);
+}
+.turn-banner-text {
+  font-family: var(--font-title, 'Cinzel', serif);
+  font-size: 3.2rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.9), 0 0 40px currentColor;
+  position: relative;
+}
+.turn-player .turn-banner-text { color: #80ffcc; }
+.turn-enemy .turn-banner-text { color: #ff8080; }
+.turn-banner-sub {
+  font-family: var(--font-ui, 'Exo 2', sans-serif);
+  font-size: 0.82rem;
+  font-style: italic;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+.turn-player .turn-banner-sub { color: #b0ffd8; }
+.turn-enemy .turn-banner-sub { color: #ffb0b0; }
+@keyframes turnBannerAnim {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+  28%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  78%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.08); }
+}
+/* ── Confetti canvas ── */
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 790;
+  width: 100%;
+  height: 100%;
+}
+/* ── Reward card stagger entrance ── */
+.reward-card:nth-child(1) { animation-delay: 0.06s !important; }
+.reward-card:nth-child(2) { animation-delay: 0.13s !important; }
+.reward-card:nth-child(3) { animation-delay: 0.20s !important; }
+.reward-card:nth-child(4) { animation-delay: 0.27s !important; }
+/* ── Shop item stagger ── */
+.shop-item {
+  animation: shopItemIn 0.3s ease-out both;
+}
+.shop-item:nth-child(1) { animation-delay: 0.05s; }
+.shop-item:nth-child(2) { animation-delay: 0.10s; }
+.shop-item:nth-child(3) { animation-delay: 0.15s; }
+.shop-item:nth-child(4) { animation-delay: 0.20s; }
+.shop-item:nth-child(5) { animation-delay: 0.25s; }
+@keyframes shopItemIn {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* ── Talent tooltip smooth transition ── */
+.combat-card-tooltip,
+.talent-node-tooltip {
+  transition: opacity 0.14s ease, transform 0.14s ease !important;
+}
+/* ── Potion button hover pop ── */
+.combat-header-potion {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s ease !important;
+}
+.combat-header-potion:hover {
+  transform: scale(1.25) translateY(-3px) !important;
+  filter: brightness(1.2) drop-shadow(0 0 8px rgba(180, 220, 120, 0.6)) !important;
+}
+/* ── Victory panel enhanced ── */
+.victory-panel .reward-title {
+  background: linear-gradient(135deg, #ffdd00, #ff8844, #cc44ff, #44aaff);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: victoryTitleGradient 3s linear infinite;
+}
+@keyframes victoryTitleGradient {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ── Stat badge floor/deck pulse on combat ── */
+.badge-floor {
+  transition: color 0.2s ease, background 0.2s ease;
 }

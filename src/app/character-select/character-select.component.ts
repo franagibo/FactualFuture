@@ -21,10 +21,12 @@ import type { CharacterDef } from '../../engine/loadData';
           <p class="char-subtitle">Each character begins with a unique starter deck.</p>
         </div>
         <div class="char-grid">
-          @for (char of characters; track char.id) {
+        @for (char of characters; track char.id; let i = $index) {
             <button
               type="button"
               class="char-card"
+              [class.char-card--selected]="selectedId === char.id"
+              [style.animation-delay]="(i * 0.08) + 's'"
               (click)="onSelect(char)"
             >
             <div class="char-card-art-wrap">
@@ -190,11 +192,13 @@ import type { CharacterDef } from '../../engine/loadData';
       text-align: left;
       padding: 0;
       border-radius: 14px;
-      border: 1px solid rgba(158, 118, 34, 0.38);      border-radius: 14px;
-      background: linear-gradient(175deg, rgba(28, 20, 8, 0.9) 0%, rgba(14, 10, 4, 0.97) 100%);      cursor: pointer;
+      border: 1px solid rgba(158, 118, 34, 0.38);
+      background: linear-gradient(175deg, rgba(28, 20, 8, 0.9) 0%, rgba(14, 10, 4, 0.97) 100%);
+      cursor: pointer;
       overflow: hidden;
       transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,160,0.04);
+      animation: charCardIn 0.38s cubic-bezier(0.34, 1.15, 0.64, 1) both;
 
       &:hover {
         transform: translateY(-5px) scale(1.015);
@@ -205,6 +209,25 @@ import type { CharacterDef } from '../../engine/loadData';
       }
 
       &:active { transform: translateY(-1px) scale(1.005); }
+      
+      &.char-card--selected {
+        border-color: rgba(220, 168, 50, 0.9);
+        box-shadow:
+          0 0 0 2px rgba(200, 158, 42, 0.5),
+          0 12px 36px rgba(0,0,0,0.5),
+          0 0 32px rgba(180, 136, 30, 0.45);
+        animation: charCardSelected 0.25s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+      }
+    }
+    
+    @keyframes charCardIn {
+      from { opacity: 0; transform: translateY(18px) scale(0.94); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes charCardSelected {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.03); }
+      100% { transform: scale(1); }
     }
 
     /* ── art ── */
@@ -349,6 +372,7 @@ import type { CharacterDef } from '../../engine/loadData';
 export class CharacterSelectComponent implements OnInit {
   characters: CharacterDef[] = [];
   backgroundReady = false;
+  selectedId: string | null = null;
 
   constructor(
     private router: Router,
@@ -386,9 +410,11 @@ export class CharacterSelectComponent implements OnInit {
     return CharacterSelectComponent.CHARACTER_ART[charId] ?? '';
   }
 
-  onSelect(char: CharacterDef): void {
+ onSelect(char: CharacterDef): void {
+    this.selectedId = char.id;
+    this.cdr.markForCheck();
     this.bridge.setPendingCharacter(char.id);
-    this.router.navigate(['/game']);
+    setTimeout(() => this.router.navigate(['/game']), 280);
   }
 
   onBack(): void {

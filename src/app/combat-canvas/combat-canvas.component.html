@@ -34,6 +34,20 @@
       <span class="combo-number">x{{ comboCountSignal() }}</span>
     </div>
   }
+  @if (turnBannerSignal()) {
+    <div class="turn-banner" [class.turn-player]="turnBannerSignal() === 'player'" [class.turn-enemy]="turnBannerSignal() === 'enemy'" aria-live="assertive" role="status">
+      <div class="turn-banner-bg"></div>
+      <div class="turn-banner-text">
+        {{ turnBannerSignal() === 'player' ? 'Your Turn' : 'Enemy Turn' }}
+      </div>
+      <div class="turn-banner-sub">
+        {{ turnBannerSignal() === 'player' ? 'Draw cards and play your hand' : 'Brace for impact' }}
+      </div>
+    </div>
+  }
+  @if (confettiActiveSignal()) {
+    <canvas id="confetti-canvas" class="confetti-canvas" aria-hidden="true"></canvas>
+  }
   @if (getHoveredCardPreview(); as hoverPreview) {
     <div class="hand-card-preview" role="status" aria-live="polite">
       <img class="hand-card-preview-art" [src]="getCardArtUrl(hoverPreview.id)" alt="" />
@@ -74,11 +88,11 @@
                 [class.hp-low]="playerMaxHpSignal() > 0 && (playerHpSignal() / playerMaxHpSignal()) < 0.3"
               ></div>
             </div>
-            <span class="stat-text">{{ playerHpSignal() }}<span class="stat-denom">/{{ playerMaxHpSignal() }}</span></span>
+            <span class="stat-text" [class.num-pop]="hpPopSignal()">{{ playerHpSignal() }}<span class="stat-denom">/{{ playerMaxHpSignal() }}</span></span>
           </div>
           <div class="combat-header-stat stat-gold">
             <img class="combat-header-icon" src="/assets/map/nodes/shop.svg" alt="Gold" width="16" height="16" />
-            <span class="stat-text">{{ goldSignal() }}</span>
+            <span class="stat-text" [class.num-pop]="goldPopSignal()">{{ goldSignal() }}</span>
           </div>
           @if (potionsSignal().length > 0) {
             <div class="combat-header-potions">
@@ -150,17 +164,18 @@
         class="combat-result-overlay"
         [class.result-win]="combatResultSignal() === 'win'"
         [class.result-lose]="combatResultSignal() === 'lose'"
+        [class.defeat-glitch]="defeatGlitchSignal()"
         aria-live="polite" aria-atomic="true" role="status"
       >
         <div class="combat-result-inner">
           <div class="combat-result-title">
-            {{ combatResultSignal() === 'win' ? 'Victory!' : 'Defeated' }}
+            {{ combatResultSignal() === 'win' ? '✦ Victory ✦' : '✕ Defeated' }}
           </div>
           <div class="combat-result-sub">
-            {{ combatResultSignal() === 'win' ? 'The enemy is vanquished.' : 'Your systems have failed.' }}
+            {{ combatResultSignal() === 'win' ? 'The enemy is vanquished. Press on.' : 'You have fallen. Rise again.' }}
           </div>
           <button type="button" class="btn-result-action" (click)="onRestart()" aria-label="Restart">
-            {{ combatResultSignal() === 'win' ? 'Continue' : 'Try Again' }}
+            {{ combatResultSignal() === 'win' ? 'Continue →' : 'Try Again' }}
           </button>
         </div>
       </div>
@@ -169,7 +184,9 @@
         type="button"
         class="btn-end"
         (click)="onEndTurn()"
+        [class.btn-end-ready]="canEndTurn()"
         [disabled]="!canEndTurn()"
+        title="End your turn and let the enemy act"
         aria-label="End turn"
       >
         <span class="btn-end-inner">
@@ -214,6 +231,8 @@
       [getCardName]="getCardName.bind(this)"
       [getCardArtUrl]="getCardArtUrl.bind(this)"
       [getCardTooltip]="getCardTooltip.bind(this)"
+      [playerHp]="playerHpSignal()"
+      [playerMaxHp]="playerMaxHpSignal()"
       (restHeal)="onRestHeal()"
       (removeCard)="onRestRemoveCard($event)"
     />

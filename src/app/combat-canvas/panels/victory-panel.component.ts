@@ -15,12 +15,13 @@ export type VictoryPanelPhase = 'actComplete' | 'victory';
           ? 'The path forward is open.'
           : 'You have conquered all who stood before you.' }}
       </div>
-      @if (phase() === 'actComplete') { <button type="button" class="btn-rest" (click)="advance.emit()">
-          Advance →
-        </button> <button type="button" class="btn-rest" (click)="advance.emit()">Next sector</button>
+      @if (phase() === 'actComplete') {
+        <button type="button" class="btn-rest" (click)="advance.emit()">
+          Advance to Next Sector →
+        </button>
       } @else {
         <button type="button" class="btn-rest" (click)="toMenu.emit()">
-          Return to Command
+        Return to Menu
         </button>
       }
     </div>

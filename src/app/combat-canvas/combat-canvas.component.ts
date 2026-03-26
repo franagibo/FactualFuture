@@ -103,11 +103,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   ghostPlayerHpSignal = signal(0);
   comboCountSignal = signal(0);
   showComboSignal = signal(false);
+  turnBannerSignal = signal<'player' | 'enemy' | null>(null);
+  confettiActiveSignal = signal(false);
+  goldPopSignal = signal(false);
+  hpPopSignal = signal(false);
+  defeatGlitchSignal = signal(false);
 
   /* Screen-shake HostBinding */
   @HostBinding('class.screen-shaking') isScreenShaking = false;
   @HostBinding('class.high-contrast') get highContrastClass(): boolean { return this.gameSettings.highContrast(); }
-
+  private _lastGold: number | null = null;
+  private _turnBannerTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _confettiFrameId: number | null = null;
+  private _confettiParticles: Array<{x:number;y:number;vx:number;vy:number;r:number;color:string;alpha:number;rot:number;rotV:number}> = [];
+  private _defeatGlitchTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _wasInCombat = false;
   private _lastPlayerHp: number | null = null;
   private _ghostHpTimeout: ReturnType<typeof setTimeout> | null = null;
   private _comboCount = 0;
@@ -215,7 +225,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (!state) return;
     this.rewardChoicesSignal.set(this.bridge.getRewardChoices());
     this.potionsSignal.set(this.bridge.getPotions());
-    this.goldSignal.set(state.gold ?? 0);
+    const nextGold = state.gold ?? 0;
+    const prevGold = this._lastGold;
+    this.goldSignal.set(nextGold);
+    if (prevGold != null && nextGold !== prevGold) this.triggerGoldPop();
+    this._lastGold = nextGold;
     const nextHp = state.playerHp ?? 0;
     const prevHp = this._lastPlayerHp;
     this.playerHpSignal.set(nextHp);
@@ -224,7 +238,31 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.triggerScreenShake();
       this.updateGhostHp(prevHp);
     }
+    if (prevHp != null && nextHp > prevHp) this.triggerHpPop();
     if (prevHp == null) this.ghostPlayerHpSignal.set(nextHp);
+    
+    const result = state.combatResult ?? null;
+    const wasInCombat = this._wasInCombat;
+    this._wasInCombat = this._runPhase === 'combat';
+    if (result === 'win' && !this.confettiActiveSignal()) {
+      this.confettiActiveSignal.set(true);
+      setTimeout(() => {
+        const canvas = document.getElementById('confetti-canvas') as HTMLCanvasElement | null;
+        if (canvas) this.startConfetti(canvas);
+      }, 50);
+    } else if (result !== 'win' && this.confettiActiveSignal()) {
+      this.confettiActiveSignal.set(false);
+      this.stopConfetti();
+    }
+    if (result === 'lose') {
+      this.triggerDefeatGlitch();
+    }
+    if (wasInCombat && this._runPhase === 'combat' && !result) {
+      const inCombatNow = !!state && state.phase === 'player' && !state.combatResult;
+      if (inCombatNow && prevHp == null) {
+        setTimeout(() => this.showTurnBanner('player'), 300);
+      }
+    }
     this._lastPlayerHp = nextHp;
     this.headerFloorSignal.set(state.floor ?? 1);
     const char = state.characterId ? this.bridge.getCharacter(state.characterId) : undefined;
@@ -380,6 +418,84 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.showPauseMenu = true;
     this.showPauseSettings = true;
     this.requestTemplateUpdate();
+  }
+
+  
+  private showTurnBanner(type: 'player' | 'enemy'): void {
+    if (this._turnBannerTimeout != null) clearTimeout(this._turnBannerTimeout);
+    this.turnBannerSignal.set(type);
+    const duration = type === 'player' ? 1600 : 1200;
+    this._turnBannerTimeout = setTimeout(() => {
+      this.turnBannerSignal.set(null);
+      this.cdr.markForCheck();
+    }, duration);
+    this.cdr.markForCheck();
+  }
+  private startConfetti(canvas: HTMLCanvasElement): void {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const colors = ['#ffdd00','#ff4466','#44aaff','#88ff66','#ff8822','#cc44ff','#ffffff','#ffaa00'];
+    this._confettiParticles = Array.from({ length: 110 }, () => ({
+      x: Math.random() * canvas.width,
+      y: -10 - Math.random() * 200,
+      vx: (Math.random() - 0.5) * 3.5,
+      vy: 2 + Math.random() * 4,
+      r: 4 + Math.random() * 7,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      alpha: 0.8 + Math.random() * 0.2,
+      rot: Math.random() * Math.PI * 2,
+      rotV: (Math.random() - 0.5) * 0.18,
+    }));
+    const animate = (): void => {
+      if (!this.confettiActiveSignal()) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of this._confettiParticles) {
+        p.x += p.vx + Math.sin(p.rot * 0.5) * 0.6;
+        p.y += p.vy;
+        p.rot += p.rotV;
+        p.alpha -= 0.0018;
+        if (p.y > canvas.height + 20) {
+          p.y = -10;
+          p.x = Math.random() * canvas.width;
+        }
+        if (p.alpha <= 0) continue;
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 0.5);
+        ctx.restore();
+      }
+      this._confettiFrameId = requestAnimationFrame(animate);
+    };
+    this._confettiFrameId = requestAnimationFrame(animate);
+  }
+  private stopConfetti(): void {
+    if (this._confettiFrameId != null) cancelAnimationFrame(this._confettiFrameId);
+    this._confettiFrameId = null;
+    this._confettiParticles = [];
+  }
+  private triggerGoldPop(): void {
+    this.goldPopSignal.set(true);
+    setTimeout(() => { this.goldPopSignal.set(false); this.cdr.markForCheck(); }, 380);
+    this.cdr.markForCheck();
+  }
+  private triggerHpPop(): void {
+    this.hpPopSignal.set(true);
+    setTimeout(() => { this.hpPopSignal.set(false); this.cdr.markForCheck(); }, 380);
+    this.cdr.markForCheck();
+  }
+  private triggerDefeatGlitch(): void {
+    if (this._defeatGlitchTimeout != null) clearTimeout(this._defeatGlitchTimeout);
+    this.defeatGlitchSignal.set(true);
+    this._defeatGlitchTimeout = setTimeout(() => {
+      this.defeatGlitchSignal.set(false);
+      this.cdr.markForCheck();
+    }, 800);
+    this.cdr.markForCheck();
   }
 
   openTalentTree(): void {
@@ -803,6 +919,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.shieldTicker = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.stopConfetti();
+    if (this._turnBannerTimeout != null) clearTimeout(this._turnBannerTimeout);
+    if (this._ghostHpTimeout != null) clearTimeout(this._ghostHpTimeout);
+    if (this._comboHideTimeout != null) clearTimeout(this._comboHideTimeout);
+    if (this._shakeTimeout != null) clearTimeout(this._shakeTimeout);
+    if (this._defeatGlitchTimeout != null) clearTimeout(this._defeatGlitchTimeout);
     this.app?.destroy(true, { children: true, texture: false });
     this.app = null;
     this.contentContainer = null;
@@ -2270,6 +2392,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (hpLost > 0) this.pushCombatLog(`Took ${hpLost} damage from enemy turn.`);
       const defeated = nextState?.enemies.filter((e) => e.hp <= 0).length ?? 0;
       if (defeated > 0) this.pushCombatLog(`Enemies defeated: ${defeated}.`);
+      if (nextState?.phase === 'player' && !nextState.combatResult) {
+        // Show "Your Turn" only as the enemy turn truly ends.
+        this.showTurnBanner('player');
+      }
       this.combatController.showingEnemyTurn = false;
       this.redraw();
       this.requestTemplateUpdate();
