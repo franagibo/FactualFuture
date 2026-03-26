@@ -177,6 +177,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   showPileInspector = false;
   showCombatLog = false;
   combatLogEntries: string[] = [];
+  hoveredEnemyIndexSignal = signal<number | null>(null);
   activePileTab: 'draw' | 'discard' | 'exhaust' = 'draw';
   talentSelectionMessage = signal<string | null>(null);
 
@@ -334,6 +335,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.combatLogEntries = [entry, ...this.combatLogEntries].slice(0, 40);
   }
 
+  private setHoveredEnemyIndex(idx: number | null): void {
+    // Keep both controller state (Pixi rendering) and overlay state (Angular signals) in sync.
+    if (this.combatController) this.combatController.hoveredEnemyIndex = idx;
+    this.hoveredEnemyIndexSignal.set(idx);
+  }
+
   private announceLive(message: string): void {
     this.ariaLiveMessage.set(message);
   }
@@ -354,7 +361,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const state = this.bridge.getState();
     const handCount = state?.hand?.length ?? 0;
     this.combatController.hoveredCardIndex = null;
-    this.combatController.hoveredEnemyIndex = null;
+    this.setHoveredEnemyIndex(null);
     this.combatController.targetLerp = Array.from({ length: handCount }, () => 0);
     this.combatController.cardInteractionState = 'idle';
     this.combatController.cardInteractionCardIndex = null;
@@ -386,7 +393,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
       this.combatController.cardInteractionCardId = null;
-      this.combatController.hoveredEnemyIndex = null;
+      this.setHoveredEnemyIndex(null);
       this.clearDragListeners();
       this.redraw();
       this.requestTemplateUpdate();
@@ -824,8 +831,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       onCardPointerDown: (cardId, handIndex, stageX, stageY) => this.onCardPointerDown(cardId, handIndex, stageX, stageY),
       onCardClick: (cardId, handIndex) => this.onCardClick(cardId, handIndex),
       onEnemyTargetClick: (enemyIndex) => this.onEnemyTargetClick(enemyIndex),
-      onEnemyPointerOver: (enemyIndex) => { this.combatController.hoveredEnemyIndex = enemyIndex; this.redraw(); },
-      onEnemyPointerOut: () => { this.combatController.hoveredEnemyIndex = null; this.redraw(); },
+      onEnemyPointerOver: (enemyIndex) => { this.setHoveredEnemyIndex(enemyIndex); this.redraw(); },
+      onEnemyPointerOut: () => { this.setHoveredEnemyIndex(null); this.redraw(); },
       cardNeedsEnemyTarget: (cardId) => this.cardNeedsEnemyTarget(cardId),
       markForCheck: () => this.requestTemplateUpdate(),
       getPools: () => this.combatPools,
@@ -2012,6 +2019,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     const { x: mouseX, y: mouseY } = this.clientToStage(clientX, clientY);
     const w = this.app.screen.width;
     const h = this.app.screen.height;
+    // Enemy hover is derived deterministically from cursor position on every pointer move.
+    // This prevents the tooltip from sticking when Pixi pointerout events are missed.
+    const enemyIdx = getEnemyIndexAtPoint(mouseX, mouseY, state.enemies.length, w, h);
+    const aliveEnemyIdx = enemyIdx != null && state.enemies[enemyIdx]?.hp > 0 ? enemyIdx : null;
+    if (this.hoveredEnemyIndexSignal() !== aliveEnemyIdx) {
+      this.setHoveredEnemyIndex(aliveEnemyIdx);
+    }
     // Use rest layout (hoveredIndex = null) for hit-test so cursor stays "over" the card after it lifts
     const layout = getHandLayout(hand.length, w, h, null, {
       handLayout: this.gameSettings.handLayout(),
@@ -2129,11 +2143,11 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
           if (stateNow?.enemies?.length) {
             const idx = getEnemyIndexAtPoint(x, y, stateNow.enemies.length, this.app.screen.width, this.app.screen.height);
             const newHover = idx != null && stateNow.enemies[idx].hp > 0 ? idx : null;
-            if (this.combatController.hoveredEnemyIndex !== newHover) {
-              this.combatController.hoveredEnemyIndex = newHover;
+            if (this.hoveredEnemyIndexSignal() !== newHover) {
+              this.setHoveredEnemyIndex(newHover);
             }
           } else {
-            this.combatController.hoveredEnemyIndex = null;
+            this.setHoveredEnemyIndex(null);
           }
         }
         this.redraw();
@@ -2229,7 +2243,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.combatController.cardInteractionState = 'idle';
     this.combatController.cardInteractionCardIndex = null;
     this.combatController.cardInteractionCardId = null;
-    this.combatController.hoveredEnemyIndex = null;
+    this.setHoveredEnemyIndex(null);
     this.clearDragListeners();
     this.redraw();
     this.requestTemplateUpdate();
@@ -2274,7 +2288,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
       this.combatController.cardInteractionCardId = null;
-      this.combatController.hoveredEnemyIndex = null;
+      this.setHoveredEnemyIndex(null);
       this.redraw();
       this.requestTemplateUpdate();
       return;
@@ -2317,7 +2331,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
       this.combatController.cardInteractionCardId = null;
-      this.combatController.hoveredEnemyIndex = null;
+      this.setHoveredEnemyIndex(null);
       const now = performance.now();
       const toAdd: { type: 'damage' | 'block'; value: number; x: number; y: number; enemyIndex?: number; addedAt: number }[] = [];
       if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
@@ -2547,11 +2561,13 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return def ? `${def.name}: ${def.description}` : potionId;
   }
 
-  getHoveredEnemyIntentDetails(): { enemyName: string; lines: string[] } | null {
+  getHoveredEnemyIntentPanel():
+    | { enemyName: string; lines: string[]; x: number; y: number }
+    | null {
     if (this._runPhase !== 'combat' || this.isCombatInteractionBlocked()) return null;
     const state = this.bridge.getState();
     if (!state) return null;
-    const idx = this.combatController.hoveredEnemyIndex;
+    const idx = this.hoveredEnemyIndexSignal();
     if (idx == null || idx < 0 || idx >= state.enemies.length) return null;
     const enemy = state.enemies[idx];
     const intent = enemy.intent;
@@ -2588,7 +2604,30 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       lines.push('No immediate action');
     }
     if ((enemy.strengthStacks ?? 0) > 0) lines.push(`Current Strength: ${enemy.strengthStacks}`);
-    return { enemyName: enemy.name, lines };
+
+    // Anchor tooltip near the hovered enemy instead of using hardcoded top-right.
+    const w = this.app?.screen.width ?? 1920;
+    const h = this.app?.screen.height ?? 1080;
+    const panelW = Math.min(340, Math.max(260, Math.round(w * 0.28)));
+    const titleH = 24;
+    const lineH = 18;
+    const paddingY = 18;
+    const panelH = Math.min(240, titleH + lines.length * lineH + paddingY);
+    const headerSafeTop = Math.max(72, Math.round(h * 0.09));
+
+    const enemyCenter = getEnemyCenter(idx, state.enemies.length, w, h);
+    // Prefer showing to the left of the enemy (enemies are on the right side).
+    let x = enemyCenter.x - panelW - 18;
+    let y = enemyCenter.y - panelH / 2;
+
+    // If left overflows, flip to the right side.
+    if (x < 12) x = enemyCenter.x + 18;
+
+    // Clamp to viewport and keep below header.
+    x = Math.max(12, Math.min(x, w - panelW - 12));
+    y = Math.max(headerSafeTop + 10, Math.min(y, h - panelH - 12));
+
+    return { enemyName: enemy.name, lines, x, y };
   }
 
   onUsePotion(potionId: string): void {

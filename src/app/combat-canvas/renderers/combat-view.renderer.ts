@@ -1964,15 +1964,19 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
     container.y = centerPos.y;
     container.scale.set(scale);
 
-    // Pointer events for targeting
-    if (isValidTarget) {
+    // Hover/intent tooltip should work even when we're NOT actively targeting.
+    // Pointer events are therefore wired for all alive enemies (pointerover/out),
+    // while pointerdown is kept behind isValidTarget so drag-and-drop targeting stays intact.
+    if (isAlive) {
       container.eventMode = 'static';
-      container.cursor = 'pointer';
+      container.cursor = isValidTarget ? 'pointer' : 'default';
       container.hitArea = new PIXI.Rectangle(0, 0, enemyPlaceholderW, enemyPlaceholderH);
       const idx = i;
       container.on('pointerover', () => { ctx.onEnemyPointerOver(idx); });
       container.on('pointerout', () => ctx.onEnemyPointerOut());
-      container.on('pointerdown', () => ctx.onEnemyTargetClick(idx));
+      if (isValidTarget) {
+        container.on('pointerdown', () => ctx.onEnemyTargetClick(idx));
+      }
     }
     stage.addChild(container);
   }

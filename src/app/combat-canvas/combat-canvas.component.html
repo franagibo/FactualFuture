@@ -60,10 +60,10 @@
       </div>
     </div>
   }
-  @if (getHoveredEnemyIntentDetails(); as intentDetails) {
-    <div class="intent-detail-panel" role="status" aria-live="polite">
-      <div class="intent-detail-title">{{ intentDetails.enemyName }}</div>
-      @for (line of intentDetails.lines; track line + '_' + $index) {
+  @if (getHoveredEnemyIntentPanel(); as intentPanel) {
+    <div class="intent-detail-panel" role="status" aria-live="polite" [style.left.px]="intentPanel.x" [style.top.px]="intentPanel.y">
+      <div class="intent-detail-title">{{ intentPanel.enemyName }}</div>
+      @for (line of intentPanel.lines; track line + '_' + $index) {
         <div class="intent-detail-line">{{ line }}</div>
       }
     </div>
