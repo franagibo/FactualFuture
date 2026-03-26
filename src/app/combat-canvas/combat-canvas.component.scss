@@ -2631,3 +2631,237 @@
 .badge-floor {
   transition: color 0.2s ease, background 0.2s ease;
 }
+
+/* ═══════════════════════════════════════════════════
+   POLISH PASS 2 — Num-pop, HP flash, turn sweep, extras
+   ═══════════════════════════════════════════════════ */
+
+/* ── Number pop (HP and gold change) ── */
+.num-pop {
+  animation: numPop 0.38s cubic-bezier(0.34, 1.72, 0.64, 1) both;
+  display: inline-block;
+}
+
+@keyframes numPop {
+  0%   { transform: scale(1); color: inherit; filter: none; }
+  20%  { transform: scale(1.55); color: #fff8a0; filter: drop-shadow(0 0 6px rgba(255, 240, 80, 0.9)); }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1); color: inherit; filter: none; }
+}
+
+/* ── HP bar shake on significant damage ── */
+.hp-bar-wrap.hp-hit {
+  animation: hpBarHit 0.28s ease-out both;
+}
+
+@keyframes hpBarHit {
+  0%   { transform: translateX(0); }
+  20%  { transform: translateX(-4px); }
+  45%  { transform: translateX(4px); }
+  65%  { transform: translateX(-2px); }
+  80%  { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+/* ── HP bar low-health pulse ── */
+.hp-bar-fill.hp-low {
+  animation: hpLowPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes hpLowPulse {
+  0%, 100% { filter: none; }
+  50%       { filter: brightness(1.35) drop-shadow(0 0 6px rgba(255, 60, 60, 0.7)); }
+}
+
+/* ── Turn banner: cinematic sweep lines ── */
+.turn-banner::before,
+.turn-banner::after {
+  content: '';
+  position: fixed;
+  left: -10%;
+  right: -10%;
+  height: 2px;
+  pointer-events: none;
+  z-index: 940;
+}
+
+.turn-banner::before {
+  top: calc(50% - 52px);
+  animation: sweepLine 1.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.turn-banner::after {
+  top: calc(50% + 52px);
+  animation: sweepLine 1.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.04s forwards;
+}
+
+.turn-banner.turn-player::before,
+.turn-banner.turn-player::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(60, 220, 140, 0.6) 30%, rgba(120, 255, 200, 0.9) 50%, rgba(60, 220, 140, 0.6) 70%, transparent 100%);
+}
+
+.turn-banner.turn-enemy::before,
+.turn-banner.turn-enemy::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(220, 60, 60, 0.6) 30%, rgba(255, 120, 120, 0.9) 50%, rgba(220, 60, 60, 0.6) 70%, transparent 100%);
+}
+
+@keyframes sweepLine {
+  0%   { opacity: 0; transform: scaleX(0); }
+  15%  { opacity: 1; transform: scaleX(1); }
+  70%  { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1.05); }
+}
+
+/* ── Turn banner text slam ── */
+.turn-banner-text {
+  animation: textSlam 0.28s cubic-bezier(0.12, 0.8, 0.5, 1.4) both;
+}
+
+@keyframes textSlam {
+  0%   { transform: scale(1.6) translateY(-10px); opacity: 0; }
+  100% { transform: scale(1) translateY(0);       opacity: 1; }
+}
+
+/* ── Combo counter: number slam ── */
+.combo-number {
+  display: inline-block;
+  animation: comboNumPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes comboNumPop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.2); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+/* ── End turn button: stronger outer glow on ready ── */
+.btn-end-ready::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: 0 0 24px 6px rgba(210, 160, 44, 0.45);
+  animation: endGlowRing 1.8s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: 16px;
+}
+
+@keyframes endGlowRing {
+  0%, 100% { box-shadow: 0 0 16px 4px rgba(210, 160, 44, 0.3); }
+  50%       { box-shadow: 0 0 36px 10px rgba(240, 190, 55, 0.6); }
+}
+
+/* ── Reward card: flip-in entrance ── */
+.reward-card {
+  animation: rewardCardFlipIn 0.45s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+  transform-origin: center bottom;
+}
+
+@keyframes rewardCardFlipIn {
+  0%   { opacity: 0; transform: perspective(600px) rotateX(-40deg) scale(0.8) translateY(20px); }
+  60%  { transform: perspective(600px) rotateX(6deg)  scale(1.03) translateY(-4px); }
+  100% { opacity: 1; transform: perspective(600px) rotateX(0deg)  scale(1)    translateY(0); }
+}
+
+/* ── Victory panel: title shimmer bar ── */
+.victory-panel .reward-title::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  animation: titleShimmer 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.victory-panel .reward-title {
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes titleShimmer {
+  0%   { left: -60%; }
+  100% { left: 120%; }
+}
+
+/* ── Feedback toast polish ── */
+.feedback-toast {
+  animation: toastIn 0.3s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.92); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
+
+/* ── Intent panel slide-in ── */
+.intent-detail-panel {
+  animation: intentPanelIn 0.18s ease-out both;
+}
+
+@keyframes intentPanelIn {
+  from { opacity: 0; transform: scale(0.92) translateY(-6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Map loading overlay fade ── */
+.map-loading-overlay {
+  animation: mapOverlayIn 0.4s ease-out both;
+}
+
+@keyframes mapOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Combat log panel slide-in ── */
+.combat-log-panel {
+  animation: logPanelIn 0.25s cubic-bezier(0.34, 1.1, 0.64, 1) both;
+}
+
+@keyframes logPanelIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Pile inspector card hover ── */
+.pile-card {
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.14s ease, filter 0.14s ease;
+}
+
+.pile-card:hover {
+  transform: scale(1.06) translateY(-3px);
+  filter: brightness(1.1);
+}
+
+/* ── Potion use ripple ── */
+.combat-header-potion:active {
+  animation: potionPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
+}
+
+@keyframes potionPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.78); }
+  100% { transform: scale(1.25) translateY(-3px); }
+}
+
+/* ── Deck badge pulse on draw ── */
+.badge-deck {
+  transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.badge-deck:hover {
+  transform: scale(1.08);
+}
+
+/* ── Hand card preview slide-in ── */
+.hand-card-preview {
+  animation: previewSlideIn 0.2s cubic-bezier(0.34, 1.15, 0.64, 1) both;
+}
+
+@keyframes previewSlideIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

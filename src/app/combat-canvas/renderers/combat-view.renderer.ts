@@ -93,8 +93,8 @@ const darkenIntentHex = (color: number, factor: number): number => {
 
 
 /**
- * Draws a Slay-the-Spire-style intent badge: large circle icon + value panel to the right.
- * The badge is prominent and legible at a glance.
+ * Draws a polished Slay-the-Spire-style intent badge: large circle icon floating above the
+ * enemy with a value pill below it. x,y = center-X and top-Y anchor in container local coords.
  */
 function drawIntentIcon(
   ctx: CombatViewContext,
@@ -107,133 +107,130 @@ function drawIntentIcon(
   intentExtras?: { times?: number; value2?: number; strength?: number; block?: number }
 ): void {
   const badgeColor = intentBadgeColor(type);
-  const badgeDark   = darkenIntentHex(badgeColor, 0.32);
-  const badgeLight  = lightenIntentHex(badgeColor, 0.52);
-  const badgeShine  = lightenIntentHex(badgeColor, 0.82);
-  const iconR = INTENT_ICON_SIZE / 2;           // radius of the circle badge
-  const cx    = x + iconR;
-  const cy    = y + iconR;
-
-  // ── Outer soft glow rings ──────────────────────────────────────────────
-  const glowGr = g(ctx);
-  glowGr.circle(cx, cy, iconR + 10).fill({ color: badgeColor, alpha: 0.12 });
-  glowGr.circle(cx, cy, iconR + 6).fill({ color: badgeColor, alpha: 0.20 });
-  // Drop shadow offset
-  glowGr.circle(cx + 2, cy + 3, iconR + 1).fill({ color: 0x000000, alpha: 0.50 });
-  container.addChild(glowGr);
-
-  // ── Circle background (dark rim → colored face → top highlight) ───────
-  const circleGr = g(ctx);
-  circleGr.circle(cx, cy, iconR + 1.5).fill({ color: badgeDark });
-  circleGr.circle(cx, cy, iconR).fill({ color: badgeColor });
-  // Radial shine at top-left quadrant
-  circleGr.circle(cx - iconR * 0.22, cy - iconR * 0.26, iconR * 0.48).fill({ color: 0xffffff, alpha: 0.16 });
-  // Crisp bright edge stroke
-  circleGr.circle(cx, cy, iconR).stroke({ width: 2, color: badgeShine, alpha: 0.92 });
-  // Inner accent ring
-  circleGr.circle(cx, cy, iconR - 4).stroke({ width: 1, color: badgeLight, alpha: 0.35 });
-  container.addChild(circleGr);
-
-  // ── Intent symbol ──────────────────────────────────────────────────────
-  const symText = t(ctx);
-  symText.text = intentSymbol(type);
-  symText.style = {
-    fontFamily: 'system-ui, serif',
-    fontSize: Math.round(iconR * 1.08),
-    fill: 0xffffff,
-    fontWeight: '700',
-    dropShadow: { color: 0x000000, blur: 4, distance: 1, alpha: 0.8 },
-  };
-  symText.anchor.set(0.5, 0.5);
-  symText.x = cx;
-  symText.y = cy;
-  container.addChild(symText);
-
-  // ── Value panel (to the right of the circle) ───────────────────────────
-  // Line 1: intent type name (small caps)
-  // Line 2: damage / effect value (bold, larger)
-  const panelX   = x + INTENT_ICON_SIZE + L.intentLabelOffset;
-  const panelW   = 108;   // enough for "ATTACK\n15 ×2"
-  const panelH   = INTENT_ICON_SIZE;
-  const panelY   = y;
-  const panelR   = 8;
-
-  const panelBg = g(ctx);
-  panelBg.roundRect(panelX, panelY, panelW, panelH, panelR)
-    .fill({ color: badgeDark, alpha: 0.88 })
-    .stroke({ width: 1.5, color: badgeLight, alpha: 0.65 });
-  // Left accent bar
-  panelBg.roundRect(panelX, panelY + 4, 3, panelH - 8, 2).fill({ color: badgeShine, alpha: 0.85 });
-  container.addChild(panelBg);
+  const badgeDark  = darkenIntentHex(badgeColor, 0.28);
+  const badgeLight = lightenIntentHex(badgeColor, 0.55);
+  const badgeShine = lightenIntentHex(badgeColor, 0.85);
 
   // --- Build value string ---
-  let valLine = '?';
+  let valLine = '???';
   if (type === 'attack' || type === 'attack_multi' || type === 'attack_frail' || type === 'attack_vulnerable' || type === 'attack_and_block') {
     const times = intentExtras?.times ?? 1;
     valLine = times > 1 ? `${value} \u00d7${times}` : `${value}`;
   } else if (type === 'block' || type === 'block_ally') {
     valLine = `+${intentExtras?.strength ?? value}`;
-  } else if (type === 'debuff')    valLine = `\u00d7${value}`;
-  else if (type === 'vulnerable')  valLine = `\u00d7${value}`;
-  else if (type === 'ritual')      valLine = `+${value} STR`;
-  else if (type === 'buff')        valLine = intentExtras?.strength ? `+${intentExtras.strength} STR` : (intentExtras?.block ? `+${intentExtras.block} BLK` : '!');
-  else if (type === 'drain')       valLine = 'Drain';
-  else if (type === 'hex')         valLine = 'Hex';
-  else if (type === 'none')        valLine = '???';
+  } else if (type === 'debuff')   valLine = `\u00d7${value}`;
+  else if (type === 'vulnerable') valLine = `\u00d7${value}`;
+  else if (type === 'ritual')     valLine = `+${value} STR`;
+  else if (type === 'buff')       valLine = intentExtras?.strength ? `+${intentExtras.strength} STR` : (intentExtras?.block ? `+${intentExtras.block} BLK` : '!');
+  else if (type === 'drain')      valLine = 'DRAIN';
+  else if (type === 'hex')        valLine = 'HEX';
+  else if (type === 'none')       valLine = '???';
   if (addStatus?.length) {
     const n = addStatus.reduce((s, a) => s + a.count, 0);
     valLine += ` +${n}`;
   }
+  let secLabel = '';
+  if (type === 'attack_frail'      && intentExtras?.value2) secLabel = `+${intentExtras.value2} Frail`;
+  if (type === 'attack_vulnerable' && intentExtras?.value2) secLabel = `+${intentExtras.value2} Vuln`;
+  if (type === 'attack_and_block'  && intentExtras?.value2) secLabel = `+${intentExtras.value2} Blk`;
 
-  // Type name (small, muted)
-  const typeFontSize = Math.max(9, Math.round(INTENT_ICON_SIZE * 0.25));
+  // Layout: large icon circle at top, pill label below
+  const iconR  = 26;
+  const iconCX = x;
+  const iconCY = y + iconR + 2;     // center of the icon circle
+  const pillH  = 30;
+  const pillW  = secLabel ? 130 : 110;
+  const pillX  = iconCX - pillW / 2;
+  const pillY  = iconCY + iconR + 2; // pill starts just below the circle
+
+  // Connector line
+  const connGr = g(ctx);
+  connGr.rect(iconCX - 1, iconCY + iconR - 1, 2, pillY - (iconCY + iconR - 1))
+    .fill({ color: badgeLight, alpha: 0.45 });
+  container.addChild(connGr);
+
+  // Outer glow rings
+  const glowGr = g(ctx);
+  glowGr.circle(iconCX, iconCY, iconR + 18).fill({ color: badgeColor, alpha: 0.07 });
+  glowGr.circle(iconCX, iconCY, iconR + 10).fill({ color: badgeColor, alpha: 0.15 });
+  glowGr.circle(iconCX + 2, iconCY + 3, iconR + 1).fill({ color: 0x000000, alpha: 0.44 }); // drop shadow
+  container.addChild(glowGr);
+
+  // Icon circle: dark rim → colored body → shine
+  const circleGr = g(ctx);
+  circleGr.circle(iconCX, iconCY, iconR + 2.5).fill({ color: darkenIntentHex(badgeColor, 0.18) });
+  circleGr.circle(iconCX, iconCY, iconR).fill({ color: badgeColor });
+  circleGr.circle(iconCX - iconR * 0.26, iconCY - iconR * 0.30, iconR * 0.52).fill({ color: 0xffffff, alpha: 0.20 });
+  circleGr.circle(iconCX, iconCY, iconR).stroke({ width: 2.5, color: badgeShine, alpha: 0.95 });
+  circleGr.circle(iconCX, iconCY, iconR - 5).stroke({ width: 1, color: badgeLight, alpha: 0.28 });
+  container.addChild(circleGr);
+
+  // Intent symbol
+  const symText = t(ctx);
+  symText.text = intentSymbol(type);
+  symText.style = {
+    fontFamily: 'system-ui, serif',
+    fontSize: Math.round(iconR * 1.18),
+    fill: 0xffffff,
+    fontWeight: '700',
+    dropShadow: { color: 0x000000, blur: 6, distance: 1.5, alpha: 0.9 },
+  };
+  symText.anchor.set(0.5, 0.5);
+  symText.x = iconCX;
+  symText.y = iconCY;
+  container.addChild(symText);
+
+  // Value pill background
+  const pillBg = g(ctx);
+  pillBg.roundRect(pillX, pillY, pillW, pillH, pillH / 2)
+    .fill({ color: badgeDark, alpha: 0.95 })
+    .stroke({ width: 1.5, color: badgeLight, alpha: 0.70 });
+  pillBg.roundRect(pillX + 4, pillY + 5, 3, pillH - 10, 1.5).fill({ color: badgeShine, alpha: 0.78 });
+  container.addChild(pillBg);
+
+  // Intent type name (small caps, inside pill top)
   const typeText = t(ctx);
   typeText.text = intentTypeName(type);
   typeText.style = {
     fontFamily: 'system-ui',
-    fontSize: typeFontSize,
+    fontSize: 10,
     fill: badgeLight,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   };
-  typeText.anchor.set(0, 0);
-  typeText.x = panelX + 8;
-  typeText.y = panelY + 4;
+  typeText.anchor.set(0.5, 0);
+  typeText.x = iconCX + 3;
+  typeText.y = pillY + 3;
   container.addChild(typeText);
 
-  // Value (bold, prominent)
-  const valFontSize = Math.max(14, Math.round(INTENT_ICON_SIZE * 0.48));
-  const valueText = t(ctx);
-  valueText.text = valLine;
-  valueText.style = {
+  // Value line (bold, larger, bottom of pill)
+  const valText = t(ctx);
+  valText.text = valLine;
+  valText.style = {
     fontFamily: 'system-ui',
-    fontSize: valFontSize,
+    fontSize: 16,
     fill: 0xffffff,
     fontWeight: 'bold',
-    dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.7 },
+    dropShadow: { color: 0x000000, blur: 4, distance: 1, alpha: 0.85 },
   };
-  valueText.anchor.set(0, 1);
-  valueText.x = panelX + 8;
-  valueText.y = panelY + panelH - 4;
-  container.addChild(valueText);
+  valText.anchor.set(secLabel ? 0 : 0.5, 1);
+  valText.x = secLabel ? pillX + 14 : iconCX + 3;
+  valText.y = pillY + pillH - 2;
+  container.addChild(valText);
 
-  // Secondary effect label (e.g., "+ 2 Frail", "+ 3 Vuln") right-aligned inside panel
-  let secondaryLabel = '';
-  if (type === 'attack_frail'      && intentExtras?.value2) secondaryLabel = `+${intentExtras.value2} Frail`;
-  if (type === 'attack_vulnerable' && intentExtras?.value2) secondaryLabel = `+${intentExtras.value2} Vuln`;
-  if (type === 'attack_and_block'  && intentExtras?.value2) secondaryLabel = `+${intentExtras.value2} Blk`;
-  if (secondaryLabel) {
+  // Secondary effect label right-aligned in pill
+  if (secLabel) {
     const secText = t(ctx);
-    secText.text = secondaryLabel;
+    secText.text = secLabel;
     secText.style = {
       fontFamily: 'system-ui',
-      fontSize: Math.max(8, typeFontSize - 1),
+      fontSize: 10,
       fill: badgeShine,
       fontWeight: '600',
     };
     secText.anchor.set(1, 1);
-    secText.x = panelX + panelW - 6;
-    secText.y = panelY + panelH - 4;
+    secText.x = pillX + pillW - 6;
+    secText.y = pillY + pillH - 3;
     container.addChild(secText);
   }
 }
@@ -1069,182 +1066,102 @@ function drawPlants(ctx: CombatViewContext): void {
 }
 
 // ---------------------------------------------------------------------------
-// HP/Block/Energy icons
+// HP/Block/Energy icons — Polished STS-style Player HUD
 // ---------------------------------------------------------------------------
 
-/** Draws HP, block, and energy as icons with numbers centered (Slay the Spire style). */
-function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
-  const { state, stage, w, h } = ctx;
-  const playerBounds = getCombatSlotBounds('player', w, h);
-  const hpBounds = getCombatSlotBounds('hpBlockEnergy', w, h);
-  const centerX = playerBounds.x + playerBounds.width / 2;
-  const baseY   = hpBounds.y;
+/** Helper: draws a fully polished HP-style stat bar with inner glow, shine stripe and segment ticks. */
+function drawHudStatBar(
+  ctx: CombatViewContext,
+  container: PIXI.Container,
+  x: number, y: number, barW: number, barH: number,
+  ratio: number,
+  palette: { fill: number; glow: number; border: number },
+  labelText: string,
+): void {
+  const r = Math.max(4, Math.round(barH / 2));
+  const fillW = Math.max(0, barW * Math.max(0, Math.min(1, ratio)));
 
-  const hpBarH  = Math.max(20, L.hpBarHeight);
-  const hpBarW  = L.hpBarWidth;
-  const hpBarX  = centerX - hpBarW / 2;
+  // Track (dark recessed trough)
+  const track = g(ctx);
+  track.roundRect(x, y, barW, barH, r).fill({ color: 0x050308, alpha: 0.88 });
+  track.roundRect(x, y, barW, barH, r).stroke({ width: 1, color: palette.border, alpha: 0.18 });
+  container.addChild(track);
 
-  const hpRatio = state.playerMaxHp > 0 ? Math.max(0, Math.min(1, state.playerHp / state.playerMaxHp)) : 0;
-  const blockVal = state.playerBlock ?? 0;
-  const curEnergy = state.energy;
-  const maxEnergy = state.maxEnergy;
-
-  // Height of optional rows
-  const blockRowH  = blockVal > 0 ? 26 : 0;
-  const orbSize    = 20;
-  const totalPanelH = hpBarH + 8 + blockRowH + (blockRowH ? 4 : 0) + orbSize + 10;
-
-  const barsContainer = c(ctx);
-  barsContainer.zIndex = 20;
-
-  // ── Frosted-glass background panel ────────────────────────────────────
-  const panelBg = g(ctx);
-  panelBg.roundRect(hpBarX - 14, baseY - 6, hpBarW + 28, totalPanelH, 10)
-    .fill({ color: 0x04020b, alpha: 0.82 });
-  panelBg.roundRect(hpBarX - 14, baseY - 6, hpBarW + 28, totalPanelH, 10)
-    .stroke({ width: 1, color: 0x3a2255, alpha: 0.55 });
-  panelBg.roundRect(hpBarX - 14, baseY - 6, hpBarW + 28, 2, 10)
-    .fill({ color: 0x5a3a80, alpha: 0.70 });
-  barsContainer.addChild(panelBg);
-
-  // ── HP bar ──────────────────────────────────────────────────────────
-  const hpBarY = baseY;
-  const hpR    = Math.max(4, Math.round(hpBarH / 2));
-  const hpPalette = hpRatio < 0.3
-    ? { fill: 0xc01818, glow: 0xff3030, border: 0xff6a6a }
-    : hpRatio < 0.6
-      ? { fill: 0xbb5510, glow: 0xf08830, border: 0xf2aa6b }
-      : { fill: 0xb02828, glow: 0xe04444, border: 0xf07070 };
-
-  // Track
-  const hpTrack = g(ctx);
-  hpTrack.roundRect(hpBarX, hpBarY, hpBarW, hpBarH, hpR)
-    .fill({ color: 0x000000, alpha: 0.65 });
-  hpTrack.roundRect(hpBarX, hpBarY, hpBarW, hpBarH, hpR)
-    .stroke({ width: 1, color: hpPalette.border, alpha: 0.22 });
-  barsContainer.addChild(hpTrack);
-
-  // Fill
-  const hpFillW = Math.max(0, hpBarW * hpRatio);
-  if (hpFillW > 0) {
-    const hpFill = g(ctx);
-    hpFill.roundRect(hpBarX, hpBarY, hpFillW, hpBarH, hpR)
-      .fill({ color: hpPalette.fill, alpha: 0.96 });
-    if (hpFillW > 8) {
-      hpFill.roundRect(hpBarX + 2, hpBarY + 2, hpFillW - 4, Math.max(2, hpBarH * 0.30), Math.max(2, hpBarH * 0.15))
-        .fill({ color: 0xffffff, alpha: 0.15 });
-      for (let seg = 1; seg <= 4; seg++) {
-        const segX = hpBarX + hpBarW * seg * 0.2;
-        if (segX < hpBarX + hpFillW - 3) {
-          hpFill.rect(segX, hpBarY + 2, 1, hpBarH - 4).fill({ color: 0x000000, alpha: 0.18 });
-        }
+  if (fillW > 0) {
+    // Main fill
+    const fill = g(ctx);
+    fill.roundRect(x, y, fillW, barH, r).fill({ color: palette.fill, alpha: 0.96 });
+    // Top shine stripe
+    if (fillW > 8) {
+      fill.roundRect(x + 2, y + 2, fillW - 4, Math.max(2, barH * 0.32), Math.max(2, barH * 0.18))
+        .fill({ color: 0xffffff, alpha: 0.17 });
+    }
+    // Segment tick marks (20% intervals)
+    for (let seg = 1; seg <= 4; seg++) {
+      const sx = x + barW * seg * 0.2;
+      if (sx < x + fillW - 2) {
+        fill.rect(sx, y + 2, 1.5, barH - 4).fill({ color: 0x000000, alpha: 0.22 });
       }
     }
-    hpFill.roundRect(hpBarX, hpBarY, hpFillW, hpBarH, hpR)
-      .stroke({ width: 1, color: hpPalette.glow, alpha: 0.55 });
-    barsContainer.addChild(hpFill);
-    const hpGlow = g(ctx);
-    hpGlow.roundRect(hpBarX - 1, hpBarY - 1, hpFillW + 2, hpBarH + 2, hpR + 1)
-      .stroke({ width: 1.5, color: hpPalette.glow, alpha: 0.20 });
-    barsContainer.addChild(hpGlow);
+    fill.roundRect(x, y, fillW, barH, r).stroke({ width: 1, color: palette.glow, alpha: 0.55 });
+    container.addChild(fill);
+
+    // Outer glow halo
+    const glowGr = g(ctx);
+    glowGr.roundRect(x - 1, y - 1, fillW + 2, barH + 2, r + 1)
+      .stroke({ width: 2, color: palette.glow, alpha: 0.22 });
+    container.addChild(glowGr);
   }
 
-  // "X / Y" text
-  const hpLabelT = t(ctx);
-  hpLabelT.text = `${state.playerHp} / ${state.playerMaxHp}`;
-  hpLabelT.style = {
+  // Centered label text (e.g. "45 / 80")
+  const lbl = t(ctx);
+  lbl.text = labelText;
+  lbl.style = {
     fontFamily: 'system-ui',
     fontSize: scaledFontSize(13, ctx),
     fill: 0xffffff,
     fontWeight: 'bold',
-    dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.95 },
+    dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.95 },
   };
-  hpLabelT.anchor.set(0.5, 0.5);
-  hpLabelT.x = hpBarX + hpBarW / 2;
-  hpLabelT.y = hpBarY + hpBarH / 2;
-  barsContainer.addChild(hpLabelT);
+  lbl.anchor.set(0.5, 0.5);
+  lbl.x = x + barW / 2;
+  lbl.y = y + barH / 2;
+  container.addChild(lbl);
+}
 
-  let nextY = hpBarY + hpBarH + 8;
+/** Draws the polished player HUD: HP bar, block badge, energy orbs, and status badges. */
+function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
+  const { state, stage, w, h } = ctx;
+  const playerBounds = getCombatSlotBounds('player', w, h);
+  const hpBounds = getCombatSlotBounds('hpBlockEnergy', w, h);
 
-  // ── Block badge (only when block > 0) ──────────────────────────────
-  if (blockVal > 0) {
-    const badgeW = 78;
-    const badgeH = 22;
-    const badgeX = centerX - badgeW / 2;
-    const badgeR = 11;
+  // Panel is centered on the player character
+  const panelW   = Math.max(260, L.playerPlaceholderW + 20);
+  const panelX   = playerBounds.x + playerBounds.width / 2 - panelW / 2;
+  const panelPad = 10;
+  const innerW   = panelW - panelPad * 2;
+  const barInnerX = panelX + panelPad;
 
-    const bdGlow = g(ctx);
-    bdGlow.roundRect(badgeX - 3, nextY - 3, badgeW + 6, badgeH + 6, badgeR + 3)
-      .fill({ color: 0x2255cc, alpha: 0.20 });
-    barsContainer.addChild(bdGlow);
+  const hpRatio  = state.playerMaxHp > 0 ? Math.max(0, Math.min(1, state.playerHp / state.playerMaxHp)) : 0;
+  const blockVal = state.playerBlock ?? 0;
+  const curEnergy = state.energy;
+  const maxEnergy = state.maxEnergy;
 
-    const bdBg = g(ctx);
-    bdBg.roundRect(badgeX, nextY, badgeW, badgeH, badgeR)
-      .fill({ color: 0x08122a, alpha: 0.94 })
-      .stroke({ width: 1.5, color: 0x3399ff, alpha: 0.88 });
-    bdBg.roundRect(badgeX + 3, nextY + 3, 3, badgeH - 6, 2)
-      .fill({ color: 0x55aaff, alpha: 0.70 });
-    barsContainer.addChild(bdBg);
+  // HP bar palette: green at full → orange → crimson at low
+  const hpPalette = hpRatio < 0.25
+    ? { fill: 0xcc1212, glow: 0xff3333, border: 0xff7777 }
+    : hpRatio < 0.55
+      ? { fill: 0xc06010, glow: 0xf08028, border: 0xf0aa66 }
+      : { fill: 0x1a8832, glow: 0x33cc55, border: 0x66ee88 };
 
-    const bdText = t(ctx);
-    bdText.text = `\u25a3  ${blockVal}`;
-    bdText.style = {
-      fontFamily: 'system-ui',
-      fontSize: scaledFontSize(13, ctx),
-      fill: 0x88ddff,
-      fontWeight: 'bold',
-      dropShadow: { color: 0x000022, blur: 3, distance: 1, alpha: 0.9 },
-    };
-    bdText.anchor.set(0.5, 0.5);
-    bdText.x = badgeX + badgeW / 2;
-    bdText.y = nextY + badgeH / 2;
-    barsContainer.addChild(bdText);
-    nextY += badgeH + 4;
-  }
+  // Section heights
+  const headerH   = 22;   // "HP" label row
+  const barH      = 26;
+  const blockH    = blockVal > 0 ? 28 : 0;
+  const divH      = 2;
+  const orbSize   = 22;
+  const energyH   = orbSize + 8;
 
-  // ── Energy orbs row ──────────────────────────────────────────────────
-  const orbGap   = 5;
-  const totalOrbW = maxEnergy * orbSize + (maxEnergy - 1) * orbGap;
-  let orbX = centerX - totalOrbW / 2;
-  for (let ei = 0; ei < maxEnergy; ei++) {
-    const filled = ei < curEnergy;
-    const cx = orbX + orbSize / 2;
-    const cy = nextY + orbSize / 2;
-    const orbGr = g(ctx);
-    if (filled) orbGr.circle(cx, cy, orbSize * 0.64).fill({ color: 0x1a8acc, alpha: 0.20 });
-    orbGr.circle(cx, cy, orbSize / 2).fill({ color: filled ? 0x1877b8 : 0x0a1520, alpha: filled ? 0.96 : 0.75 });
-    orbGr.circle(cx, cy, orbSize / 2).stroke({ width: 1.5, color: filled ? 0x55ddff : 0x1a3344, alpha: 0.88 });
-    if (filled) {
-      orbGr.circle(cx - orbSize * 0.20, cy - orbSize * 0.22, orbSize * 0.18)
-        .fill({ color: 0xffffff, alpha: 0.25 });
-    }
-    barsContainer.addChild(orbGr);
-    if (filled) {
-      const orbDot = g(ctx);
-      orbDot.circle(cx, cy, orbSize * 0.18).fill({ color: 0x88eeff, alpha: 0.70 });
-      barsContainer.addChild(orbDot);
-    }
-    orbX += orbSize + orbGap;
-  }
-  // Energy label to the right of orbs
-  const energyLabelT = t(ctx);
-  energyLabelT.text = `ENERGY`;
-  energyLabelT.style = {
-    fontFamily: 'system-ui',
-    fontSize: scaledFontSize(9, ctx),
-    fill: 0x4488aa,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  };
-  energyLabelT.anchor.set(0, 0.5);
-  energyLabelT.x = centerX + totalOrbW / 2 + 7;
-  energyLabelT.y = nextY + orbSize / 2;
-  barsContainer.addChild(energyLabelT);
-  nextY += orbSize + 8;
-
-  stage.addChild(barsContainer);
-
-  // ── Player status badges ────────────────────────────────────────────
   const playerStr      = state.strengthStacks        ?? 0;
   const playerWeak     = state.playerWeakStacks       ?? 0;
   const playerVuln     = state.playerVulnerableStacks ?? 0;
@@ -1252,11 +1169,8 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   const playerArtifact = state.playerArtifactStacks   ?? 0;
   const hexInHand      = state.hand.filter((id) => id === 'hex').length;
 
-  interface PlayerBadgeDef {
-    icon: string; label: string; count: string;
-    bg: number; border: number; glow: number;
-  }
-  const playerBadges: PlayerBadgeDef[] = [];
+  interface HudBadgeDef { icon: string; label: string; count: string; bg: number; border: number; glow: number; }
+  const playerBadges: HudBadgeDef[] = [];
   if (playerStr > 0)      playerBadges.push({ icon: '\u2694', label: 'STR',   count: `${playerStr}`,      bg: 0x8a1a1a, border: 0xff5555, glow: 0xff3333 });
   if (playerWeak > 0)     playerBadges.push({ icon: '\u223c', label: 'WEAK',  count: `${playerWeak}`,     bg: 0x333300, border: 0x888800, glow: 0xcccc00 });
   if (playerVuln > 0)     playerBadges.push({ icon: '\u25bd', label: 'VULN',  count: `${playerVuln}`,     bg: 0x550033, border: 0xcc1177, glow: 0xff44aa });
@@ -1264,58 +1178,301 @@ function drawHpBlockEnergyIcons(ctx: CombatViewContext): void {
   if (playerArtifact > 0) playerBadges.push({ icon: '\u25c6', label: 'ART',   count: `${playerArtifact}`, bg: 0x004433, border: 0x00bb77, glow: 0x00ffaa });
   if (hexInHand > 0)      playerBadges.push({ icon: '\u2726', label: 'HEX',   count: `${hexInHand}`,      bg: 0x330033, border: 0x9922aa, glow: 0xcc33dd });
 
+  const badgeSz   = 28;
+  const badgeH    = playerBadges.length > 0 ? badgeSz + 14 : 0;
+
+  const totalPanelH = panelPad + headerH + 4 + barH + 6 + (blockH > 0 ? blockH + 6 : 0) + divH + 6 + energyH + (badgeH > 0 ? 6 + badgeH : 0) + panelPad;
+
+  const panelY = hpBounds.y - 4;
+
+  const container = c(ctx);
+  container.zIndex = 20;
+
+  // ── Outer glow halo around panel ───────────────────────────────────────
+  const panelGlow = g(ctx);
+  panelGlow.roundRect(panelX - 4, panelY - 4, panelW + 8, totalPanelH + 8, 16)
+    .fill({ color: hpPalette.glow, alpha: 0.04 });
+  container.addChild(panelGlow);
+
+  // ── Background panel ──────────────────────────────────────────────────
+  const panelBg = g(ctx);
+  // Main body
+  panelBg.roundRect(panelX, panelY, panelW, totalPanelH, 12)
+    .fill({ color: 0x060412, alpha: 0.90 });
+  // Subtle inner bevel
+  panelBg.roundRect(panelX + 1, panelY + 1, panelW - 2, totalPanelH - 2, 11)
+    .stroke({ width: 1, color: 0xffffff, alpha: 0.05 });
+  // Outer border — green when healthy, orange mid, red low
+  panelBg.roundRect(panelX, panelY, panelW, totalPanelH, 12)
+    .stroke({ width: 1.5, color: hpPalette.glow, alpha: 0.35 });
+  // Top accent bar (colored stripe)
+  panelBg.roundRect(panelX, panelY, panelW, 3, 12).fill({ color: hpPalette.glow, alpha: 0.50 });
+  panelBg.roundRect(panelX + 4, panelY, panelW - 8, 1, 1).fill({ color: 0xffffff, alpha: 0.10 });
+  container.addChild(panelBg);
+
+  let curY = panelY + panelPad;
+
+  // ── HP header row: icon + "HP" label + "X / Y" value ─────────────────
+  const hpHeaderGr = g(ctx);
+  // Heart icon circle
+  const hpIconR = 8;
+  const hpIconCX = barInnerX + hpIconR + 2;
+  const hpIconCY = curY + headerH / 2;
+  hpHeaderGr.circle(hpIconCX, hpIconCY, hpIconR + 2).fill({ color: hpPalette.fill, alpha: 0.22 });
+  hpHeaderGr.circle(hpIconCX, hpIconCY, hpIconR).fill({ color: hpPalette.fill, alpha: 0.95 });
+  hpHeaderGr.circle(hpIconCX, hpIconCY, hpIconR).stroke({ width: 1, color: hpPalette.glow, alpha: 0.65 });
+  hpHeaderGr.circle(hpIconCX - hpIconR * 0.3, hpIconCY - hpIconR * 0.35, hpIconR * 0.38).fill({ color: 0xffffff, alpha: 0.25 });
+  container.addChild(hpHeaderGr);
+
+  // "HP" label
+  const hpLbl = t(ctx);
+  hpLbl.text = 'HP';
+  hpLbl.style = {
+    fontFamily: 'system-ui',
+    fontSize: scaledFontSize(11, ctx),
+    fill: hpPalette.glow,
+    fontWeight: '800',
+    letterSpacing: 1,
+  };
+  hpLbl.anchor.set(0, 0.5);
+  hpLbl.x = hpIconCX + hpIconR + 6;
+  hpLbl.y = hpIconCY;
+  container.addChild(hpLbl);
+
+  // HP value right-aligned
+  const hpValT = t(ctx);
+  hpValT.text = `${state.playerHp} / ${state.playerMaxHp}`;
+  hpValT.style = {
+    fontFamily: 'system-ui',
+    fontSize: scaledFontSize(14, ctx),
+    fill: 0xf0ead0,
+    fontWeight: 'bold',
+    dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.9 },
+  };
+  hpValT.anchor.set(1, 0.5);
+  hpValT.x = panelX + panelW - panelPad;
+  hpValT.y = hpIconCY;
+  container.addChild(hpValT);
+
+  curY += headerH + 4;
+
+  // ── HP bar ─────────────────────────────────────────────────────────────
+  drawHudStatBar(ctx, container, barInnerX, curY, innerW, barH, hpRatio, hpPalette, '');
+  curY += barH + 6;
+
+  // ── Block row (only when block > 0) ────────────────────────────────────
+  if (blockVal > 0) {
+    const shieldGlow = g(ctx);
+    shieldGlow.roundRect(barInnerX - 2, curY - 2, innerW + 4, blockH + 4, 14)
+      .fill({ color: 0x2244cc, alpha: 0.16 });
+    container.addChild(shieldGlow);
+
+    const shieldBg = g(ctx);
+    shieldBg.roundRect(barInnerX, curY, innerW, blockH, 12)
+      .fill({ color: 0x07101f, alpha: 0.95 })
+      .stroke({ width: 1.5, color: 0x44aaff, alpha: 0.80 });
+    // Left accent stripe
+    shieldBg.roundRect(barInnerX + 4, curY + 5, 3, blockH - 10, 2).fill({ color: 0x88ccff, alpha: 0.72 });
+    container.addChild(shieldBg);
+
+    // Shield icon (pentagon/square-ish shape)
+    const shieldIconGr = g(ctx);
+    const siCX = barInnerX + 22;
+    const siCY = curY + blockH / 2;
+    shieldIconGr.circle(siCX, siCY, 11).fill({ color: 0x0a1e38, alpha: 0.95 });
+    shieldIconGr.circle(siCX, siCY, 11).stroke({ width: 2, color: 0x44aaff, alpha: 0.85 });
+    shieldIconGr.circle(siCX - 3, siCY - 3, 3.5).fill({ color: 0xffffff, alpha: 0.22 });
+    container.addChild(shieldIconGr);
+
+    const shieldSymT = t(ctx);
+    shieldSymT.text = '\u25a3';
+    shieldSymT.style = {
+      fontFamily: 'system-ui',
+      fontSize: scaledFontSize(13, ctx),
+      fill: 0x88ddff,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000022, blur: 3, distance: 1, alpha: 0.9 },
+    };
+    shieldSymT.anchor.set(0.5, 0.5);
+    shieldSymT.x = siCX;
+    shieldSymT.y = siCY;
+    container.addChild(shieldSymT);
+
+    const shieldLbl = t(ctx);
+    shieldLbl.text = 'BLOCK';
+    shieldLbl.style = {
+      fontFamily: 'system-ui',
+      fontSize: scaledFontSize(10, ctx),
+      fill: 0x5599cc,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+    };
+    shieldLbl.anchor.set(0, 0.5);
+    shieldLbl.x = barInnerX + 38;
+    shieldLbl.y = curY + blockH / 2;
+    container.addChild(shieldLbl);
+
+    const shieldValT = t(ctx);
+    shieldValT.text = `${blockVal}`;
+    shieldValT.style = {
+      fontFamily: 'system-ui',
+      fontSize: scaledFontSize(18, ctx),
+      fill: 0xaaddff,
+      fontWeight: 'bold',
+      dropShadow: { color: 0x000022, blur: 4, distance: 1, alpha: 0.9 },
+    };
+    shieldValT.anchor.set(1, 0.5);
+    shieldValT.x = panelX + panelW - panelPad;
+    shieldValT.y = curY + blockH / 2;
+    container.addChild(shieldValT);
+
+    curY += blockH + 6;
+  }
+
+  // ── Divider ─────────────────────────────────────────────────────────────
+  const divGr = g(ctx);
+  divGr.rect(panelX + panelPad, curY, innerW, 1).fill({ color: 0x3a2a55, alpha: 0.60 });
+  divGr.rect(panelX + panelPad, curY + 1, innerW, 1).fill({ color: 0xffffff, alpha: 0.04 });
+  container.addChild(divGr);
+  curY += divH + 6;
+
+  // ── Energy section ────────────────────────────────────────────────────
+  const energyLabelT = t(ctx);
+  energyLabelT.text = 'ENERGY';
+  energyLabelT.style = {
+    fontFamily: 'system-ui',
+    fontSize: scaledFontSize(9, ctx),
+    fill: 0x4488aa,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  };
+  energyLabelT.anchor.set(0, 0.5);
+  energyLabelT.x = barInnerX;
+  energyLabelT.y = curY + orbSize / 2;
+  container.addChild(energyLabelT);
+
+  // Energy orbs (right-aligned in the row)
+  const orbGap = 5;
+  const totalOrbW = maxEnergy * orbSize + (maxEnergy - 1) * orbGap;
+  const orbStartX = panelX + panelW - panelPad - totalOrbW;
+  let orbX = orbStartX;
+  for (let ei = 0; ei < maxEnergy; ei++) {
+    const filled = ei < curEnergy;
+    const ocx = orbX + orbSize / 2;
+    const ocy = curY + orbSize / 2;
+    const orbGr = g(ctx);
+    // Outer glow
+    if (filled) orbGr.circle(ocx, ocy, orbSize * 0.72).fill({ color: 0x1a99dd, alpha: 0.18 });
+    // Drop shadow
+    orbGr.circle(ocx + 1, ocy + 1.5, orbSize / 2 + 0.5).fill({ color: 0x000000, alpha: 0.45 });
+    // Main orb body
+    orbGr.circle(ocx, ocy, orbSize / 2).fill({ color: filled ? 0x1166bb : 0x09141e, alpha: filled ? 0.97 : 0.80 });
+    orbGr.circle(ocx, ocy, orbSize / 2).stroke({ width: 2, color: filled ? 0x55ddff : 0x1d3a4e, alpha: filled ? 0.92 : 0.60 });
+    // Inner crystal shine
+    if (filled) {
+      orbGr.circle(ocx - orbSize * 0.20, ocy - orbSize * 0.24, orbSize * 0.20).fill({ color: 0xffffff, alpha: 0.30 });
+    }
+    container.addChild(orbGr);
+    if (filled) {
+      const orbCore = g(ctx);
+      orbCore.circle(ocx, ocy, orbSize * 0.16).fill({ color: 0x88eeff, alpha: 0.75 });
+      container.addChild(orbCore);
+    }
+    // Orb number label (for current energy count)
+    if (ei === maxEnergy - 1) {
+      const energyCountT = t(ctx);
+      energyCountT.text = `${curEnergy}/${maxEnergy}`;
+      energyCountT.style = {
+        fontFamily: 'system-ui',
+        fontSize: scaledFontSize(10, ctx),
+        fill: filled ? 0x88ddff : 0x3a6688,
+        fontWeight: 'bold',
+        dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.8 },
+      };
+      energyCountT.anchor.set(0.5, 1);
+      energyCountT.x = orbStartX + totalOrbW / 2;
+      energyCountT.y = curY + orbSize + 4;
+      container.addChild(energyCountT);
+    }
+    orbX += orbSize + orbGap;
+  }
+  curY += energyH;
+
+  // ── Status effect badges row ──────────────────────────────────────────
   if (playerBadges.length > 0) {
-    const bdSz  = 30;
+    curY += 6;
+    const bdSz  = badgeSz;
     const bdGap = 5;
     const totalBW = playerBadges.length * bdSz + (playerBadges.length - 1) * bdGap;
-    let bx = centerX - totalBW / 2;
+    const bdStartX = panelX + panelW / 2 - totalBW / 2;
+    let bx = bdStartX;
 
     for (const badge of playerBadges) {
-      const bc = c(ctx);
-      bc.zIndex = 22;
       const bcx = bx + bdSz / 2;
-      const bcy = nextY + bdSz / 2;
+      const bcy = curY + bdSz / 2;
 
+      // Outer glow
       const glGr = g(ctx);
-      glGr.circle(bcx, bcy, bdSz * 0.72).fill({ color: badge.glow, alpha: 0.14 });
-      bc.addChild(glGr);
+      glGr.circle(bcx, bcy, bdSz * 0.75).fill({ color: badge.glow, alpha: 0.15 });
+      container.addChild(glGr);
 
+      // Circle body
       const ciGr = g(ctx);
-      ciGr.circle(bcx, bcy, bdSz / 2 + 1).fill({ color: 0x000000, alpha: 0.50 });
-      ciGr.circle(bcx, bcy, bdSz / 2).fill({ color: badge.bg, alpha: 0.96 });
-      ciGr.circle(bcx, bcy, bdSz / 2).stroke({ width: 2, color: badge.border, alpha: 0.92 });
-      ciGr.circle(bcx - bdSz * 0.20, bcy - bdSz * 0.22, bdSz * 0.18).fill({ color: 0xffffff, alpha: 0.20 });
-      bc.addChild(ciGr);
+      ciGr.circle(bcx + 1, bcy + 1.5, bdSz / 2 + 1).fill({ color: 0x000000, alpha: 0.48 });
+      ciGr.circle(bcx, bcy, bdSz / 2).fill({ color: badge.bg, alpha: 0.97 });
+      ciGr.circle(bcx, bcy, bdSz / 2).stroke({ width: 2, color: badge.border, alpha: 0.94 });
+      ciGr.circle(bcx - bdSz * 0.22, bcy - bdSz * 0.24, bdSz * 0.20).fill({ color: 0xffffff, alpha: 0.22 });
+      container.addChild(ciGr);
 
+      // Icon
       const icT = t(ctx);
       icT.text = badge.icon;
-      icT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(12, ctx), fill: 0xffffff, fontWeight: 'bold',
-        dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.8 } };
+      icT.style = {
+        fontFamily: 'system-ui',
+        fontSize: scaledFontSize(13, ctx),
+        fill: 0xffffff,
+        fontWeight: 'bold',
+        dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.85 },
+      };
       icT.anchor.set(0.5, 0.5);
       icT.x = bcx;
       icT.y = bcy - 5;
-      bc.addChild(icT);
+      container.addChild(icT);
 
+      // Count
       const ctT = t(ctx);
       ctT.text = badge.count;
-      ctT.style = { fontFamily: 'system-ui', fontSize: scaledFontSize(10, ctx), fill: 0xffffff, fontWeight: 'bold' };
+      ctT.style = {
+        fontFamily: 'system-ui',
+        fontSize: scaledFontSize(10, ctx),
+        fill: 0xffffff,
+        fontWeight: 'bold',
+      };
       ctT.anchor.set(0.5, 0);
       ctT.x = bcx;
       ctT.y = bcy + 4;
-      bc.addChild(ctT);
+      container.addChild(ctT);
 
+      // Label below badge
       const lbT = t(ctx);
       lbT.text = badge.label;
-      lbT.style = { fontFamily: 'system-ui', fontSize: Math.max(8, scaledFontSize(8, ctx)), fill: badge.border, fontWeight: '600' };
+      lbT.style = {
+        fontFamily: 'system-ui',
+        fontSize: Math.max(8, scaledFontSize(8, ctx)),
+        fill: badge.border,
+        fontWeight: '600',
+      };
       lbT.anchor.set(0.5, 0);
       lbT.x = bcx;
-      lbT.y = nextY + bdSz + 2;
-      bc.addChild(lbT);
+      lbT.y = curY + bdSz + 2;
+      container.addChild(lbT);
 
-      stage.addChild(bc);
       bx += bdSz + bdGap;
     }
   }
+
+  container.zIndex = 20;
+  stage.addChild(container);
 }
 
 // ---------------------------------------------------------------------------
@@ -1681,256 +1838,284 @@ function drawEnemies(ctx: CombatViewContext, handContainer: PIXI.Container): {
       container.addChild(ph);
     }
 
-    // ─── Bottom info panel: name → HP bar → block badge ─────────────────────
-    const barW    = L.enemyBarWidth ?? 234;
-    const barH    = L.enemyBarHeight ?? 22;
-    const barX    = Math.floor((enemyPlaceholderW - barW) / 2);
-    const blockVal= e.block ?? 0;
-    const hpRatio = e.maxHp > 0 ? Math.max(0, Math.min(1, e.hp / e.maxHp)) : 0;
+    // ─── Enemy info: polished bottom panel ──────────────────────────────────
+    const eBlockVal = e.block ?? 0;
+    const eHpRatio  = e.maxHp > 0 ? Math.max(0, Math.min(1, e.hp / e.maxHp)) : 0;
 
-    // How tall is the block badge row? (only when block > 0)
-    const blockRowH = blockVal > 0 ? 24 : 0;
-    const bottomPanelH = 26 + barH + 6 + blockRowH + 6;   // name + spacing + bar + spacing + block + padding
+    // HP palette: green (healthy) → orange (mid) → crimson (low)
+    const eHpPal = eHpRatio < 0.25
+      ? { fill: 0xcc1111, glow: 0xff3333, border: 0xff7070 }
+      : eHpRatio < 0.55
+        ? { fill: 0xc05510, glow: 0xf08828, border: 0xf0aa66 }
+        : { fill: 0x1d8833, glow: 0x33cc55, border: 0x66ee88 };
 
-    // Dark frosted-glass panel behind everything
-    const panelX = 4;
-    const panelW = enemyPlaceholderW - 8;
-    const panelY = enemyPlaceholderH - bottomPanelH;
-    const panelBg = g(ctx);
-    panelBg.roundRect(panelX, panelY, panelW, bottomPanelH, 8)
-      .fill({ color: 0x05030c, alpha: 0.82 });
-    panelBg.roundRect(panelX, panelY, panelW, bottomPanelH, 8)
-      .stroke({ width: 1, color: 0x3a2255, alpha: 0.55 });
-    // Thin gold top edge accent
-    panelBg.roundRect(panelX, panelY, panelW, 2, 8).fill({ color: 0x5a3a80, alpha: 0.7 });
-    container.addChild(panelBg);
+    // Panel dimensions — full width, taller for improved legibility
+    const ePanelPad = 6;
+    const ePanelW   = enemyPlaceholderW - ePanelPad * 2;
+    const ePanelX   = ePanelPad;
+    const eBarW     = ePanelW - 8;
+    const eBarH     = 24;
+    const eBarX     = ePanelX + 4;
+    const eNameH    = 20;
+    const eBlockH   = eBlockVal > 0 ? 26 : 0;
+    const ePanelH   = 6 + eNameH + 4 + eBarH + (eBlockVal > 0 ? 4 + eBlockH : 0) + 6;
+    const ePanelY   = enemyPlaceholderH - ePanelH;
+
+    // ── Panel background ────────────────────────────────────────────────
+    const ePanelGlow = g(ctx);
+    ePanelGlow.roundRect(ePanelX - 3, ePanelY - 3, ePanelW + 6, ePanelH + 6, 13)
+      .fill({ color: eHpPal.glow, alpha: 0.06 });
+    container.addChild(ePanelGlow);
+
+    const ePanelBg = g(ctx);
+    ePanelBg.roundRect(ePanelX, ePanelY, ePanelW, ePanelH, 10)
+      .fill({ color: 0x06040e, alpha: 0.92 });
+    // Inner bevel
+    ePanelBg.roundRect(ePanelX + 1, ePanelY + 1, ePanelW - 2, ePanelH - 2, 9)
+      .stroke({ width: 1, color: 0xffffff, alpha: 0.05 });
+    // Outer border colored by HP state
+    ePanelBg.roundRect(ePanelX, ePanelY, ePanelW, ePanelH, 10)
+      .stroke({ width: 1.5, color: eHpPal.glow, alpha: 0.30 });
+    // Top color stripe
+    ePanelBg.roundRect(ePanelX, ePanelY, ePanelW, 3, 10).fill({ color: eHpPal.glow, alpha: 0.45 });
+    container.addChild(ePanelBg);
+
+    let eCurY = ePanelY + 6;
 
     // ── Enemy name ──────────────────────────────────────────────────────
-    const nameFontSz = scaledFontSize(14, ctx);
-    const nameT = t(ctx);
-    nameT.text = e.name;
-    nameT.style = {
+    const eNameT = t(ctx);
+    eNameT.text = e.name;
+    eNameT.style = {
       fontFamily: 'system-ui',
-      fontSize: nameFontSz,
-      fill: 0xf2eaff,
+      fontSize: scaledFontSize(13, ctx),
+      fill: 0xf2eeff,
       fontWeight: '800',
-      dropShadow: { color: 0x000000, blur: 4, distance: 1, alpha: 0.9 },
+      letterSpacing: 0.3,
+      dropShadow: { color: 0x000000, blur: 5, distance: 1, alpha: 0.95 },
     };
-    nameT.anchor.set(0.5, 0);
-    nameT.x = enemyPlaceholderW / 2;
-    nameT.y = panelY + 4;
-    container.addChild(nameT);
+    eNameT.anchor.set(0.5, 0);
+    eNameT.x = enemyPlaceholderW / 2;
+    eNameT.y = eCurY;
+    container.addChild(eNameT);
+    eCurY += eNameH + 4;
 
-    // ── HP bar ──────────────────────────────────────────────────────────
-    const hpY = panelY + 26;
-    const hpPalette: StatBarPalette = hpRatio < 0.3
-      ? { fill: 0xc01818, glow: 0xff3030, border: 0xff6a6a }
-      : hpRatio < 0.6
-        ? { fill: 0xbb5510, glow: 0xf08830, border: 0xf2aa6b }
-        : { fill: 0xb02828, glow: 0xe04444, border: 0xf07070 };
+    // ── HP bar (full-width, color-coded) ────────────────────────────────
+    const eHpBarR = Math.max(4, Math.round(eBarH / 2));
+    const eHpFillW = Math.max(0, eBarW * eHpRatio);
 
-    // Track (dark background)
-    const hpTrack = g(ctx);
-    const hpR = Math.max(4, Math.round(barH / 2));
-    hpTrack.roundRect(barX, hpY, barW, barH, hpR).fill({ color: 0x000000, alpha: 0.65 });
-    hpTrack.roundRect(barX, hpY, barW, barH, hpR).stroke({ width: 1, color: hpPalette.border ?? 0x886666, alpha: 0.22 });
-    container.addChild(hpTrack);
+    // Track
+    const eHpTrack = g(ctx);
+    eHpTrack.roundRect(eBarX, eCurY, eBarW, eBarH, eHpBarR).fill({ color: 0x040208, alpha: 0.90 });
+    eHpTrack.roundRect(eBarX, eCurY, eBarW, eBarH, eHpBarR).stroke({ width: 1, color: eHpPal.border, alpha: 0.20 });
+    container.addChild(eHpTrack);
 
     // Fill
-    const hpFillW = Math.max(0, barW * hpRatio);
-    if (hpFillW > 0) {
-      const hpFill = g(ctx);
-      hpFill.roundRect(barX, hpY, hpFillW, barH, hpR).fill({ color: hpPalette.fill, alpha: 0.96 });
-      // Segmented shine stripe
-      if (hpFillW > 8) {
-        hpFill.roundRect(barX + 2, hpY + 2, hpFillW - 4, Math.max(2, barH * 0.30), Math.max(2, barH * 0.15))
-          .fill({ color: 0xffffff, alpha: 0.15 });
-        // Segment tick marks every ~20% across fill
+    if (eHpFillW > 0) {
+      const eHpFill = g(ctx);
+      eHpFill.roundRect(eBarX, eCurY, eHpFillW, eBarH, eHpBarR).fill({ color: eHpPal.fill, alpha: 0.97 });
+      if (eHpFillW > 8) {
+        eHpFill.roundRect(eBarX + 2, eCurY + 2, eHpFillW - 4, Math.max(2, eBarH * 0.32), Math.max(2, eBarH * 0.18))
+          .fill({ color: 0xffffff, alpha: 0.18 });
         for (let seg = 1; seg <= 4; seg++) {
-          const segX = barX + (barW * seg * 0.2);
-          if (segX < barX + hpFillW - 3) {
-            hpFill.rect(segX, hpY + 2, 1, barH - 4).fill({ color: 0x000000, alpha: 0.18 });
+          const eSegX = eBarX + eBarW * seg * 0.2;
+          if (eSegX < eBarX + eHpFillW - 2) {
+            eHpFill.rect(eSegX, eCurY + 2, 1.5, eBarH - 4).fill({ color: 0x000000, alpha: 0.20 });
           }
         }
       }
-      hpFill.roundRect(barX, hpY, hpFillW, barH, hpR)
-        .stroke({ width: 1, color: hpPalette.glow, alpha: 0.55 });
-      container.addChild(hpFill);
-      // Glow halo
-      const hpGlow = g(ctx);
-      hpGlow.roundRect(barX - 1, hpY - 1, hpFillW + 2, barH + 2, hpR + 1)
-        .stroke({ width: 1.5, color: hpPalette.glow, alpha: 0.20 });
-      container.addChild(hpGlow);
+      eHpFill.roundRect(eBarX, eCurY, eHpFillW, eBarH, eHpBarR).stroke({ width: 1, color: eHpPal.glow, alpha: 0.55 });
+      container.addChild(eHpFill);
+
+      const eHpGlow = g(ctx);
+      eHpGlow.roundRect(eBarX - 1, eCurY - 1, eHpFillW + 2, eBarH + 2, eHpBarR + 1)
+        .stroke({ width: 2, color: eHpPal.glow, alpha: 0.20 });
+      container.addChild(eHpGlow);
     }
 
-    // HP text centered in bar: "X / Y"
-    const hpLabelT = t(ctx);
-    hpLabelT.text = `${e.hp} / ${e.maxHp}`;
-    hpLabelT.style = {
+    // HP text: small "♥ X / Y" left-side of bar
+    const eHpT = t(ctx);
+    eHpT.text = `${e.hp} / ${e.maxHp}`;
+    eHpT.style = {
       fontFamily: 'system-ui',
       fontSize: scaledFontSize(11, ctx),
       fill: 0xffffff,
       fontWeight: 'bold',
-      dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.95 },
+      dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.98 },
     };
-    hpLabelT.anchor.set(0.5, 0.5);
-    hpLabelT.x = barX + barW / 2;
-    hpLabelT.y = hpY + barH / 2;
-    container.addChild(hpLabelT);
+    eHpT.anchor.set(0.5, 0.5);
+    eHpT.x = eBarX + eBarW / 2;
+    eHpT.y = eCurY + eBarH / 2;
+    container.addChild(eHpT);
+    eCurY += eBarH;
 
-    // ── Block badge (below HP bar when block > 0) ──────────────────────
-    if (blockVal > 0) {
-      const blockBadgeY = hpY + barH + 5;
-      const badgeW = 74;
-      const badgeH = 20;
-      const badgeX = barX + barW / 2 - badgeW / 2;
-      const badgeRad = 10;
+    // ── Block row (only when block > 0) ─────────────────────────────────
+    if (eBlockVal > 0) {
+      eCurY += 4;
+      const eShieldGlow = g(ctx);
+      eShieldGlow.roundRect(eBarX - 2, eCurY - 2, eBarW + 4, eBlockH + 4, 14)
+        .fill({ color: 0x2244cc, alpha: 0.18 });
+      container.addChild(eShieldGlow);
 
-      const badgeGlowGr = g(ctx);
-      badgeGlowGr.roundRect(badgeX - 3, blockBadgeY - 3, badgeW + 6, badgeH + 6, badgeRad + 3)
-        .fill({ color: 0x2255cc, alpha: 0.20 });
-      container.addChild(badgeGlowGr);
+      const eShieldBg = g(ctx);
+      eShieldBg.roundRect(eBarX, eCurY, eBarW, eBlockH, 12)
+        .fill({ color: 0x07101f, alpha: 0.96 })
+        .stroke({ width: 1.5, color: 0x44aaff, alpha: 0.80 });
+      eShieldBg.roundRect(eBarX + 4, eCurY + 5, 3, eBlockH - 10, 2).fill({ color: 0x88ccff, alpha: 0.70 });
+      container.addChild(eShieldBg);
 
-      const badgeBg = g(ctx);
-      badgeBg.roundRect(badgeX, blockBadgeY, badgeW, badgeH, badgeRad)
-        .fill({ color: 0x08122a, alpha: 0.94 })
-        .stroke({ width: 1.5, color: 0x3399ff, alpha: 0.88 });
-      badgeBg.roundRect(badgeX + 3, blockBadgeY + 3, 3, badgeH - 6, 2)
-        .fill({ color: 0x55aaff, alpha: 0.70 });
-      container.addChild(badgeBg);
+      // Shield icon circle
+      const eShIconGr = g(ctx);
+      const eShCX = eBarX + 18;
+      const eShCY = eCurY + eBlockH / 2;
+      eShIconGr.circle(eShCX, eShCY, 10).fill({ color: 0x0a1e38, alpha: 0.95 });
+      eShIconGr.circle(eShCX, eShCY, 10).stroke({ width: 2, color: 0x44aaff, alpha: 0.85 });
+      eShIconGr.circle(eShCX - 2.5, eShCY - 2.5, 3).fill({ color: 0xffffff, alpha: 0.22 });
+      container.addChild(eShIconGr);
 
-      const shieldT = t(ctx);
-      shieldT.text = `\u25a3  ${blockVal}`;   // ▣ shield
-      shieldT.style = {
+      const eShSymT = t(ctx);
+      eShSymT.text = '\u25a3';
+      eShSymT.style = {
         fontFamily: 'system-ui',
         fontSize: scaledFontSize(12, ctx),
         fill: 0x88ddff,
         fontWeight: 'bold',
         dropShadow: { color: 0x000022, blur: 3, distance: 1, alpha: 0.9 },
       };
-      shieldT.anchor.set(0.5, 0.5);
-      shieldT.x = badgeX + badgeW / 2;
-      shieldT.y = blockBadgeY + badgeH / 2;
-      container.addChild(shieldT);
+      eShSymT.anchor.set(0.5, 0.5);
+      eShSymT.x = eShCX;
+      eShSymT.y = eShCY;
+      container.addChild(eShSymT);
+
+      const eShLbl = t(ctx);
+      eShLbl.text = 'BLOCK';
+      eShLbl.style = {
+        fontFamily: 'system-ui',
+        fontSize: scaledFontSize(9, ctx),
+        fill: 0x5599cc,
+        fontWeight: '700',
+        letterSpacing: 0.8,
+      };
+      eShLbl.anchor.set(0, 0.5);
+      eShLbl.x = eBarX + 34;
+      eShLbl.y = eShCY;
+      container.addChild(eShLbl);
+
+      const eShValT = t(ctx);
+      eShValT.text = `${eBlockVal}`;
+      eShValT.style = {
+        fontFamily: 'system-ui',
+        fontSize: scaledFontSize(17, ctx),
+        fill: 0xaaddff,
+        fontWeight: 'bold',
+        dropShadow: { color: 0x000022, blur: 4, distance: 1, alpha: 0.9 },
+      };
+      eShValT.anchor.set(1, 0.5);
+      eShValT.x = ePanelX + ePanelW - 4;
+      eShValT.y = eShCY;
+      container.addChild(eShValT);
     }
 
-    // --- Intent icon (top-left) ---
+    // ─── Intent icon: floating above the enemy (negative y in container) ──
+    const eIntentCX = enemyPlaceholderW / 2; // center of enemy horizontally
+    const eIntentTopY = -88;                  // above the container top (y=0)
     if (e.intent) {
-      drawIntentIcon(ctx, container, e.intent.type, e.intent.value, L.intentPosX, L.intentPosY, e.intent.addStatus, {
+      drawIntentIcon(ctx, container, e.intent.type, e.intent.value, eIntentCX, eIntentTopY, e.intent.addStatus, {
         times: e.intent.times,
         value2: e.intent.value2,
         strength: e.intent.strength,
         block: e.intent.block,
       });
     } else {
-      drawIntentIcon(ctx, container, 'none', 0, L.intentPosX, L.intentPosY);
+      drawIntentIcon(ctx, container, 'none', 0, eIntentCX, eIntentTopY);
     }
 
-    // ─── Status effect badges (below intent, horizontal centred row) ──────────
+    // ─── Status effect badges: horizontal row inside bottom panel ──────────
     const vulnerableStacks = e.vulnerableStacks ?? 0;
     const weakStacks       = e.weakStacks       ?? 0;
     const strengthStacks   = e.strengthStacks   ?? 0;
     const ritualStacks     = e.ritualStacks     ?? 0;
     const artifactStacks   = e.artifactStacks   ?? 0;
 
-    interface StatusBadgeDef {
+    interface EnemyStatusBadge {
       icon: string; label: string; count: string;
-      bg: number; border: number; glow: number; isBuff: boolean;
+      bg: number; border: number; glow: number;
     }
-    const allBadges: StatusBadgeDef[] = [];
-    // ── Buffs (warm/orange/red tones) ─────────────────────────────────────
-    if (strengthStacks > 0) allBadges.push({
-      icon: '\u2694', label: 'STR', count: `${strengthStacks}`,
-      bg: 0x8a1a1a, border: 0xff5555, glow: 0xff3333, isBuff: true,
-    });
-    if (ritualStacks > 0) allBadges.push({
-      icon: '\u2605', label: 'RITL', count: `${ritualStacks}`,
-      bg: 0x5a3300, border: 0xcc8800, glow: 0xffaa00, isBuff: true,
-    });
-    if (artifactStacks > 0) allBadges.push({
-      icon: '\u25c6', label: 'ART', count: `${artifactStacks}`,
-      bg: 0x004433, border: 0x00bb77, glow: 0x00ffaa, isBuff: true,
-    });
-    // ── Debuffs (purple/green tones) ────────────────────────────────────
-    if (vulnerableStacks > 0) allBadges.push({
-      icon: '\u25bd', label: 'VULN', count: `${vulnerableStacks}`,
-      bg: 0x550033, border: 0xcc1177, glow: 0xff44aa, isBuff: false,
-    });
-    if (weakStacks > 0) allBadges.push({
-      icon: '\u223c', label: 'WEAK', count: `${weakStacks}`,
-      bg: 0x333300, border: 0x888800, glow: 0xcccc00, isBuff: false,
-    });
+    const allBadges: EnemyStatusBadge[] = [];
+    if (strengthStacks > 0) allBadges.push({ icon: '\u2694', label: 'STR',  count: `${strengthStacks}`, bg: 0x8a1a1a, border: 0xff5555, glow: 0xff3333 });
+    if (ritualStacks > 0)   allBadges.push({ icon: '\u2605', label: 'RITL', count: `${ritualStacks}`,   bg: 0x5a3300, border: 0xcc8800, glow: 0xffaa00 });
+    if (artifactStacks > 0) allBadges.push({ icon: '\u25c6', label: 'ART',  count: `${artifactStacks}`, bg: 0x004433, border: 0x00bb77, glow: 0x00ffaa });
+    if (vulnerableStacks > 0) allBadges.push({ icon: '\u25bd', label: 'VULN', count: `${vulnerableStacks}`, bg: 0x550033, border: 0xcc1177, glow: 0xff44aa });
+    if (weakStacks > 0)     allBadges.push({ icon: '\u223c', label: 'WEAK', count: `${weakStacks}`,     bg: 0x333300, border: 0x888800, glow: 0xcccc00 });
 
     if (allBadges.length > 0) {
-      const badgeSize = 32;          // circle diameter
-      const badgeGap  = 5;
-      const pillRowY  = L.intentPosY + INTENT_ICON_SIZE + 8;
-      const totalW    = allBadges.length * badgeSize + (allBadges.length - 1) * badgeGap;
-      let bx          = Math.floor((enemyPlaceholderW - totalW) / 2);
+      const eBdSz  = 26;
+      const eBdGap = 4;
+      const eBdTotalW = allBadges.length * eBdSz + (allBadges.length - 1) * eBdGap;
+      // Float badges just above the bottom panel
+      const eBdY = ePanelY - eBdSz - 8;
+      let eBdX = Math.floor((enemyPlaceholderW - eBdTotalW) / 2);
 
       for (const badge of allBadges) {
-        const cx = bx + badgeSize / 2;
-        const cy = pillRowY + badgeSize / 2;
+        const bcx = eBdX + eBdSz / 2;
+        const bcy = eBdY + eBdSz / 2;
 
-        // Outer glow
-        const glowGr = g(ctx);
-        glowGr.circle(cx, cy, badgeSize * 0.72).fill({ color: badge.glow, alpha: 0.14 });
-        container.addChild(glowGr);
+        // Glow
+        const glGr = g(ctx);
+        glGr.circle(bcx, bcy, eBdSz * 0.75).fill({ color: badge.glow, alpha: 0.16 });
+        container.addChild(glGr);
 
-        // Circle body
-        const circleGr = g(ctx);
-        circleGr.circle(cx, cy, badgeSize / 2 + 1).fill({ color: 0x000000, alpha: 0.50 });
-        circleGr.circle(cx, cy, badgeSize / 2).fill({ color: badge.bg, alpha: 0.96 });
-        circleGr.circle(cx, cy, badgeSize / 2).stroke({ width: 2, color: badge.border, alpha: 0.92 });
-        // Top-left shine
-        circleGr.circle(cx - badgeSize * 0.20, cy - badgeSize * 0.22, badgeSize * 0.18)
-          .fill({ color: 0xffffff, alpha: 0.20 });
-        container.addChild(circleGr);
+        // Body
+        const ciGr = g(ctx);
+        ciGr.circle(bcx + 1, bcy + 1.5, eBdSz / 2 + 1).fill({ color: 0x000000, alpha: 0.48 });
+        ciGr.circle(bcx, bcy, eBdSz / 2).fill({ color: badge.bg, alpha: 0.97 });
+        ciGr.circle(bcx, bcy, eBdSz / 2).stroke({ width: 2, color: badge.border, alpha: 0.94 });
+        ciGr.circle(bcx - eBdSz * 0.22, bcy - eBdSz * 0.24, eBdSz * 0.20).fill({ color: 0xffffff, alpha: 0.22 });
+        container.addChild(ciGr);
 
-        // Icon symbol (upper half of circle)
-        const iconT = t(ctx);
-        iconT.text = badge.icon;
-        iconT.style = {
+        // Icon
+        const icT = t(ctx);
+        icT.text = badge.icon;
+        icT.style = {
           fontFamily: 'system-ui',
-          fontSize: scaledFontSize(13, ctx),
+          fontSize: scaledFontSize(11, ctx),
           fill: 0xffffff,
           fontWeight: 'bold',
-          dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.8 },
+          dropShadow: { color: 0x000000, blur: 3, distance: 1, alpha: 0.85 },
         };
-        iconT.anchor.set(0.5, 0.5);
-        iconT.x = cx;
-        iconT.y = cy - 5;
-        container.addChild(iconT);
+        icT.anchor.set(0.5, 0.5);
+        icT.x = bcx;
+        icT.y = bcy - 4;
+        container.addChild(icT);
 
-        // Stack count (lower half, bold)
-        const countT = t(ctx);
-        countT.text = badge.count;
-        countT.style = {
+        // Count
+        const ctT = t(ctx);
+        ctT.text = badge.count;
+        ctT.style = {
           fontFamily: 'system-ui',
-          fontSize: scaledFontSize(10, ctx),
+          fontSize: scaledFontSize(9, ctx),
           fill: 0xffffff,
           fontWeight: 'bold',
         };
-        countT.anchor.set(0.5, 0);
-        countT.x = cx;
-        countT.y = cy + 5;
-        container.addChild(countT);
+        ctT.anchor.set(0.5, 0);
+        ctT.x = bcx;
+        ctT.y = bcy + 4;
+        container.addChild(ctT);
 
-        // Label tooltip strip below the circle (very small, muted)
-        const labelT = t(ctx);
-        labelT.text = badge.label;
-        labelT.style = {
+        // Label below badge
+        const lbT = t(ctx);
+        lbT.text = badge.label;
+        lbT.style = {
           fontFamily: 'system-ui',
-          fontSize: Math.max(8, scaledFontSize(9, ctx)),
+          fontSize: Math.max(7, scaledFontSize(8, ctx)),
           fill: badge.border,
           fontWeight: '600',
         };
-        labelT.anchor.set(0.5, 0);
-        labelT.x = cx;
-        labelT.y = pillRowY + badgeSize + 2;
-        container.addChild(labelT);
+        lbT.anchor.set(0.5, 0);
+        lbT.x = bcx;
+        lbT.y = eBdY + eBdSz + 2;
+        container.addChild(lbT);
 
-        bx += badgeSize + badgeGap;
+        eBdX += eBdSz + eBdGap;
       }
     }
 

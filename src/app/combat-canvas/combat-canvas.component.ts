@@ -43,9 +43,7 @@ import { RestPanelComponent } from './panels/rest-panel.component';
 import { ShopPanelComponent } from './panels/shop-panel.component';
 import { EventPanelComponent } from './panels/event-panel.component';
 import { VictoryPanelComponent } from './panels/victory-panel.component';
-import { NoiseFilter } from '@pixi/filter-noise';
-import { GlowFilter } from '@pixi/filter-glow';
-import { ColorMatrixFilter } from '@pixi/filter-color-matrix';
+import { ColorMatrixFilter } from 'pixi.js';
 
 /**
  * Main game canvas: owns PixiJS app lifecycle, game state sync, and user actions.
@@ -291,13 +289,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   private triggerScreenShake(): void {
-    if (this._shakeTimeout != null) clearTimeout(this._shakeTimeout);
-    this.isScreenShaking = true;
-    this._shakeTimeout = setTimeout(() => {
-      this.isScreenShaking = false;
-      this.cdr.markForCheck();
-    }, 450);
-    this.cdr.markForCheck();
+    // Screen shake disabled by design.
+    this.isScreenShaking = false;
   }
 
   private updateGhostHp(prevHp: number): void {
@@ -955,21 +948,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.viewOffsetY = 0;
     this.rootContainer.scale.set(1);
     this.rootContainer.position.set(0, 0);
-    // Apply post FX based on settings (combat only).
-    const enablePostFx = this.gameSettings.postFx() === 'on' && !this.gameSettings.reducedMotion();
-    if (enablePostFx) {
-      if (!this.postFxFilters) {
-        const noise = new NoiseFilter(0.08);
-        const glow = new GlowFilter({ distance: 10, outerStrength: 0.35, innerStrength: 0, color: 0xffffff, quality: 0.2 });
-        const cm = new ColorMatrixFilter();
-        cm.brightness(1.02, false);
-        cm.contrast(1.05, false);
-        this.postFxFilters = [cm, glow, noise];
-      }
-      this.rootContainer.filters = this.postFxFilters as unknown as PIXI.Filter[];
-    } else {
-      this.rootContainer.filters = null;
-    }
+    // Post FX filters disabled (filter packages incompatible with pixi.js v8).
+    this.rootContainer.filters = null;
     // Fill host area.
     this.app.canvas.style.position = 'absolute';
     this.app.canvas.style.left = '0px';
@@ -2387,13 +2367,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return !!state && state.phase === 'player' && !state.combatResult && this._runPhase === 'combat';
   }
 
-  /** Show "Enemy turn" banner, then after delay call bridge.endTurn() and redraw. */
+  /** End turn flow: resolve enemy turn after delay, without enemy banner overlay. */
   onEndTurn(): void {
     if (!this.canEndTurn()) return;
     this.pushCombatLog('Turn ended.');
     this.announceLive('Turn ended.');
     this.sound.playTurnEnd();
-    this.combatController.showingEnemyTurn = true;
     this.redraw();
     this.requestTemplateUpdate();
     setTimeout(() => {
@@ -2410,7 +2389,6 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         // Show "Your Turn" only as the enemy turn truly ends.
         this.showTurnBanner('player');
       }
-      this.combatController.showingEnemyTurn = false;
       this.redraw();
       this.requestTemplateUpdate();
     }, this.getScaledTimingMs(COMBAT_TIMING.enemyTurnBannerDelayMs, 70));

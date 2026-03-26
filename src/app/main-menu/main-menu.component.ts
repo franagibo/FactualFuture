@@ -16,6 +16,9 @@ interface EmberParticle {
   vx: number; vy: number;
   size: number; life: number; decay: number;
   color: string;
+  kind: 'ember' | 'spark' | 'wisp';
+  twinklePhase: number;
+  twinkleSpeed: number;
 }
 
 const LOADING_TIPS = [
@@ -771,16 +774,62 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private makeEmber(canvas: HTMLCanvasElement, fromBottom = false): EmberParticle {
-    const colors = ['#ff6030', '#ff8040', '#ffaa50', '#ffcc60', '#ffd080', '#ff4420', '#ffa030', '#ff7010'];
+    const roll = Math.random();
+    const kind: EmberParticle['kind'] = roll < 0.62 ? 'ember' : roll < 0.85 ? 'spark' : 'wisp';
+
+    const emberColors = ['#ff6030', '#ff8040', '#ffaa50', '#ffcc60', '#ffd080', '#ff4420', '#ffa030', '#ff7010', '#ff5820', '#ffb840'];
+    const sparkColors = ['#fff8e0', '#ffe8a0', '#ffffff', '#ffe0c0', '#ffd0a0'];
+    const wispColors  = ['#ff3010', '#ff6620', '#c84400', '#ff9940', '#d06020', '#ff4c28'];
+
+    const colorPalette = kind === 'ember' ? emberColors : kind === 'spark' ? sparkColors : wispColors;
+    const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+
+    const startY = fromBottom ? canvas.height + Math.random() * 30 : Math.random() * canvas.height;
+
+    if (kind === 'spark') {
+      return {
+        x: Math.random() * canvas.width,
+        y: startY,
+        vx: (Math.random() - 0.5) * 1.4,
+        vy: 0.8 + Math.random() * 1.8,
+        size: 0.5 + Math.random() * 1.0,
+        life: 0.5 + Math.random() * 0.5,
+        decay: 0.003 + Math.random() * 0.005,
+        color,
+        kind,
+        twinklePhase: Math.random() * Math.PI * 2,
+        twinkleSpeed: 0.08 + Math.random() * 0.14,
+      };
+    }
+
+    if (kind === 'wisp') {
+      return {
+        x: Math.random() * canvas.width,
+        y: startY,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: 0.18 + Math.random() * 0.45,
+        size: 3.5 + Math.random() * 5.0,
+        life: 0.12 + Math.random() * 0.22,
+        decay: 0.0003 + Math.random() * 0.0008,
+        color,
+        kind,
+        twinklePhase: Math.random() * Math.PI * 2,
+        twinkleSpeed: 0.01 + Math.random() * 0.025,
+      };
+    }
+
     return {
       x: Math.random() * canvas.width,
-      y: fromBottom ? canvas.height + Math.random() * 20 : Math.random() * canvas.height,
+      y: startY,
       vx: (Math.random() - 0.5) * 0.7,
       vy: 0.35 + Math.random() * 0.9,
       size: 0.8 + Math.random() * 2.8,
       life: 0.25 + Math.random() * 0.75,
       decay: 0.0008 + Math.random() * 0.0025,
-      color: colors[Math.floor(Math.random() * colors.length)],
+      color,
+      kind,
+      twinklePhase: Math.random() * Math.PI * 2,
+      twinkleSpeed: 0.02 + Math.random() * 0.04,
     };
   }
 
@@ -799,29 +848,75 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
     this.emberResizeHandler = resize;
     window.addEventListener('resize', resize);
 
-    this.emberParticles = Array.from({ length: 70 }, () => this.makeEmber(canvas));
+    this.emberParticles = Array.from({ length: 120 }, () => this.makeEmber(canvas));
 
-    const animate = (): void => {
+    let lastTime = 0;
+    const animate = (ts: number): void => {
       if (!this.emberCtx || !canvas) return;
+      const dt = Math.min((ts - lastTime) / 16.67, 3);
+      lastTime = ts;
       this.emberCtx.clearRect(0, 0, canvas.width, canvas.height);
+
       for (let i = 0; i < this.emberParticles.length; i++) {
         const p = this.emberParticles[i];
-        p.x += p.vx + Math.sin(Date.now() * 0.001 + i) * 0.2;
-        p.y -= p.vy;
-        p.life -= p.decay;
-        if (p.life <= 0 || p.y < -8) {
+        p.twinklePhase += p.twinkleSpeed * dt;
+
+        const windX = Math.sin(ts * 0.00055 + i * 0.37) * 0.28 + Math.cos(ts * 0.00031 + i * 0.19) * 0.18;
+        p.x += (p.vx + windX) * dt;
+        p.y -= p.vy * dt;
+        p.life -= p.decay * dt;
+
+        if (p.life <= 0 || p.y < -12) {
           this.emberParticles[i] = this.makeEmber(canvas, true);
           continue;
         }
-        const alpha = Math.min(p.life, 0.85) * (p.size > 2 ? 0.7 : 0.9);
+
+        const twinkle = 0.75 + Math.sin(p.twinklePhase) * 0.25;
+
         this.emberCtx.save();
-        this.emberCtx.globalAlpha = alpha;
-        this.emberCtx.shadowBlur = p.size > 2 ? 10 : 5;
-        this.emberCtx.shadowColor = p.color;
-        this.emberCtx.fillStyle = p.color;
-        this.emberCtx.beginPath();
-        this.emberCtx.arc(p.x, p.y, p.size * (0.5 + p.life * 0.5), 0, Math.PI * 2);
-        this.emberCtx.fill();
+
+        if (p.kind === 'wisp') {
+          const alpha = Math.min(p.life, 0.18) * twinkle;
+          const radius = p.size * (0.4 + p.life * 0.6);
+          const grad = this.emberCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+          grad.addColorStop(0, p.color + 'aa');
+          grad.addColorStop(1, p.color + '00');
+          this.emberCtx.globalAlpha = alpha;
+          this.emberCtx.shadowBlur = 18;
+          this.emberCtx.shadowColor = p.color;
+          this.emberCtx.fillStyle = grad;
+          this.emberCtx.beginPath();
+          this.emberCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          this.emberCtx.fill();
+        } else if (p.kind === 'spark') {
+          const alpha = Math.min(p.life, 0.95) * twinkle;
+          const radius = p.size * (0.3 + p.life * 0.7);
+          this.emberCtx.globalAlpha = alpha;
+          this.emberCtx.shadowBlur = 14;
+          this.emberCtx.shadowColor = p.color;
+          this.emberCtx.fillStyle = p.color;
+          this.emberCtx.beginPath();
+          this.emberCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          this.emberCtx.fill();
+          if (p.life > 0.6) {
+            this.emberCtx.globalAlpha = alpha * 0.4;
+            this.emberCtx.beginPath();
+            this.emberCtx.arc(p.x, p.y, radius * 2.2, 0, Math.PI * 2);
+            this.emberCtx.fill();
+          }
+        } else {
+          const lifeRatio = Math.min(p.life, 1);
+          const alpha = lifeRatio * (p.size > 2 ? 0.72 : 0.88) * twinkle;
+          const radius = p.size * (0.5 + lifeRatio * 0.5);
+          this.emberCtx.globalAlpha = alpha;
+          this.emberCtx.shadowBlur = p.size > 2 ? 12 : 6;
+          this.emberCtx.shadowColor = p.color;
+          this.emberCtx.fillStyle = p.color;
+          this.emberCtx.beginPath();
+          this.emberCtx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          this.emberCtx.fill();
+        }
+
         this.emberCtx.restore();
       }
       this.emberAnimId = requestAnimationFrame(animate);

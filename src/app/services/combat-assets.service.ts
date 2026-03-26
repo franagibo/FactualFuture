@@ -247,10 +247,10 @@ export class CombatAssetsService {
           this.combatBgPool = [];
         }
       } catch {
-        this.combatBgByEnemy = { default: 'background_level_1.png' };
+        this.combatBgByEnemy = { default: 'background_level_1_variant.png' };
         this.combatBgPool = [];
       }
-      const defaultFilename = this.combatBgByEnemy['default'] ?? 'background_level_1.png';
+      const defaultFilename = this.combatBgByEnemy['default'] ?? 'background_level_1_variant.png';
       try {
         const tex = (await PIXI.Assets.load(this.resolveUrl(FIGHT_LOCATION_PREFIX + defaultFilename))) as PIXI.Texture;
         this.combatBgTextureCache.set('default', tex);
@@ -337,7 +337,7 @@ export class CombatAssetsService {
       const bgKey = enemyIds?.[0] ?? 'default';
       const hasMapping = bgKey !== 'default' && this.combatBgByEnemy[bgKey] != null;
       effectiveKey = hasMapping ? bgKey : 'default';
-      filename = this.combatBgByEnemy[effectiveKey] ?? 'background_level_1.png';
+      filename = this.combatBgByEnemy[effectiveKey] ?? 'background_level_1_variant.png';
       if (isNewFight) {
         this.currentCombatBgSignature = signature;
         this.currentCombatBgKey = effectiveKey;
