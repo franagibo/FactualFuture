@@ -1,7 +1,16 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, OnInit, OnDestroy, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { GameBridgeService } from '../services/game-bridge.service';
+import { LanguageService } from '../services/language.service';
 import type { CharacterDef } from '../../engine/loadData';
+
+const CHARACTER_TIPS = [
+  'Tip: Your starter relic defines your early game. Read it carefully.',
+  'Tip: You can view your full deck at any time during a run.',
+  'Tip: The map shows all possible paths — plan ahead before moving.',
+  'Tip: Each character has unique card synergies. Explore them all.',
+  'Tip: Losing is how you learn what to do differently next time.',
+];
 
 @Component({
   selector: 'app-character-select',
@@ -12,26 +21,28 @@ import type { CharacterDef } from '../../engine/loadData';
       @if (!backgroundReady) {
         <div class="char-loading-overlay" aria-busy="true">
           <span class="char-loading-spinner"></span>
-          <span class="char-loading-label">Loading…</span>
+          <span class="char-loading-label">{{ lang.t().loadingLabel }}</span>
+          <span class="char-loading-tip">{{ currentTip }}</span>
         </div>
       }
       <div class="char-panel">
-      <div class="char-header">
-          <h1 class="char-title">Choose Your Character</h1>
-          <p class="char-subtitle">Each character begins with a unique starter deck.</p>
+        <div class="char-header">
+          <h1 class="char-title">{{ lang.t().chooseCharacter }}</h1>
+          <p class="char-subtitle">{{ lang.t().characterSubtitle }}</p>
         </div>
         <div class="char-grid">
-        @for (char of characters; track char.id; let i = $index) {
+          @for (char of characters; track char.id; let i = $index) {
             <button
               type="button"
               class="char-card"
               [class.char-card--selected]="selectedId === char.id"
               [style.animation-delay]="(i * 0.08) + 's'"
               (click)="onSelect(char)"
+              [attr.aria-label]="char.name + ', ' + char.startingMaxHp + ' ' + lang.t().hp"
             >
-            <div class="char-card-art-wrap">
-            @if (getCharacterImageUrl(char.id)) {
-              <img class="char-card-art" [src]="getCharacterImageUrl(char.id)" alt="{{ char.name }}" />
+              <div class="char-card-art-wrap">
+                @if (getCharacterImageUrl(char.id)) {
+                  <img class="char-card-art" [src]="getCharacterImageUrl(char.id)" [alt]="char.name" />
                 } @else {
                   <div class="char-card-art-placeholder">{{ char.name[0] }}</div>
                 }
@@ -41,19 +52,19 @@ import type { CharacterDef } from '../../engine/loadData';
                 <div class="char-card-name">{{ char.name }}</div>
                 <div class="char-card-desc">{{ char.description || 'A mysterious warrior.' }}</div>
                 <div class="char-card-meta">
-                  <span class="char-meta-badge badge-hp">❤ {{ char.startingMaxHp ?? 70 }} HP</span>
+                  <span class="char-meta-badge badge-hp">❤ {{ char.startingMaxHp ?? 70 }} {{ lang.t().hp }}</span>
                   @if (char.starterRelicId) {
                     <span class="char-meta-badge badge-relic">◆ {{ getRelicName(char.starterRelicId) }}</span>
                   }
                 </div>
-                <div class="char-card-cta">Select →</div>
+                <div class="char-card-cta">{{ lang.t().select }}</div>
               </div>
             </button>
           }
         </div>
         <div class="char-actions">
           <button type="button" class="char-btn char-btn-back" (click)="onBack()">
-          ← Back
+            {{ lang.t().back }}
           </button>
         </div>
       </div>
@@ -73,7 +84,8 @@ import type { CharacterDef } from '../../engine/loadData';
       align-items: center;
       justify-content: center;
       position: relative;
-      background: #09080a center center no-repeat;      background-size: cover;
+      background: #09080a center center no-repeat;
+      background-size: cover;
       padding: 2rem;
     }
 
@@ -85,7 +97,8 @@ import type { CharacterDef } from '../../engine/loadData';
       content: '';
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.72) 100%);      pointer-events: none;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.72) 100%);
+      pointer-events: none;
       z-index: 0;
     }
 
@@ -120,6 +133,23 @@ import type { CharacterDef } from '../../engine/loadData';
       letter-spacing: 0.06em;
     }
 
+    .char-loading-tip {
+      font-family: 'Exo 2', system-ui, sans-serif;
+      font-size: 0.8rem;
+      color: #4a3a18;
+      font-style: italic;
+      text-align: center;
+      max-width: 320px;
+      padding: 0 1rem;
+      line-height: 1.5;
+      animation: tipFadeIn 0.6s ease-out both;
+    }
+
+    @keyframes tipFadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
     /* ── panel ── */
     .char-panel {
       position: relative;
@@ -131,7 +161,7 @@ import type { CharacterDef } from '../../engine/loadData';
       border-radius: 20px;
       padding: 2.2rem 2.5rem 2rem;
       box-shadow:
-      0 0 60px rgba(80, 55, 10, 0.4),
+        0 0 60px rgba(80, 55, 10, 0.4),
         0 16px 50px rgba(0, 0, 0, 0.8),
         inset 0 1px 0 rgba(255, 240, 160, 0.05);
       max-width: 820px;
@@ -145,7 +175,7 @@ import type { CharacterDef } from '../../engine/loadData';
       top: 0; left: 10%; right: 10%;
       height: 2px;
       background: linear-gradient(90deg, transparent 0%, rgba(200,158,42,0.9) 50%, transparent 100%);
-       border-radius: 20px 20px 0 0;
+      border-radius: 20px 20px 0 0;
     }
 
     @keyframes panelIn {
@@ -203,13 +233,13 @@ import type { CharacterDef } from '../../engine/loadData';
       &:hover {
         transform: translateY(-5px) scale(1.015);
         box-shadow:
-        0 14px 40px rgba(80, 55, 10, 0.5),
+          0 14px 40px rgba(80, 55, 10, 0.5),
           0 0 28px rgba(180, 136, 30, 0.28);
         border-color: rgba(210, 160, 50, 0.7);
       }
 
       &:active { transform: translateY(-1px) scale(1.005); }
-      
+
       &.char-card--selected {
         border-color: rgba(220, 168, 50, 0.9);
         box-shadow:
@@ -219,7 +249,7 @@ import type { CharacterDef } from '../../engine/loadData';
         animation: charCardSelected 0.25s cubic-bezier(0.34, 1.4, 0.64, 1) both;
       }
     }
-    
+
     @keyframes charCardIn {
       from { opacity: 0; transform: translateY(18px) scale(0.94); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -356,7 +386,7 @@ import type { CharacterDef } from '../../engine/loadData';
       border-radius: 12px;
       background: linear-gradient(160deg, #2c2210 0%, #1a1408 100%);
       box-shadow: 0 4px 0 #0e0a04, 0 6px 16px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,160,0.07);
-       transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+      transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
 
       &:hover {
         transform: translateY(-2px);
@@ -369,10 +399,15 @@ import type { CharacterDef } from '../../engine/loadData';
     }
   `],
 })
-export class CharacterSelectComponent implements OnInit {
+export class CharacterSelectComponent implements OnInit, OnDestroy {
   characters: CharacterDef[] = [];
   backgroundReady = false;
   selectedId: string | null = null;
+  currentTip = '';
+
+  readonly lang = inject(LanguageService);
+
+  private tipInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private router: Router,
@@ -381,6 +416,8 @@ export class CharacterSelectComponent implements OnInit {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.pickTip();
+    this.tipInterval = setInterval(() => this.pickTip(), 4000);
     try {
       await this.bridge.ensureDataLoaded();
     } catch {
@@ -388,6 +425,15 @@ export class CharacterSelectComponent implements OnInit {
     }
     this.characters = this.bridge.getCharacters();
     this.loadBackground();
+    this.cdr.markForCheck();
+  }
+
+  ngOnDestroy(): void {
+    if (this.tipInterval) clearInterval(this.tipInterval);
+  }
+
+  private pickTip(): void {
+    this.currentTip = CHARACTER_TIPS[Math.floor(Math.random() * CHARACTER_TIPS.length)];
     this.cdr.markForCheck();
   }
 
@@ -403,14 +449,15 @@ export class CharacterSelectComponent implements OnInit {
   }
 
   private static readonly CHARACTER_ART: Record<string, string> = {
-    gungirl: '/assets/characters/gungirl/gungirl_idle.png',
-    verdant_machinist: '/assets/characters/verdant_machinist/munui.png',
+    gungirl: '/assets/characters/gungirl/portrait.png',
+    verdant_machinist: '/assets/characters/verdant_machinist/portrait.png',
+    chibi: '/assets/characters/chibi/portrait.png',
   };
   getCharacterImageUrl(charId: string): string {
     return CharacterSelectComponent.CHARACTER_ART[charId] ?? '';
   }
 
- onSelect(char: CharacterDef): void {
+  onSelect(char: CharacterDef): void {
     this.selectedId = char.id;
     this.cdr.markForCheck();
     this.bridge.setPendingCharacter(char.id);

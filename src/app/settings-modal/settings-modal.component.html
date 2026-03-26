@@ -1,296 +1,228 @@
 <div class="settings-backdrop" (click)="onClose()"></div>
 <div class="settings-modal" (click)="$event.stopPropagation()">
   <header class="settings-header">
-    <h2 class="settings-title">Settings</h2>
-    <button type="button" class="settings-close-btn" (click)="onClose()">{{ closeButtonLabel }}</button>
+    <h2 class="settings-title">{{ lang.t().settingsTitle }}</h2>
+    <button type="button" class="settings-close-btn" (click)="onClose()">{{ lang.t().close }}</button>
   </header>
   <div class="settings-body">
     <nav class="settings-nav">
-      <button
-        type="button"
-        class="settings-nav-item"
-        [class.active]="activeCategory === 'audio'"
-        (click)="setCategory('audio')"
-      >
-        Audio
+      <button type="button" class="settings-nav-item" [class.active]="activeCategory === 'audio'" (click)="setCategory('audio')">
+        {{ lang.t().audio }}
       </button>
-      <button
-        type="button"
-        class="settings-nav-item"
-        [class.active]="activeCategory === 'graphics'"
-        (click)="setCategory('graphics')"
-      >
-        Graphics
+      <button type="button" class="settings-nav-item" [class.active]="activeCategory === 'graphics'" (click)="setCategory('graphics')">
+        {{ lang.t().graphics }}
+      </button>
+      <button type="button" class="settings-nav-item" [class.active]="activeCategory === 'language'" (click)="setCategory('language')">
+        {{ lang.t().language }}
       </button>
       @if (showDisplayCategory) {
-        <button
-          type="button"
-          class="settings-nav-item"
-          [class.active]="activeCategory === 'display'"
-          (click)="setCategory('display')"
-        >
-          Display
+        <button type="button" class="settings-nav-item" [class.active]="activeCategory === 'display'" (click)="setCategory('display')">
+          {{ lang.t().display }}
         </button>
       }
     </nav>
+
     <div class="settings-content">
       @switch (activeCategory) {
+
         @case ('audio') {
           <section class="settings-panel">
-            <div class="settings-panel-title">Audio</div>
+            <div class="settings-panel-title">{{ lang.t().audio }}</div>
             <div class="settings-row">
-              <label class="settings-label">Music</label>
+              <label class="settings-label">{{ lang.t().music }}</label>
               <div class="settings-slider-wrap">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  [value]="sound.getMusicVolume() * 100"
-                  (input)="setMusicVolume($any($event.target).value)"
-                  class="settings-range"
-                />
+                <input type="range" min="0" max="100" [value]="sound.getMusicVolume() * 100"
+                  (input)="setMusicVolume($any($event.target).value)" class="settings-range" />
                 <span class="settings-value">{{ musicVolumePercent }}%</span>
               </div>
             </div>
             <div class="settings-row">
-              <label class="settings-label">Effects</label>
+              <label class="settings-label">{{ lang.t().effects }}</label>
               <div class="settings-slider-wrap">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  [value]="sound.getEffectsVolume() * 100"
-                  (input)="setEffectsVolume($any($event.target).value)"
-                  class="settings-range"
-                />
+                <input type="range" min="0" max="100" [value]="sound.getEffectsVolume() * 100"
+                  (input)="setEffectsVolume($any($event.target).value)" class="settings-range" />
                 <span class="settings-value">{{ effectsVolumePercent }}%</span>
               </div>
             </div>
-            <div class="settings-row settings-row-checkbox">
-              <label class="settings-checkbox-label">
-                <input
-                  type="checkbox"
-                  [checked]="sound.isMuted()"
-                  (change)="setMuted($any($event.target).checked)"
-                  class="settings-checkbox"
-                />
-                Mute all
+            <div class="toggle-list">
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().muteAll }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="sound.isMuted()" (change)="setMuted($any($event.target).checked)" />
+                  <span class="toggle-thumb"></span>
+                </span>
               </label>
-            </div>
-            <div class="settings-row settings-row-checkbox">
-              <label class="settings-checkbox-label">
-                <input
-                  type="checkbox"
-                  [checked]="sound.isClickSoundEnabled()"
-                  (change)="setClickSound($any($event.target).checked)"
-                  class="settings-checkbox"
-                />
-                Click sound
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().clickSound }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="sound.isClickSoundEnabled()" (change)="setClickSound($any($event.target).checked)" />
+                  <span class="toggle-thumb"></span>
+                </span>
               </label>
             </div>
           </section>
         }
+
         @case ('graphics') {
+          <section class="settings-panel gfx-panel">
+
+            <!-- ── Rendering ── -->
+            <div class="gfx-section-label">Rendering</div>
+
+            <div class="gfx-row">
+              <span class="gfx-row-label">{{ lang.t().vfxIntensity }}</span>
+              <div class="seg-ctrl">
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.vfxIntensity() === 'full'"
+                  (click)="gameSettings.setVfxIntensity('full'); cdr.markForCheck()">{{ lang.t().full }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.vfxIntensity() === 'reduced'"
+                  (click)="gameSettings.setVfxIntensity('reduced'); cdr.markForCheck()">{{ lang.t().reduced }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.vfxIntensity() === 'off'"
+                  (click)="gameSettings.setVfxIntensity('off'); cdr.markForCheck()">{{ lang.t().off }}</button>
+              </div>
+            </div>
+
+            <div class="gfx-row">
+              <span class="gfx-row-label">{{ lang.t().animationSpeed }}</span>
+              <div class="seg-ctrl">
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.animationSpeed() === 'slow'"
+                  (click)="gameSettings.setAnimationSpeed('slow'); cdr.markForCheck()">{{ lang.t().slow }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.animationSpeed() === 'normal'"
+                  (click)="gameSettings.setAnimationSpeed('normal'); cdr.markForCheck()">{{ lang.t().normal }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.animationSpeed() === 'fast'"
+                  (click)="gameSettings.setAnimationSpeed('fast'); cdr.markForCheck()">{{ lang.t().fast }}</button>
+              </div>
+            </div>
+
+            <!-- ── Display ── -->
+            <div class="gfx-section-label" style="margin-top:1.1rem">Display</div>
+
+            <div class="gfx-row">
+              <span class="gfx-row-label">{{ lang.t().textSize }}</span>
+              <div class="seg-ctrl">
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.textSize() === 'small'"
+                  (click)="gameSettings.setTextSize('small'); cdr.markForCheck()">{{ lang.t().small }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.textSize() === 'normal'"
+                  (click)="gameSettings.setTextSize('normal'); cdr.markForCheck()">{{ lang.t().normal }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.textSize() === 'large'"
+                  (click)="gameSettings.setTextSize('large'); cdr.markForCheck()">{{ lang.t().large }}</button>
+              </div>
+            </div>
+
+            <div class="gfx-row">
+              <span class="gfx-row-label">{{ lang.t().handLayout }}</span>
+              <div class="seg-ctrl">
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.handLayout() === 'default'"
+                  (click)="gameSettings.setHandLayout('default'); cdr.markForCheck()">{{ lang.t().default }}</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="gameSettings.handLayout() === 'compact'"
+                  (click)="gameSettings.setHandLayout('compact'); cdr.markForCheck()">{{ lang.t().compact }}</button>
+              </div>
+            </div>
+
+            <!-- ── Accessibility ── -->
+            <div class="gfx-section-label" style="margin-top:1.1rem">Accessibility</div>
+
+            <div class="toggle-list">
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().reducedMotion }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="gameSettings.reducedMotion()"
+                    (change)="gameSettings.setReducedMotion($any($event.target).checked); cdr.markForCheck()" />
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().highContrast }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="gameSettings.highContrast()"
+                    (change)="gameSettings.setHighContrast($any($event.target).checked); cdr.markForCheck()" />
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+            </div>
+
+            <!-- ── Developer ── -->
+            <div class="gfx-section-label" style="margin-top:1.1rem">Developer</div>
+
+            <div class="toggle-list">
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().postProcessing }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="gameSettings.postFx() === 'on'"
+                    (change)="gameSettings.setPostFx($any($event.target).checked ? 'on' : 'off'); cdr.markForCheck()" />
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().fpsCounter }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="gameSettings.showFps()"
+                    (change)="gameSettings.setShowFps($any($event.target).checked); cdr.markForCheck()" />
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-label">{{ lang.t().debugLayout }}</span>
+                <span class="toggle-switch">
+                  <input type="checkbox" class="toggle-input" [checked]="gameSettings.debugLayout()"
+                    (change)="gameSettings.setDebugLayout($any($event.target).checked); cdr.markForCheck()" />
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+            </div>
+
+            <!-- ── Combat hotkeys reference ── -->
+            <div class="gfx-section-label" style="margin-top:1.1rem">{{ lang.t().combatHotkeys }}</div>
+            <div class="hotkeys-box">
+              <div class="hotkey-row"><kbd>Space</kbd><span>End turn</span></div>
+              <div class="hotkey-row"><kbd>1 – 9</kbd><span>Hover / quick-play card</span></div>
+              <div class="hotkey-row"><kbd>D</kbd><span>Draw pile · <kbd>C</kbd> Discard · <kbd>X</kbd> Exhaust</span></div>
+              <div class="hotkey-row"><kbd>T</kbd><span>Talents · <kbd>P</kbd> Pause · <kbd>Esc</kbd> Cancel</span></div>
+            </div>
+
+          </section>
+        }
+
+        @case ('language') {
           <section class="settings-panel">
-            <div class="settings-panel-title">Graphics</div>
-            <div class="settings-row">
-              <label class="settings-label">VFX intensity</label>
-              <div class="settings-options">
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.vfxIntensity() === 'full'"
-                  (click)="gameSettings.setVfxIntensity('full'); cdr.markForCheck()"
-                >
-                  Full
+            <div class="settings-panel-title">{{ lang.t().selectLanguage }}</div>
+            <div class="lang-grid">
+              @for (l of languages; track l.code) {
+                <button type="button" class="lang-btn" [class.lang-btn--active]="lang.currentLang() === l.code"
+                  (click)="selectLanguage(l.code)">
+                  <span class="lang-flag">{{ l.flag }}</span>
+                  <span class="lang-native">{{ l.nativeLabel }}</span>
+                  <span class="lang-en">{{ l.label }}</span>
+                  @if (lang.currentLang() === l.code) {
+                    <span class="lang-check">✔</span>
+                  }
                 </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.vfxIntensity() === 'reduced'"
-                  (click)="gameSettings.setVfxIntensity('reduced'); cdr.markForCheck()"
-                >
-                  Reduced
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.vfxIntensity() === 'off'"
-                  (click)="gameSettings.setVfxIntensity('off'); cdr.markForCheck()"
-                >
-                  Off
-                </button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <label class="settings-label">Animation speed</label>
-              <div class="settings-options">
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.animationSpeed() === 'slow'"
-                  (click)="gameSettings.setAnimationSpeed('slow'); cdr.markForCheck()"
-                >
-                  Slow
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.animationSpeed() === 'normal'"
-                  (click)="gameSettings.setAnimationSpeed('normal'); cdr.markForCheck()"
-                >
-                  Normal
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.animationSpeed() === 'fast'"
-                  (click)="gameSettings.setAnimationSpeed('fast'); cdr.markForCheck()"
-                >
-                  Fast
-                </button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <label class="settings-label">Text size</label>
-              <div class="settings-options">
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.textSize() === 'small'"
-                  (click)="gameSettings.setTextSize('small'); cdr.markForCheck()"
-                >
-                  Small
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.textSize() === 'normal'"
-                  (click)="gameSettings.setTextSize('normal'); cdr.markForCheck()"
-                >
-                  Normal
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.textSize() === 'large'"
-                  (click)="gameSettings.setTextSize('large'); cdr.markForCheck()"
-                >
-                  Large
-                </button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <label class="settings-label">Hand layout</label>
-              <div class="settings-options">
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.handLayout() === 'default'"
-                  (click)="gameSettings.setHandLayout('default'); cdr.markForCheck()"
-                >
-                  Default
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="gameSettings.handLayout() === 'compact'"
-                  (click)="gameSettings.setHandLayout('compact'); cdr.markForCheck()"
-                >
-                  Compact
-                </button>
-              </div>
-            </div>
-            <div class="settings-row settings-row-checkbox">
-              <label class="settings-checkbox-label">
-                <input
-                  type="checkbox"
-                  [checked]="gameSettings.reducedMotion()"
-                  (change)="gameSettings.setReducedMotion($any($event.target).checked); cdr.markForCheck()"
-                  class="settings-checkbox"
-                />
-                Reduced motion
-              </label>
-            </div>
-            <div class="settings-row settings-row-checkbox">
-              <label class="settings-checkbox-label">
-                <input
-                  type="checkbox"
-                  [checked]="gameSettings.highContrast()"
-                  (change)="gameSettings.setHighContrast($any($event.target).checked); cdr.markForCheck()"
-                  class="settings-checkbox"
-                />
-                High contrast mode
-              </label>
-            </div>
-            <div class="settings-row settings-row-checkbox">
-              <label class="settings-checkbox-label">
-                <input
-                  type="checkbox"
-                  [checked]="gameSettings.postFx() === 'on'"
-                  (change)="gameSettings.setPostFx($any($event.target).checked ? 'on' : 'off'); cdr.markForCheck()"
-                  class="settings-checkbox"
-                />
-                Post-processing
-              </label>
-            </div>
-            <div class="settings-row settings-row-checkbox">
-              <label class="settings-checkbox-label">
-                <input
-                  type="checkbox"
-                  [checked]="gameSettings.debugLayout()"
-                  (change)="gameSettings.setDebugLayout($any($event.target).checked); cdr.markForCheck()"
-                  class="settings-checkbox"
-                />
-                Debug layout overlay (F3)
-              </label>
-            </div>
-            <div class="settings-row">
-              <label class="settings-label">Combat hotkeys</label>
-              <div class="settings-options">
-                <button type="button" class="settings-opt-btn" disabled>Space: End turn</button>
-                <button type="button" class="settings-opt-btn" disabled>1-9: Hover/quick play non-target cards</button>
-                <button type="button" class="settings-opt-btn" disabled>D/C/X: Draw/Discard/Exhaust piles</button>
-                <button type="button" class="settings-opt-btn" disabled>T: Talents · P: Pause · Esc: Cancel</button>
-              </div>
+              }
             </div>
           </section>
         }
+
         @case ('display') {
           <section class="settings-panel">
-            <div class="settings-panel-title">Display</div>
-            <div class="settings-row">
-              <label class="settings-label">Mode</label>
-              <div class="settings-options">
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="fullscreen"
-                  (click)="setFullScreen(true)"
-                >
-                  Fullscreen
-                </button>
-                <button
-                  type="button"
-                  class="settings-opt-btn"
-                  [class.active]="!fullscreen"
-                  (click)="setFullScreen(false)"
-                >
-                  Windowed
-                </button>
+            <div class="settings-panel-title">{{ lang.t().display }}</div>
+            <div class="gfx-row">
+              <span class="gfx-row-label">Mode</span>
+              <div class="seg-ctrl">
+                <button type="button" class="seg-btn" [class.seg-btn--on]="fullscreen" (click)="setFullScreen(true)">Fullscreen</button>
+                <button type="button" class="seg-btn" [class.seg-btn--on]="!fullscreen" (click)="setFullScreen(false)">Windowed</button>
               </div>
             </div>
-            <div class="settings-row">
+            <div class="settings-row" style="margin-top:1rem">
               <label class="settings-label">Resolution</label>
               <div class="settings-options settings-options-wrap">
-                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(2560, 1440)" (click)="setResolution(2560, 1440)">2560 × 1440</button>
-                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1920, 1080)" (click)="setResolution(1920, 1080)">1920 × 1080</button>
-                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1600, 900)" (click)="setResolution(1600, 900)">1600 × 900</button>
-                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1280, 720)" (click)="setResolution(1280, 720)">1280 × 720</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(2560,1440)" (click)="setResolution(2560,1440)">2560 × 1440</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1920,1080)" (click)="setResolution(1920,1080)">1920 × 1080</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1600,900)"  (click)="setResolution(1600,900)">1600 × 900</button>
+                <button type="button" class="settings-opt-btn" [class.active]="isResolutionActive(1280,720)"  (click)="setResolution(1280,720)">1280 × 720</button>
               </div>
             </div>
           </section>
         }
+
       }
     </div>
   </div>

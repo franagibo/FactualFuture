@@ -17,6 +17,7 @@ export interface GameSettings {
   postFx: PostFxMode;
   debugLayout: boolean;
   highContrast: boolean;
+  showFps: boolean;
 }
 
 const DEFAULTS: GameSettings = {
@@ -28,6 +29,7 @@ const DEFAULTS: GameSettings = {
   postFx: 'on',
   debugLayout: false,
   highContrast: false,
+  showFps: false,
 };
 
 /** Multiplier for animation duration (card fly, etc.): higher = faster. */
@@ -60,6 +62,7 @@ export class GameSettingsService {
   postFx = computed(() => this.stored().postFx);
   debugLayout = computed(() => this.stored().debugLayout);
   highContrast = computed(() => this.stored().highContrast);
+  showFps = computed(() => this.stored().showFps);
   animationSpeedMultiplier = computed(() => animationSpeedMultiplier(this.stored().animationSpeed));
   textScale = computed(() => textSizeScale(this.stored().textSize));
 
@@ -95,6 +98,10 @@ export class GameSettingsService {
     this.update({ highContrast: value });
   }
 
+  setShowFps(value: boolean): void {
+    this.update({ showFps: value });
+  }
+
   getSettings(): GameSettings {
     return this.stored();
   }
@@ -114,6 +121,7 @@ export class GameSettingsService {
         postFx: parsed.postFx === 'off' ? 'off' : 'on',
         debugLayout: Boolean(parsed.debugLayout),
         highContrast: Boolean(parsed.highContrast),
+        showFps: Boolean(parsed.showFps),
       };
     } catch {
       return { ...DEFAULTS };

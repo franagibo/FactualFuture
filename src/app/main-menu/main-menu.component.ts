@@ -1,10 +1,15 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy, HostListener, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import {
+  Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy,
+  HostListener, ElementRef, ViewChild, AfterViewInit, inject
+} from '@angular/core';
 import { Router } from '@angular/router';
 import type { MetaState } from '../../engine/types';
 import { GameBridgeService } from '../services/game-bridge.service';
 import { SoundService } from '../services/sound.service';
 import { SettingsModalComponent } from '../settings-modal/settings-modal.component';
 import { AssetManifestService } from '../services/asset-manifest.service';
+import { LanguageService } from '../services/language.service';
+import { ConfirmDialogComponent } from '../components/confirm-dialog.component';
 
 interface EmberParticle {
   x: number; y: number;
@@ -13,30 +18,48 @@ interface EmberParticle {
   color: string;
 }
 
+const LOADING_TIPS = [
+  'Block early — taking less damage across fights wins the run.',
+  'Read every relic carefully. Some combos change your entire strategy.',
+  'The map has multiple paths. Longer routes often yield more rewards.',
+  'Exhaust cards permanently remove them from your deck for that run.',
+  'Shop early. Removing weak cards from your deck is often better than adding new ones.',
+  'Elites are hard, but their relics can be run-defining.',
+  'Save your gold — running out mid-sector is dangerous.',
+  'Strength buffs multiply with attacks that hit multiple times.',
+  'High-cost cards are not always better. Efficiency per energy matters.',
+  'Rest sites can also upgrade cards — sometimes that\'s worth more than healing.',
+];
+
 @Component({
   selector: 'app-main-menu',
   standalone: true,
-  imports: [SettingsModalComponent],
+  imports: [SettingsModalComponent, ConfirmDialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="menu-wrap" [class.bg-ready]="backgroundReady">
       <canvas #emberCanvas class="ember-canvas" aria-hidden="true"></canvas>
+
       @if (!backgroundReady) {
         <div class="menu-loading-overlay" aria-busy="true">
           <span class="menu-loading-spinner"></span>
           <span class="menu-loading-label">
-            Loading… @if (assetProgress.total > 0) { {{ assetProgress.loaded }}/{{ assetProgress.total }} }
+            {{ lang.t().loadingLabel }}
+            @if (assetProgress.total > 0) { {{ assetProgress.loaded }}/{{ assetProgress.total }} }
           </span>
+          <span class="menu-loading-tip">{{ currentTip }}</span>
         </div>
       }
+
       <div class="menu-panel">
-      <div class="menu-logo-area">
+        <div class="menu-logo-area">
           <h1 class="menu-title">Slay the Spire Like</h1>
           <p class="menu-tagline">A deck-builder roguelike</p>
         </div>
+
         @if (meta) {
           <div class="unlocks-section">
-            <div class="unlocks-label">Unlocks</div>
+            <div class="unlocks-label">{{ lang.t().unlocks }}</div>
             @if (meta.unlockedCards.length > 0 || meta.unlockedRelics.length > 0) {
               <div class="unlocks-list">
                 @for (id of meta.unlockedCards; track id) {
@@ -47,47 +70,132 @@ interface EmberParticle {
                 }
               </div>
             } @else {
-              <div class="unlocks-hint">Reach sector 2 or win a run to unlock more content.</div>
+              <div class="unlocks-hint">{{ lang.t().unlockHint }}</div>
             }
           </div>
         }
+
         @if (showDataLoadError) {
           <div class="menu-data-error">
-            <p>Data failed to load. Check the console for details.</p>
+            <p>{{ lang.t().dataError }}</p>
             <button type="button" class="menu-btn" (click)="onRetryDataLoad()">
-              <span class="menu-btn-inner">Retry</span>
+              <span class="menu-btn-inner">{{ lang.t().retry }}</span>
             </button>
           </div>
         }
+
         <div class="menu-actions">
           @if (showContinue) {
             <button type="button" class="menu-btn menu-btn-primary" (click)="onContinue()">
-            <span class="menu-btn-icon">▶</span>
-              <span class="menu-btn-inner">Continue</span>
+              <span class="menu-btn-icon">▶</span>
+              <span class="menu-btn-inner">{{ lang.t().continueGame }}</span>
             </button>
           }
           <button type="button" class="menu-btn menu-btn-primary" (click)="onPlay()">
-          <span class="menu-btn-icon">⚔</span>
-            <span class="menu-btn-inner">New Game</span>
+            <span class="menu-btn-icon">⚔</span>
+            <span class="menu-btn-inner">{{ lang.t().newGame }}</span>
+          </button>
+          <button type="button" class="menu-btn" (click)="onHowToPlay()">
+            <span class="menu-btn-icon">?</span>
+            <span class="menu-btn-inner">{{ lang.t().howToPlay }}</span>
           </button>
           <button type="button" class="menu-btn" (click)="onSettings()">
-          <span class="menu-btn-icon">⚙</span>
-            <span class="menu-btn-inner">Settings</span>
+            <span class="menu-btn-icon">⚙</span>
+            <span class="menu-btn-inner">{{ lang.t().settings }}</span>
+          </button>
+          <button type="button" class="menu-btn menu-btn-dim" (click)="onCredits()">
+            <span class="menu-btn-icon">★</span>
+            <span class="menu-btn-inner">{{ lang.t().credits }}</span>
           </button>
           @if (isElectron()) {
             <button type="button" class="menu-btn menu-btn-danger" (click)="onQuit()">
-            <span class="menu-btn-icon">✕</span>
-              <span class="menu-btn-inner">Quit</span>
+              <span class="menu-btn-icon">✕</span>
+              <span class="menu-btn-inner">{{ lang.t().quit }}</span>
             </button>
           }
         </div>
-        
+
         <div class="menu-footer">
           <span class="menu-version">v0.1.0</span>
         </div>
       </div>
+
       @if (showSettings) {
-        <app-settings-modal closeButtonLabel="Close" (close)="closeSettings()" />
+        <app-settings-modal [closeButtonLabel]="lang.t().close" (close)="closeSettings()" />
+      }
+
+      @if (showConfirm) {
+        <app-confirm-dialog
+          [title]="lang.t().confirmNewGame"
+          [body]="lang.t().confirmNewGameBody"
+          [labelConfirm]="lang.t().confirmYes"
+          [labelCancel]="lang.t().confirmNo"
+          (confirm)="onConfirmNewGame()"
+          (cancel)="onCancelNewGame()"
+        />
+      }
+
+      @if (showHowToPlay) {
+        <div class="htp-backdrop" (click)="closeHowToPlay()"></div>
+        <div class="htp-modal" (click)="$event.stopPropagation()">
+          <h2 class="htp-title">{{ lang.t().howToPlayTitle }}</h2>
+          <div class="htp-grid">
+            <div class="htp-card">
+              <div class="htp-card-icon">🃏</div>
+              <div class="htp-card-title">{{ lang.t().htp1Title }}</div>
+              <div class="htp-card-body">{{ lang.t().htp1Body }}</div>
+            </div>
+            <div class="htp-card">
+              <div class="htp-card-icon">⚡</div>
+              <div class="htp-card-title">{{ lang.t().htp2Title }}</div>
+              <div class="htp-card-body">{{ lang.t().htp2Body }}</div>
+            </div>
+            <div class="htp-card">
+              <div class="htp-card-icon">👁</div>
+              <div class="htp-card-title">{{ lang.t().htp3Title }}</div>
+              <div class="htp-card-body">{{ lang.t().htp3Body }}</div>
+            </div>
+            <div class="htp-card">
+              <div class="htp-card-icon">🗺</div>
+              <div class="htp-card-title">{{ lang.t().htp4Title }}</div>
+              <div class="htp-card-body">{{ lang.t().htp4Body }}</div>
+            </div>
+            <div class="htp-card">
+              <div class="htp-card-icon">💎</div>
+              <div class="htp-card-title">{{ lang.t().htp5Title }}</div>
+              <div class="htp-card-body">{{ lang.t().htp5Body }}</div>
+            </div>
+            <div class="htp-card">
+              <div class="htp-card-icon">🏆</div>
+              <div class="htp-card-title">{{ lang.t().htp6Title }}</div>
+              <div class="htp-card-body">{{ lang.t().htp6Body }}</div>
+            </div>
+          </div>
+          <button type="button" class="htp-close-btn" (click)="closeHowToPlay()">{{ lang.t().close }}</button>
+        </div>
+      }
+
+      @if (showCredits) {
+        <div class="credits-backdrop" (click)="closeCredits()"></div>
+        <div class="credits-modal" (click)="$event.stopPropagation()">
+          <h2 class="credits-title">{{ lang.t().creditsTitle }}</h2>
+          <div class="credits-list">
+            <div class="credits-row">
+              <span class="credits-role">{{ lang.t().creditsDev }}</span>
+              <span class="credits-name">The Development Team</span>
+            </div>
+            <div class="credits-row">
+              <span class="credits-role">{{ lang.t().creditsArt }}</span>
+              <span class="credits-name">Concept & Visual Artists</span>
+            </div>
+            <div class="credits-row">
+              <span class="credits-role">{{ lang.t().creditsMusic }}</span>
+              <span class="credits-name">Audio Production Team</span>
+            </div>
+          </div>
+          <div class="credits-engine">{{ lang.t().creditsEngine }}</div>
+          <button type="button" class="htp-close-btn" (click)="closeCredits()">{{ lang.t().creditsClose }}</button>
+        </div>
       }
     </div>
   `,
@@ -113,7 +221,6 @@ interface EmberParticle {
       background-image: url('/assets/main-menu.jpg');
     }
 
-    /* ember particle canvas */
     .ember-canvas {
       position: absolute;
       inset: 0;
@@ -123,7 +230,6 @@ interface EmberParticle {
       z-index: 0;
     }
 
-    /* vignette overlay */
     .menu-wrap::after {
       content: '';
       position: absolute;
@@ -163,6 +269,23 @@ interface EmberParticle {
       letter-spacing: 0.06em;
     }
 
+    .menu-loading-tip {
+      font-family: 'Exo 2', system-ui, sans-serif;
+      font-size: 0.8rem;
+      color: #4a3a18;
+      font-style: italic;
+      text-align: center;
+      max-width: 340px;
+      padding: 0 1rem;
+      line-height: 1.5;
+      animation: tipFadeIn 0.6s ease-out both;
+    }
+
+    @keyframes tipFadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
     /* ── panel ── */
     .menu-panel {
       position: relative;
@@ -174,7 +297,7 @@ interface EmberParticle {
       border-radius: 20px;
       padding: 2.8rem 3.2rem 2rem;
       box-shadow:
-      0 0 0 1px rgba(100, 74, 12, 0.18) inset,
+        0 0 0 1px rgba(100, 74, 12, 0.18) inset,
         0 0 60px rgba(80, 55, 10, 0.45),
         0 10px 40px rgba(0, 0, 0, 0.75),
         inset 0 1px 0 rgba(255, 240, 180, 0.06);
@@ -182,7 +305,6 @@ interface EmberParticle {
       min-width: 300px;
     }
 
-    /* top accent stripe */
     .menu-panel::before {
       content: '';
       position: absolute;
@@ -211,7 +333,7 @@ interface EmberParticle {
       color: #f4d98a;
       letter-spacing: 0.06em;
       text-shadow:
-      0 0 28px rgba(200, 158, 42, 0.7),
+        0 0 28px rgba(200, 158, 42, 0.7),
         0 0 56px rgba(160, 112, 20, 0.35),
         0 3px 6px rgba(0, 0, 0, 0.9);
       animation: titleGlow 3.5s ease-in-out infinite;
@@ -219,8 +341,8 @@ interface EmberParticle {
 
     @keyframes titleGlow {
       0%, 100% { text-shadow: 0 0 28px rgba(200,158,42,0.7), 0 0 56px rgba(160,112,20,0.35), 0 3px 6px rgba(0,0,0,0.9); }
-      50%        { text-shadow: 0 0 40px rgba(230,180,55,0.9), 0 0 80px rgba(190,138,28,0.5), 0 3px 6px rgba(0,0,0,0.9); }
-     }
+      50%       { text-shadow: 0 0 40px rgba(230,180,55,0.9), 0 0 80px rgba(190,138,28,0.5), 0 3px 6px rgba(0,0,0,0.9); }
+    }
 
     .menu-tagline {
       font-family: 'Exo 2', system-ui, sans-serif;
@@ -307,6 +429,7 @@ interface EmberParticle {
     .menu-actions .menu-btn:nth-child(3) { animation: btnIn 0.45s 0.28s ease-out both; }
     .menu-actions .menu-btn:nth-child(4) { animation: btnIn 0.45s 0.36s ease-out both; }
     .menu-actions .menu-btn:nth-child(5) { animation: btnIn 0.45s 0.44s ease-out both; }
+    .menu-actions .menu-btn:nth-child(6) { animation: btnIn 0.45s 0.52s ease-out both; }
 
     @keyframes btnIn {
       from { opacity: 0; transform: translateY(14px); }
@@ -329,10 +452,9 @@ interface EmberParticle {
       border-radius: 12px;
       background: linear-gradient(160deg, #2c2210 0%, #1a1408 100%);
       box-shadow:
-      0 5px 0 #0e0a04,
+        0 5px 0 #0e0a04,
         0 6px 18px rgba(0, 0, 0, 0.55),
         inset 0 1px 0 rgba(255, 240, 160, 0.08);
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
       transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
       overflow: hidden;
@@ -344,7 +466,7 @@ interface EmberParticle {
         border-radius: 12px;
         padding: 1px;
         background: linear-gradient(170deg, rgba(255,240,160,0.15) 0%, rgba(255,220,80,0.04) 50%, transparent 100%);
-                -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         -webkit-mask-composite: xor;
         mask-composite: exclude;
@@ -355,7 +477,7 @@ interface EmberParticle {
     .menu-btn:hover {
       transform: translateY(-3px) scale(1.02);
       box-shadow:
-      0 8px 0 #0e0a04,
+        0 8px 0 #0e0a04,
         0 12px 28px rgba(0, 0, 0, 0.6),
         0 0 22px rgba(180, 136, 30, 0.4),
         inset 0 1px 0 rgba(255, 240, 160, 0.14);
@@ -366,25 +488,30 @@ interface EmberParticle {
     .menu-btn:active {
       transform: translateY(2px) scale(0.99);
       box-shadow: 0 2px 0 #0e0a04, 0 2px 8px rgba(0,0,0,0.5);
-        }
+    }
 
     .menu-btn-primary {
       background: linear-gradient(160deg, #5a3e10 0%, #3c2808 45%, #2a1c04 100%);
       border-color: rgba(180, 136, 36, 0.6);
       color: #f4d98a;
       box-shadow:
-      0 5px 0 #180f02,
+        0 5px 0 #180f02,
         0 6px 22px rgba(0, 0, 0, 0.55),
         0 0 18px rgba(160, 112, 20, 0.22),
         inset 0 1px 0 rgba(255, 240, 160, 0.16);
       &:hover {
         box-shadow:
-        0 8px 0 #180f02,
+          0 8px 0 #180f02,
           0 12px 30px rgba(0, 0, 0, 0.6),
           0 0 36px rgba(200, 155, 40, 0.55),
           inset 0 1px 0 rgba(255, 240, 160, 0.22);
         border-color: rgba(220, 168, 50, 0.8);
       }
+    }
+
+    .menu-btn-dim {
+      opacity: 0.7;
+      &:hover { opacity: 1; }
     }
 
     .menu-btn-danger {
@@ -394,7 +521,8 @@ interface EmberParticle {
       box-shadow: 0 5px 0 #281010, 0 6px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,200,200,0.08);
       &:hover {
         box-shadow: 0 8px 0 #281010, 0 12px 28px rgba(0,0,0,0.55), 0 0 22px rgba(200, 60, 60, 0.35);
-        border-color: rgba(220, 80, 80, 0.6);      }
+        border-color: rgba(220, 80, 80, 0.6);
+      }
     }
 
     .menu-btn-icon {
@@ -419,21 +547,200 @@ interface EmberParticle {
       color: #3a2e12;
       letter-spacing: 0.1em;
     }
+
+    /* ── How to Play modal ── */
+    .htp-backdrop, .credits-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 1500;
+    }
+
+    .htp-modal, .credits-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1501;
+      width: 92vw;
+      max-width: 720px;
+      max-height: 88vh;
+      overflow-y: auto;
+      background: rgba(10, 8, 3, 0.98);
+      border: 1px solid rgba(158, 118, 34, 0.55);
+      border-radius: 20px;
+      padding: 2.2rem 2.4rem 2rem;
+      box-shadow: 0 0 80px rgba(80,55,10,0.5), 0 20px 60px rgba(0,0,0,0.85);
+      animation: modalIn 0.32s cubic-bezier(0.34,1.2,0.64,1) both;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 10%; right: 10%;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(200,158,42,0.9), transparent);
+        border-radius: 20px 20px 0 0;
+      }
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: translate(-50%, -50%) scale(0.9) translateY(16px); }
+      to   { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(0); }
+    }
+
+    .htp-title, .credits-title {
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #f4d98a;
+      text-align: center;
+      letter-spacing: 0.08em;
+      margin-bottom: 1.75rem;
+      text-shadow: 0 0 24px rgba(200,158,42,0.6), 0 2px 4px rgba(0,0,0,0.9);
+    }
+
+    .htp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 1.75rem;
+    }
+
+    .htp-card {
+      background: rgba(20,15,4,0.85);
+      border: 1px solid rgba(158,118,34,0.28);
+      border-radius: 14px;
+      padding: 1.1rem 1.2rem;
+      transition: transform 0.18s ease, box-shadow 0.2s ease;
+      &:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(80,55,10,0.4), 0 0 16px rgba(180,136,30,0.2);
+        border-color: rgba(200,158,42,0.45);
+      }
+    }
+
+    .htp-card-icon {
+      font-size: 1.8rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .htp-card-title {
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #f4d98a;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.04em;
+    }
+
+    .htp-card-body {
+      font-family: 'Exo 2', system-ui, sans-serif;
+      font-size: 0.8rem;
+      color: #8a7040;
+      line-height: 1.5;
+    }
+
+    .htp-close-btn {
+      display: block;
+      margin: 0 auto;
+      padding: 12px 36px;
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #e8d8a0;
+      border: 1px solid rgba(158,118,34,0.5);
+      border-radius: 12px;
+      background: linear-gradient(160deg, #2c2210 0%, #1a1408 100%);
+      cursor: pointer;
+      box-shadow: 0 4px 0 #0e0a04, 0 5px 16px rgba(0,0,0,0.4);
+      transition: transform 0.15s, filter 0.15s, box-shadow 0.18s;
+      &:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.12);
+        border-color: rgba(210,160,50,0.65);
+        box-shadow: 0 6px 0 #0e0a04, 0 8px 22px rgba(0,0,0,0.5), 0 0 18px rgba(180,136,30,0.35);
+      }
+      &:active { transform: translateY(0); }
+    }
+
+    /* ── Credits modal ── */
+    .credits-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 1.5rem;
+    }
+
+    .credits-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 14px 18px;
+      background: rgba(20,15,4,0.85);
+      border: 1px solid rgba(158,118,34,0.2);
+      border-radius: 12px;
+      animation: creditsRowIn 0.4s ease-out both;
+    }
+
+    .credits-row:nth-child(1) { animation-delay: 0.05s; }
+    .credits-row:nth-child(2) { animation-delay: 0.12s; }
+    .credits-row:nth-child(3) { animation-delay: 0.19s; }
+
+    @keyframes creditsRowIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .credits-role {
+      font-family: 'Exo 2', system-ui, sans-serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #6a5428;
+    }
+
+    .credits-name {
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #f4d98a;
+      letter-spacing: 0.04em;
+    }
+
+    .credits-engine {
+      text-align: center;
+      font-family: 'Exo 2', system-ui, sans-serif;
+      font-size: 0.78rem;
+      color: #4a3818;
+      margin-bottom: 1.5rem;
+      font-style: italic;
+    }
   `],
 })
 export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('emberCanvas') emberCanvasRef!: ElementRef<HTMLCanvasElement>;
 
   public showSettings = false;
+  showConfirm = false;
+  showHowToPlay = false;
+  showCredits = false;
   showContinue = false;
   meta: MetaState | null = null;
   backgroundReady = false;
   assetProgress = { loaded: 0, total: 0, label: '' };
+  currentTip = '';
+
+  readonly lang = inject(LanguageService);
 
   private emberParticles: EmberParticle[] = [];
   private emberAnimId: number | null = null;
   private emberResizeHandler: (() => void) | null = null;
   private emberCtx: CanvasRenderingContext2D | null = null;
+  private tipInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private router: Router,
@@ -452,9 +759,15 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy(): void {
     if (this.emberAnimId != null) cancelAnimationFrame(this.emberAnimId);
     if (this.emberResizeHandler) window.removeEventListener('resize', this.emberResizeHandler);
+    if (this.tipInterval) clearInterval(this.tipInterval);
     this.emberAnimId = null;
     this.emberCtx = null;
     this.emberParticles = [];
+  }
+
+  private pickTip(): void {
+    this.currentTip = LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)];
+    this.cdr.markForCheck();
   }
 
   private makeEmber(canvas: HTMLCanvasElement, fromBottom = false): EmberParticle {
@@ -518,7 +831,9 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async ngOnInit(): Promise<void> {
     this.sound.startMainMenuSoundtrack();
-    // Boot preload: small UI set so the first combat/map feels instant.
+    this.pickTip();
+    this.tipInterval = setInterval(() => this.pickTip(), 4000);
+
     void this.assets.loadGroup('boot', [
       '/assets/UI/header/header-1440p.png',
       '/assets/UI/footer/footer.png',
@@ -532,6 +847,7 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
       this.assetProgress = { ...this.assets.getProgress(), label: this.assets.getProgress().label ?? '' } as unknown as { loaded: number; total: number; label: string };
       this.cdr.markForCheck();
     });
+
     this.loadBackgroundImage();
     try {
       await this.bridge.ensureDataLoaded();
@@ -582,6 +898,25 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onPlay(): void {
+    if (this.showContinue) {
+      this.showConfirm = true;
+      this.cdr.markForCheck();
+    } else {
+      this.startNewGame();
+    }
+  }
+
+  onConfirmNewGame(): void {
+    this.showConfirm = false;
+    this.startNewGame();
+  }
+
+  onCancelNewGame(): void {
+    this.showConfirm = false;
+    this.cdr.markForCheck();
+  }
+
+  private startNewGame(): void {
     this.bridge.clearState();
     this.bridge.clearSavedRun();
     this.router.navigate(['/select-character']);
@@ -595,11 +930,20 @@ export class MainMenuComponent implements OnInit, OnDestroy, AfterViewInit {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.showHowToPlay) { this.closeHowToPlay(); return; }
+    if (this.showCredits) { this.closeCredits(); return; }
+    if (this.showConfirm) { this.onCancelNewGame(); return; }
     if (this.showSettings) this.closeSettings();
   }
 
   onSettings(): void { this.showSettings = true; this.cdr.markForCheck(); }
   closeSettings(): void { this.showSettings = false; this.cdr.markForCheck(); }
+
+  onHowToPlay(): void { this.showHowToPlay = true; this.cdr.markForCheck(); }
+  closeHowToPlay(): void { this.showHowToPlay = false; this.cdr.markForCheck(); }
+
+  onCredits(): void { this.showCredits = true; this.cdr.markForCheck(); }
+  closeCredits(): void { this.showCredits = false; this.cdr.markForCheck(); }
 
   onQuit(): void {
     const api = (window as unknown as { electronAPI?: { quit?: () => void } }).electronAPI;

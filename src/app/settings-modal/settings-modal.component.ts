@@ -7,11 +7,13 @@ import {
   ChangeDetectorRef,
   OnInit,
   HostListener,
+  inject,
 } from '@angular/core';
 import { SoundService } from '../services/sound.service';
 import { GameSettingsService } from '../services/game-settings.service';
+import { LanguageService, LANGUAGES, LangCode } from '../services/language.service';
 
-export type SettingsCategory = 'audio' | 'graphics' | 'display';
+export type SettingsCategory = 'audio' | 'graphics' | 'language' | 'display';
 
 @Component({
   selector: 'app-settings-modal',
@@ -30,6 +32,9 @@ export class SettingsModalComponent implements OnInit {
   fullscreen = true;
   selectedResolutionWidth = 1920;
   selectedResolutionHeight = 1080;
+
+  readonly lang = inject(LanguageService);
+  readonly languages = LANGUAGES;
 
   private _electronChecked = false;
 
@@ -126,5 +131,10 @@ export class SettingsModalComponent implements OnInit {
 
   get effectsVolumePercent(): number {
     return Math.round(this.sound.getEffectsVolume() * 100);
+  }
+
+  selectLanguage(code: LangCode): void {
+    this.lang.setLanguage(code);
+    this.cdr.markForCheck();
   }
 }
