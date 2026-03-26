@@ -106,6 +106,7 @@ export class GameBridgeService {
     highestActReached: 0,
     runStats: { combatsWon: 0, goldSpent: 0 },
   };
+  private lastSavedAtMs: number | null = null;
 
   getState(): GameState | null {
     return this.state;
@@ -364,6 +365,12 @@ export class GameBridgeService {
     } else if (typeof localStorage !== 'undefined') {
       localStorage.setItem('run-save', data);
     }
+    this.lastSavedAtMs = Date.now();
+  }
+
+  /** Timestamp of latest successful save in this session. */
+  getLastSavedAt(): number | null {
+    return this.lastSavedAtMs;
   }
 
   async loadMeta(): Promise<void> {
@@ -649,16 +656,19 @@ export class GameBridgeService {
       next = runRelics(next, 'onTurnStart', this.relicDefs);
     }
     this.setState(next);
+    this.saveRun();
   }
 
   leaveShop(): void {
     if (!this.state) return;
     this.setState(engineLeaveShop(this.state));
+    this.saveRun();
   }
 
   executeEventChoice(choiceIndex: number): void {
     if (!this.state) return;
     this.setState(engineExecuteEventChoice(this.state, choiceIndex));
+    this.saveRun();
   }
 
   getShopState(): GameState['shopState'] {
@@ -673,6 +683,7 @@ export class GameBridgeService {
     if (!this.state) return;
     const price = this.state.shopState?.cardPrices?.[cardId] ?? 0;
     this.setState(enginePurchaseCard(this.state, cardId));
+    this.saveRun();
     if (price > 0) {
       this.meta = {
         ...this.meta,
@@ -686,6 +697,7 @@ export class GameBridgeService {
     if (!this.state) return;
     const price = this.state.shopState?.relicPrices?.[relicId] ?? 0;
     this.setState(enginePurchaseRelic(this.state, relicId));
+    this.saveRun();
     if (price > 0) {
       this.meta = {
         ...this.meta,
@@ -699,6 +711,7 @@ export class GameBridgeService {
     if (!this.state || !this.mapConfig) return;
     const previousAct = this.state.act ?? 1;
     this.setState(engineAdvanceToNextAct(this.state, this.mapConfig as Record<string, ActConfig & Record<string, unknown>>));
+    this.saveRun();
     const newAct = this.state.act ?? 1;
     if (newAct === 2 && previousAct === 1 && this.meta.highestActReached < 2) {
       for (const id of UNLOCK_ON_ACT2_CARDS) {
@@ -718,16 +731,19 @@ export class GameBridgeService {
   chooseReward(cardId: string): void {
     if (!this.state) return;
     this.setState(engineChooseCardReward(this.state, cardId));
+    this.saveRun();
   }
 
   restHeal(): void {
     if (!this.state) return;
     this.setState(engineRestHeal(this.state));
+    this.saveRun();
   }
 
   restRemoveCard(cardId: string): void {
     if (!this.state) return;
     this.setState(engineRestRemoveCard(this.state, cardId));
+    this.saveRun();
   }
 
   private maybeHandleCombatWin(): void {

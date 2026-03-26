@@ -16,6 +16,11 @@
   <script>
     (function() {
       var canvas = document.getElementById('cursor-sparkle-canvas');
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduceMotion) {
+        if (canvas) canvas.style.display = 'none';
+        return;
+      }
       var ctx = canvas.getContext('2d');
       var particles = [];
       var mouseX = -999, mouseY = -999;

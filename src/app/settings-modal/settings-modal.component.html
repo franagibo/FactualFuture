@@ -216,6 +216,17 @@
               <label class="settings-checkbox-label">
                 <input
                   type="checkbox"
+                  [checked]="gameSettings.highContrast()"
+                  (change)="gameSettings.setHighContrast($any($event.target).checked); cdr.markForCheck()"
+                  class="settings-checkbox"
+                />
+                High contrast mode
+              </label>
+            </div>
+            <div class="settings-row settings-row-checkbox">
+              <label class="settings-checkbox-label">
+                <input
+                  type="checkbox"
                   [checked]="gameSettings.postFx() === 'on'"
                   (change)="gameSettings.setPostFx($any($event.target).checked ? 'on' : 'off'); cdr.markForCheck()"
                   class="settings-checkbox"
@@ -233,6 +244,15 @@
                 />
                 Debug layout overlay (F3)
               </label>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Combat hotkeys</label>
+              <div class="settings-options">
+                <button type="button" class="settings-opt-btn" disabled>Space: End turn</button>
+                <button type="button" class="settings-opt-btn" disabled>1-9: Hover/quick play non-target cards</button>
+                <button type="button" class="settings-opt-btn" disabled>D/C/X: Draw/Discard/Exhaust piles</button>
+                <button type="button" class="settings-opt-btn" disabled>T: Talents · P: Pause · Esc: Cancel</button>
+              </div>
             </div>
           </section>
         }

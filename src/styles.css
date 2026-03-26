@@ -139,3 +139,28 @@ button .btn-ripple {
 .hp-damage {
   animation: hpDamage 0.5s ease-out;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  app-root::ng-deep router-outlet + * {
+    animation: none !important;
+  }
+
+  button .btn-ripple,
+  .num-pop,
+  .gold-flash,
+  .hp-damage {
+    animation: none !important;
+  }
+
+  #cursor-sparkle-canvas {
+    display: none !important;
+  }
+}
+
+@media (forced-colors: active), (prefers-contrast: more) {
+  :root {
+    --clr-text: #fff;
+    --clr-text-dim: #f0f0f0;
+    --clr-border-hi: #ffe28a;
+  }
+}

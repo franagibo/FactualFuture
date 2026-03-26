@@ -95,6 +95,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   selectedTalentsSignal = signal<string[]>([]);
   /** Short-lived feedback message (e.g. "New card: Overdrive") shown in overlay. */
   feedbackMessage = signal<string | null>(null);
+  ariaLiveMessage = signal('');
   /** When set, reward panel shows chosen state before transitioning; used for micro-animation. */
   chosenRewardCardId: string | null = null;
 
@@ -105,6 +106,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   /* Screen-shake HostBinding */
   @HostBinding('class.screen-shaking') isScreenShaking = false;
+  @HostBinding('class.high-contrast') get highContrastClass(): boolean { return this.gameSettings.highContrast(); }
 
   private _lastPlayerHp: number | null = null;
   private _ghostHpTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -160,7 +162,12 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   private lastContentWasCombat = false;
   showPauseMenu = false;
   showPauseSettings = false;
+  showAbandonConfirm = false;
   showTalentTree = false;
+  showPileInspector = false;
+  showCombatLog = false;
+  combatLogEntries: string[] = [];
+  activePileTab: 'draw' | 'discard' | 'exhaust' = 'draw';
   talentSelectionMessage = signal<string | null>(null);
 
   /** Combat state is on CombatPhaseController; expose for template. */
@@ -169,7 +176,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   get returnDurationMs(): number {
-    return this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.returnDurationMs;
+    return this.getScaledTimingMs(COMBAT_TIMING.returnDurationMs, 50);
   }
 
   constructor(
@@ -282,7 +289,26 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   }
 
   private isCombatInteractionBlocked(): boolean {
-    return this.showTalentTree;
+    return this.showTalentTree || this.showPileInspector;
+  }
+
+  private pushCombatLog(entry: string): void {
+    this.combatLogEntries = [entry, ...this.combatLogEntries].slice(0, 40);
+  }
+
+  private announceLive(message: string): void {
+    this.ariaLiveMessage.set(message);
+  }
+
+  private getScaledTimingMs(baseMs: number, reducedMs = 50): number {
+    if (this.gameSettings.reducedMotion()) return Math.min(baseMs, reducedMs);
+    const speed = this.gameSettings.animationSpeedMultiplier();
+    return Math.max(16, Math.round(baseMs / Math.max(0.2, speed)));
+  }
+
+  toggleCombatLog(): void {
+    this.showCombatLog = !this.showCombatLog;
+    this.requestTemplateUpdate();
   }
 
   private pauseCombatInteractionForModal(requestUpdate = true): void {
@@ -304,6 +330,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   onEscape(): void {
     if (this.showTalentTree) {
       this.closeTalentTree();
+      return;
+    }
+    if (this.showPileInspector) {
+      this.closePileInspector();
       return;
     }
     if (this.showPauseSettings) {
@@ -332,6 +362,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   closePauseMenu(): void {
     this.showPauseMenu = false;
     this.showPauseSettings = false;
+    this.showAbandonConfirm = false;
     this.requestTemplateUpdate();
   }
 
@@ -361,6 +392,18 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   closeTalentTree(): void {
     this.showTalentTree = false;
     this.talentSelectionMessage.set(null);
+    this.requestTemplateUpdate();
+  }
+
+  openPileInspector(tab: 'draw' | 'discard' | 'exhaust' = 'draw'): void {
+    this.activePileTab = tab;
+    this.showPileInspector = true;
+    this.pauseCombatInteractionForModal(false);
+    this.requestTemplateUpdate();
+  }
+
+  closePileInspector(): void {
+    this.showPileInspector = false;
     this.requestTemplateUpdate();
   }
 
@@ -513,6 +556,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       return;
     }
     this.talentSelectionMessage.set('Talent selected.');
+    this.announceLive('Talent selected.');
     this.syncOverlaySignals(this.bridge.getState());
     this.requestTemplateUpdate();
     this.redraw();
@@ -538,8 +582,36 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.bridge.saveRun();
     this.showPauseMenu = false;
     this.showPauseSettings = false;
+    this.showAbandonConfirm = false;
     this.requestTemplateUpdate();
     this.router.navigate(['/']);
+  }
+
+  openAbandonRunConfirm(): void {
+    this.showAbandonConfirm = true;
+    this.requestTemplateUpdate();
+  }
+
+  cancelAbandonRunConfirm(): void {
+    this.showAbandonConfirm = false;
+    this.requestTemplateUpdate();
+  }
+
+  abandonRunToMenu(): void {
+    this.bridge.clearSavedRun();
+    this.bridge.clearState();
+    this.showPauseMenu = false;
+    this.showPauseSettings = false;
+    this.showAbandonConfirm = false;
+    this.requestTemplateUpdate();
+    this.router.navigate(['/']);
+  }
+
+  getLastSavedLabel(): string {
+    const ms = this.bridge.getLastSavedAt();
+    if (!ms) return 'Not saved in this session';
+    const date = new Date(ms);
+    return `Last saved: ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   steamWarning = () => this._steamWarning;
@@ -646,11 +718,76 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   onWindowKeyDown(e: KeyboardEvent): void {
-    if (e.key !== 'F3') return;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-    e.preventDefault();
-    this.gameSettings.setDebugLayout(!this.gameSettings.debugLayout());
+    if (e.key === 'F3') {
+      e.preventDefault();
+      this.gameSettings.setDebugLayout(!this.gameSettings.debugLayout());
+      this.redraw();
+      this.requestTemplateUpdate();
+      return;
+    }
+    if (this._runPhase !== 'combat' || this.showPauseMenu || this.showPauseSettings || this.isCombatInteractionBlocked()) return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      this.onEndTurn();
+      return;
+    }
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      this.showPauseMenu = true;
+      this.requestTemplateUpdate();
+      return;
+    }
+    if (e.key === 't' || e.key === 'T') {
+      e.preventDefault();
+      if (this.getTalentTree()) this.openTalentTree();
+      return;
+    }
+    if (e.key === 'd' || e.key === 'D') {
+      e.preventDefault();
+      this.openPileInspector('draw');
+      return;
+    }
+    if (e.key === 'c' || e.key === 'C') {
+      e.preventDefault();
+      this.openPileInspector('discard');
+      return;
+    }
+    if (e.key === 'x' || e.key === 'X') {
+      e.preventDefault();
+      this.openPileInspector('exhaust');
+      return;
+    }
+
+    const hotbarIndex = Number.parseInt(e.key, 10);
+    if (!Number.isNaN(hotbarIndex) && hotbarIndex >= 1 && hotbarIndex <= 9) {
+      e.preventDefault();
+      const handIndex = hotbarIndex - 1;
+      this.onCardPointerOver(handIndex);
+      this.quickPlayCardAtIndex(handIndex);
+    }
+  }
+
+  private quickPlayCardAtIndex(handIndex: number): void {
+    const state = this.bridge.getState();
+    if (!state || state.runPhase !== 'combat' || state.phase !== 'player' || state.combatResult) return;
+    if (handIndex < 0 || handIndex >= state.hand.length) return;
+    const cardId = state.hand[handIndex];
+    if (!cardId) return;
+    const cost = this.getCardCost(cardId);
+    if (state.energy < cost) return;
+    if (this.cardNeedsEnemyTarget(cardId)) {
+      this.feedbackMessage.set('Targeted cards require drag-and-drop.');
+      this.requestTemplateUpdate();
+      return;
+    }
+    this.bridge.playCard(cardId, undefined, handIndex);
+    this.pushCombatLog(`Played ${this.getCardName(cardId)} (hotkey).`);
+    this.triggerPlayerAnimationForCard(cardId);
+    this.sound.playCardPlay();
+    this.incrementCombo();
     this.redraw();
     this.requestTemplateUpdate();
   }
@@ -853,8 +990,10 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       // Drive redraw every frame when character or enemies have idle animations so they advance
       if (this.bridge.hasAnimatedIdle(state.characterId ?? '')) changed = true;
       if (this.combatController.activeCardVfx.length > 0) changed = true;
-      if (this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs)) changed = true;
-      if (this.combatController.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs)) changed = true;
+      const enemyHurtDuration = this.getScaledTimingMs(ENEMY_ANIMATION_TIMING.hurtDurationMs, 40);
+      const enemyDyingDuration = this.getScaledTimingMs(ENEMY_ANIMATION_TIMING.dyingDurationMs, 100);
+      if (this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < enemyHurtDuration)) changed = true;
+      if (this.combatController.enemyDyingStartMs.some((t) => t != null && now - t < enemyDyingDuration)) changed = true;
       if (this.combatController.cardInteractionState === 'returning') {
         const elapsed = performance.now() - this.combatController.returnStartTime;
         const raw = Math.min(1, elapsed / this.returnDurationMs);
@@ -892,8 +1031,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (hand.length > 0 && this.combatController.handPresentations.length === hand.length) changed = true;
       if (changed) {
         const enemyAnimPlaying =
-          this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.hurtDurationMs) ||
-          this.combatController.enemyDyingStartMs.some((t) => t != null && now - t < ENEMY_ANIMATION_TIMING.dyingDurationMs);
+          this.combatController.enemyHurtStartMs.some((t) => t != null && now - t < this.getScaledTimingMs(ENEMY_ANIMATION_TIMING.hurtDurationMs, 40)) ||
+          this.combatController.enemyDyingStartMs.some((t) => t != null && now - t < this.getScaledTimingMs(ENEMY_ANIMATION_TIMING.dyingDurationMs, 100));
         const useIdleOnlyPath =
           this.bridge.hasAnimatedIdle(state.characterId ?? '') &&
           this.combatController.activeCardVfx.length === 0 &&
@@ -1073,7 +1212,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       return;
     }
     const now = performance.now();
-    const floatTtl = this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.floatingNumberTtlMs;
+    const floatTtl = this.getScaledTimingMs(COMBAT_TIMING.floatingNumberTtlMs, 60);
     this.combatController.floatingNumbers = this.combatController.floatingNumbers.filter((fn) => (fn.addedAt == null) || now - fn.addedAt <= floatTtl);
     const prevResult = this._combatResult;
     const prevPhase = this._runPhase;
@@ -1096,6 +1235,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     if (transition?.to === 'combat') {
       this.sound.startCombatSoundtrack();
       this.sound.playCombatStart();
+      this.combatLogEntries = [];
+      this.pushCombatLog('Combat started.');
     }
     if (this._runPhase === 'combat' && prevPhase !== 'combat' && this.app) {
       this.cdr.detectChanges();
@@ -1362,7 +1503,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         let tex: PIXI.Texture | null = null;
         if (e.hp <= 0) {
           tex = this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, 'dying', now, dyingStart ?? 0);
-        } else if (hurtStart != null && now - hurtStart < ENEMY_ANIMATION_TIMING.hurtDurationMs) {
+        } else if (hurtStart != null && now - hurtStart < this.getScaledTimingMs(ENEMY_ANIMATION_TIMING.hurtDurationMs, 40)) {
           tex = this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, 'hurt', now, hurtStart);
         } else {
           tex = this.combatAssets.getEnemyAnimationTexture(variant as 1 | 2 | 3, 'idle', now);
@@ -2006,6 +2147,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       fromY = pos.y - layout.hoverLift;
     } else {
       this.bridge.playCard(cardId, enemyIndex, handIndexForPlay >= 0 ? handIndexForPlay : undefined);
+      this.pushCombatLog(`Played ${this.getCardName(cardId)}.`);
       this.triggerPlayerAnimationForCard(cardId);
       this.combatController.cardInteractionState = 'idle';
       this.combatController.cardInteractionCardIndex = null;
@@ -2059,6 +2201,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       if (oldState.enemies[enemyIndex] && newState.enemies[enemyIndex]) {
         const hpLost = oldState.enemies[enemyIndex].hp - newState.enemies[enemyIndex].hp;
         if (hpLost > 0) {
+          this.pushCombatLog(`Dealt ${hpLost} damage to ${newState.enemies[enemyIndex].name}.`);
           toAdd.push({ type: 'damage', value: hpLost, x: toX, y: toY, enemyIndex, addedAt: now });
           this.sound.playHit();
           this.triggerHitstop(this.gameSettings.reducedMotion() ? 0 : 45);
@@ -2071,6 +2214,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       }
       const blockGain = newState.playerBlock - oldState.playerBlock;
       if (blockGain > 0) {
+        this.pushCombatLog(`Gained ${blockGain} Block.`);
         const playerCenter = getPlayerCenter(w, h);
         toAdd.push({ type: 'block', value: blockGain, x: playerCenter.x, y: playerCenter.y, addedAt: now + (toAdd.length > 0 ? 80 : 0) });
         this.sound.playBlock();
@@ -2081,7 +2225,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.redraw();
       this.requestTemplateUpdate();
       if (toAdd.length > 0) {
-        const delay = this.gameSettings.reducedMotion() ? 50 : COMBAT_TIMING.redrawAfterFloatMs;
+        const delay = this.getScaledTimingMs(COMBAT_TIMING.redrawAfterFloatMs, 50);
         setTimeout(() => this.redraw(), delay);
       }
     };
@@ -2110,21 +2254,31 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
   /** Show "Enemy turn" banner, then after delay call bridge.endTurn() and redraw. */
   onEndTurn(): void {
     if (!this.canEndTurn()) return;
+    this.pushCombatLog('Turn ended.');
+    this.announceLive('Turn ended.');
     this.sound.playTurnEnd();
     this.combatController.showingEnemyTurn = true;
     this.redraw();
     this.requestTemplateUpdate();
     setTimeout(() => {
       this.sound.playTurnStart();
+      const prevPlayerHp = this.bridge.getState()?.playerHp ?? 0;
       this.bridge.endTurn();
+      const nextState = this.bridge.getState();
+      const nextPlayerHp = nextState?.playerHp ?? prevPlayerHp;
+      const hpLost = Math.max(0, prevPlayerHp - nextPlayerHp);
+      if (hpLost > 0) this.pushCombatLog(`Took ${hpLost} damage from enemy turn.`);
+      const defeated = nextState?.enemies.filter((e) => e.hp <= 0).length ?? 0;
+      if (defeated > 0) this.pushCombatLog(`Enemies defeated: ${defeated}.`);
       this.combatController.showingEnemyTurn = false;
       this.redraw();
       this.requestTemplateUpdate();
-    }, COMBAT_TIMING.enemyTurnBannerDelayMs);
+    }, this.getScaledTimingMs(COMBAT_TIMING.enemyTurnBannerDelayMs, 70));
   }
 
   onRestart(): void {
     this.bridge.startRun(this.bridge.getCurrentCharacterId() ?? 'gungirl');
+    this.combatLogEntries = [];
     this.redraw();
     this.requestTemplateUpdate();
     this.scheduleCanvasLayoutFix({ scrollToBottom: true });
@@ -2135,6 +2289,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     this.chosenRewardCardId = cardId;
     const cardName = this.getCardName(cardId);
     this.feedbackMessage.set(`New card: ${cardName}`);
+    this.announceLive(`Reward picked: ${cardName}.`);
     this.requestTemplateUpdate();
     setTimeout(() => {
       this.bridge.chooseReward(cardId);
@@ -2143,7 +2298,7 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
       this.redraw();
       this.requestTemplateUpdate();
       this.scheduleCanvasLayoutFix({ scrollToBottom: true });
-    }, COMBAT_TIMING.rewardFeedbackDelayMs);
+    }, this.getScaledTimingMs(COMBAT_TIMING.rewardFeedbackDelayMs, 80));
   }
 
   onRestHeal(): void {
@@ -2183,6 +2338,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return desc ? `${name}: ${desc}` : name;
   }
 
+  getHoveredCardPreview(): { id: string; name: string; cost: number; desc: string } | null {
+    if (this._runPhase !== 'combat' || this.isCombatInteractionBlocked()) return null;
+    const state = this.bridge.getState();
+    if (!state || state.phase !== 'player' || state.combatResult) return null;
+    const idx = this.combatController.hoveredCardIndex;
+    if (idx == null || idx < 0 || idx >= state.hand.length) return null;
+    const cardId = state.hand[idx];
+    return {
+      id: cardId,
+      name: this.getCardName(cardId),
+      cost: this.getCardCost(cardId),
+      desc: this.getCardEffectDescriptionText(cardId),
+    };
+  }
+
   /** URL for card art image (overlay panels). Uses /assets/cards/{cardId}.png. */
   getCardArtUrl(cardId: string): string {
     return `/assets/cards/${encodeURIComponent(cardId)}.png`;
@@ -2216,9 +2386,21 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return this.bridge.getState()?.discard?.length ?? 0;
   }
 
+  getExhaustCount(): number {
+    return this.bridge.getState()?.exhaustPile?.length ?? 0;
+  }
+
   getTopDrawCardId(): string | null {
     const deck = this.bridge.getState()?.deck;
     return deck?.length ? deck[0] ?? null : null;
+  }
+
+  getPileCards(kind: 'draw' | 'discard' | 'exhaust'): string[] {
+    const state = this.bridge.getState();
+    if (!state) return [];
+    if (kind === 'draw') return [...(state.deck ?? [])];
+    if (kind === 'discard') return [...(state.discard ?? [])];
+    return [...(state.exhaustPile ?? [])];
   }
 
   getPotionName(potionId: string): string {
@@ -2239,6 +2421,50 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
     return def ? `${def.name}: ${def.description}` : potionId;
   }
 
+  getHoveredEnemyIntentDetails(): { enemyName: string; lines: string[] } | null {
+    if (this._runPhase !== 'combat' || this.isCombatInteractionBlocked()) return null;
+    const state = this.bridge.getState();
+    if (!state) return null;
+    const idx = this.combatController.hoveredEnemyIndex;
+    if (idx == null || idx < 0 || idx >= state.enemies.length) return null;
+    const enemy = state.enemies[idx];
+    const intent = enemy.intent;
+    if (!intent) return null;
+
+    const lines: string[] = [];
+    if (intent.type === 'attack' || intent.type === 'attack_frail' || intent.type === 'attack_vulnerable' || intent.type === 'attack_and_block') {
+      lines.push(`Attack: ${intent.value}`);
+      if (intent.type === 'attack_frail' && intent.value2) lines.push(`Applies Frail: ${intent.value2}`);
+      if (intent.type === 'attack_vulnerable' && intent.value2) lines.push(`Applies Vulnerable: ${intent.value2}`);
+      if (intent.type === 'attack_and_block' && intent.value2) lines.push(`Gains Block: ${intent.value2}`);
+    } else if (intent.type === 'attack_multi') {
+      const hits = intent.times ?? 1;
+      lines.push(`Attack: ${intent.value} x ${hits}`);
+      lines.push(`Total (before block): ${intent.value * hits}`);
+    } else if (intent.type === 'block') {
+      lines.push(`Gains Block: ${intent.value}`);
+    } else if (intent.type === 'buff') {
+      if (intent.strength) lines.push(`Gains Strength: ${intent.strength}`);
+      if (intent.block) lines.push(`Gains Block: ${intent.block}`);
+      if (!intent.strength && !intent.block) lines.push('Buffs itself');
+    } else if (intent.type === 'debuff') {
+      lines.push(`Applies Weak: ${intent.value}`);
+    } else if (intent.type === 'vulnerable') {
+      lines.push(`Applies Vulnerable: ${intent.value}`);
+    } else if (intent.type === 'drain') {
+      lines.push(`Applies Weak: ${intent.value}`);
+      if (intent.value2) lines.push(`Gains Strength: ${intent.value2}`);
+    } else if (intent.type === 'ritual') {
+      lines.push(`Ritual: +${intent.value} Strength each turn`);
+    } else if (intent.type === 'hex') {
+      lines.push('Adds Hex to your discard');
+    } else if (intent.type === 'none') {
+      lines.push('No immediate action');
+    }
+    if ((enemy.strengthStacks ?? 0) > 0) lines.push(`Current Strength: ${enemy.strengthStacks}`);
+    return { enemyName: enemy.name, lines };
+  }
+
   onUsePotion(potionId: string): void {
     const def = this.bridge.getPotionDef(potionId);
     const state = this.bridge.getState();
@@ -2249,6 +2475,8 @@ export class CombatCanvasComponent implements OnInit, OnDestroy {
         : undefined;
     if (def?.effect?.type === 'damage' && (target === undefined || target < 0)) return;
     this.bridge.usePotion(potionId, target ?? 0);
+    this.pushCombatLog(`Used potion: ${this.getPotionName(potionId)}.`);
+    this.announceLive(`Used potion ${this.getPotionName(potionId)}.`);
     this.redraw();
     this.requestTemplateUpdate();
   }

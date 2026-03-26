@@ -27,10 +27,31 @@
   @if (feedbackMessage()) {
     <div class="feedback-toast">{{ feedbackMessage() }}</div>
   }
+  <div class="sr-live-region" aria-live="polite" aria-atomic="true">{{ ariaLiveMessage() }}</div>
   @if (showComboSignal() && comboCountSignal() >= 2) {
     <div class="combo-overlay" [class.combo-big]="comboCountSignal() >= 5" aria-live="polite">
       <span class="combo-label">COMBO</span>
       <span class="combo-number">x{{ comboCountSignal() }}</span>
+    </div>
+  }
+  @if (getHoveredCardPreview(); as hoverPreview) {
+    <div class="hand-card-preview" role="status" aria-live="polite">
+      <img class="hand-card-preview-art" [src]="getCardArtUrl(hoverPreview.id)" alt="" />
+      <div class="hand-card-preview-main">
+        <div class="hand-card-preview-head">
+          <span class="hand-card-preview-name">{{ hoverPreview.name }}</span>
+          <span class="hand-card-preview-cost">⚡ {{ hoverPreview.cost }}</span>
+        </div>
+        <div class="hand-card-preview-desc">{{ hoverPreview.desc }}</div>
+      </div>
+    </div>
+  }
+  @if (getHoveredEnemyIntentDetails(); as intentDetails) {
+    <div class="intent-detail-panel" role="status" aria-live="polite">
+      <div class="intent-detail-title">{{ intentDetails.enemyName }}</div>
+      @for (line of intentDetails.lines; track line + '_' + $index) {
+        <div class="intent-detail-line">{{ line }}</div>
+      }
     </div>
   }
   @if (runPhaseSignal()) {
@@ -87,12 +108,14 @@
           <span class="combat-header-badge badge-floor" [attr.title]="'Floor ' + headerFloorSignal()">
             <span class="badge-icon">⬡</span> {{ headerFloorSignal() }}
           </span>
-          <span
+          <button
+            type="button"
             class="combat-header-badge badge-deck"
-            [attr.title]="'Draw: ' + getDrawCount() + ' · Discard: ' + getDiscardCount() + (getTopDrawCardId() ? ' · Top: ' + getCardName(getTopDrawCardId()!) : '')"
+            [attr.title]="'Draw: ' + getDrawCount() + ' · Discard: ' + getDiscardCount() + ' · Exhaust: ' + getExhaustCount() + (getTopDrawCardId() ? ' · Top: ' + getCardName(getTopDrawCardId()!) : '')"
+            (click)="openPileInspector('draw')"
           >
-            <span class="badge-icon">🂠</span> {{ getDrawCount() }}<span class="badge-sep">/</span>{{ getDiscardCount() }}
-          </span>
+            <span class="badge-icon">🂠</span> {{ getDrawCount() }}<span class="badge-sep">/</span>{{ getDiscardCount() }}<span class="badge-sep">/</span>{{ getExhaustCount() }}
+          </button>
           @if (getRunSeed() != null) {
             <span class="combat-header-badge badge-seed" [attr.title]="'Run seed: ' + getRunSeed()">
               #{{ getRunSeed() }}
@@ -154,9 +177,26 @@
           <span class="btn-end-icon">⟶</span>
         </span>
       </button>
+      <button type="button" class="btn-combat-log" (click)="toggleCombatLog()" [attr.aria-expanded]="showCombatLog">
+        {{ showCombatLog ? 'Hide Log' : 'Show Log' }}
+      </button>
       }
     }
   </div>
+  @if (runPhaseSignal() === 'combat' && showCombatLog) {
+    <div class="combat-log-panel" aria-live="polite" aria-label="Combat log">
+      <div class="combat-log-title">Combat Log</div>
+      @if (combatLogEntries.length === 0) {
+        <div class="combat-log-empty">No events yet.</div>
+      } @else {
+        <div class="combat-log-list">
+          @for (entry of combatLogEntries; track entry + '_' + $index) {
+            <div class="combat-log-entry">{{ entry }}</div>
+          }
+        </div>
+      }
+    </div>
+  }
   @if (runPhaseSignal() === 'reward') {
     <app-reward-panel
       [choices]="rewardChoicesSignal()"
@@ -219,14 +259,27 @@
     @if (!showPauseSettings) {
       <div class="quit-modal pause-modal">
         <div class="quit-title">Paused</div>
-        <div class="pause-actions">
-          <button type="button" class="btn-quit btn-pause" (click)="onPauseContinue()">▶ Continue</button>
-          <button type="button" class="btn-quit btn-pause" (click)="openPauseSettings()">⚙ Settings</button>
-          <button type="button" class="btn-quit btn-pause" (click)="confirmQuitToMenu()">⌂ Main Menu</button>
-          @if (isElectron()) {
-            <button type="button" class="btn-quit btn-pause btn-pause-exit" (click)="onExitGame()">✕ Exit</button>
-          }
-        </div>
+        <div class="pause-save-hint">{{ getLastSavedLabel() }}</div>
+        @if (!showAbandonConfirm) {
+          <div class="pause-actions">
+            <button type="button" class="btn-quit btn-pause" (click)="onPauseContinue()">▶ Continue</button>
+            <button type="button" class="btn-quit btn-pause" (click)="openPauseSettings()">⚙ Settings</button>
+            <button type="button" class="btn-quit btn-pause" (click)="confirmQuitToMenu()">💾 Save & Main Menu</button>
+            <button type="button" class="btn-quit btn-pause btn-danger-soft" (click)="openAbandonRunConfirm()">🗑 Abandon Run</button>
+            @if (isElectron()) {
+              <button type="button" class="btn-quit btn-pause btn-pause-exit" (click)="onExitGame()">✕ Exit</button>
+            }
+          </div>
+        } @else {
+          <div class="pause-abandon-confirm">
+            <div class="pause-abandon-title">Abandon this run?</div>
+            <div class="pause-abandon-copy">This deletes your current run save and returns to main menu.</div>
+            <div class="pause-actions">
+              <button type="button" class="btn-quit btn-pause" (click)="cancelAbandonRunConfirm()">Cancel</button>
+              <button type="button" class="btn-quit btn-pause btn-pause-exit" (click)="abandonRunToMenu()">Confirm Abandon</button>
+            </div>
+          </div>
+        }
       </div>
     } @else {
       <app-settings-modal closeButtonLabel="Back" (close)="closePauseSettings()" />
@@ -319,6 +372,35 @@
             }
           </div>
         </div>
+      </div>
+    </div>
+  }
+  @if (showPileInspector) {
+    <div class="quit-backdrop" (click)="closePileInspector()"></div>
+    <div class="quit-modal pile-modal">
+      <div class="pile-panel-header">
+        <div class="pile-panel-title">Card Piles</div>
+        <button type="button" class="talent-close-btn" (click)="closePileInspector()" aria-label="Close pile inspector">✕</button>
+      </div>
+      <div class="pile-tabs" role="tablist" aria-label="Card pile tabs">
+        <button type="button" class="pile-tab" [class.active]="activePileTab === 'draw'" (click)="activePileTab = 'draw'" role="tab">Draw ({{ getDrawCount() }})</button>
+        <button type="button" class="pile-tab" [class.active]="activePileTab === 'discard'" (click)="activePileTab = 'discard'" role="tab">Discard ({{ getDiscardCount() }})</button>
+        <button type="button" class="pile-tab" [class.active]="activePileTab === 'exhaust'" (click)="activePileTab = 'exhaust'" role="tab">Exhaust ({{ getExhaustCount() }})</button>
+      </div>
+      <div class="pile-list-wrap">
+        @if (getPileCards(activePileTab).length === 0) {
+          <div class="pile-empty">No cards in this pile.</div>
+        } @else {
+          <div class="pile-list">
+            @for (cardId of getPileCards(activePileTab); track cardId + '_' + $index) {
+              <button type="button" class="pile-card-row" [attr.title]="getCardTooltip(cardId)">
+                <img class="pile-card-art" [src]="getCardArtUrl(cardId)" alt="" />
+                <span class="pile-card-name">{{ getCardName(cardId) }}</span>
+                <span class="pile-card-desc">{{ getCardEffectDescriptionText(cardId) }}</span>
+              </button>
+            }
+          </div>
+        }
       </div>
     </div>
   }

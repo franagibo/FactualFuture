@@ -371,6 +371,11 @@
     white-space: nowrap;
     letter-spacing: 0.02em;
   }
+  button.combat-header-badge {
+    font-family: inherit;
+    background: rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+  }
   .badge-floor {
     color: #d9bc72;
     border-color: rgba(180, 136, 36, 0.34);
@@ -387,6 +392,12 @@
   .badge-talent:hover {
     color: #f4de9c;
     background: rgba(130, 96, 20, 0.35);
+  }
+
+  .badge-deck:hover {
+    color: #e0c078;
+    border-color: rgba(220, 168, 50, 0.45);
+    background: rgba(120, 88, 20, 0.25);
   }
   
   
@@ -592,6 +603,57 @@
   
   .btn-cancel-target:active {
     transform: translateY(1px) scale(0.99);
+  }
+
+  .btn-combat-log {
+    padding: 10px 16px;
+    border-radius: 9px;
+    border: 1px solid rgba(180, 136, 36, 0.45);
+    background: rgba(20, 14, 8, 0.92);
+    color: #d6bc76;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .combat-log-panel {
+    position: fixed;
+    right: 20px;
+    bottom: 78px;
+    width: min(360px, 36vw);
+    max-height: 220px;
+    z-index: 1001;
+    border: 1px solid rgba(180, 136, 36, 0.42);
+    border-radius: 10px;
+    background: rgba(10, 7, 2, 0.92);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    overflow: auto;
+  }
+
+  .combat-log-title {
+    color: #f0d48a;
+    font-family: var(--font-title);
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+  }
+
+  .combat-log-empty {
+    color: #8a7040;
+    font-size: 0.8rem;
+  }
+
+  .combat-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .combat-log-entry {
+    color: #c8ae72;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    border-bottom: 1px dashed rgba(160, 120, 36, 0.2);
+    padding-bottom: 3px;
   }
   
   .result {
@@ -826,6 +888,87 @@
     font-size: 0.95rem;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(180, 128, 24, 0.25);
     animation: feedbackFadeIn 0.2s ease;
+  }
+
+  .hand-card-preview {
+    position: fixed;
+    left: 24px;
+    bottom: 140px;
+    z-index: 1080;
+    width: min(560px, 44vw);
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(200, 158, 42, 0.45);
+    background: rgba(14, 10, 4, 0.94);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 20px rgba(180, 128, 24, 0.2);
+    pointer-events: none;
+  }
+
+  .hand-card-preview-art {
+    width: 80px;
+    height: 112px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid rgba(120, 90, 24, 0.4);
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .hand-card-preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .hand-card-preview-name {
+    font-family: var(--font-title);
+    font-size: 1.02rem;
+    color: #f4d98a;
+    text-shadow: 0 0 10px rgba(200, 158, 42, 0.4);
+  }
+
+  .hand-card-preview-cost {
+    color: #e8c878;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .hand-card-preview-desc {
+    margin-top: 4px;
+    color: #d8be74;
+    font-size: 0.85rem;
+    line-height: 1.35;
+  }
+
+  .intent-detail-panel {
+    position: fixed;
+    right: 20px;
+    top: 82px;
+    z-index: 1080;
+    min-width: 240px;
+    max-width: 340px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(200, 158, 42, 0.42);
+    background: rgba(14, 10, 4, 0.93);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+  }
+
+  .intent-detail-title {
+    font-family: var(--font-title);
+    color: #f0d48a;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+
+  .intent-detail-line {
+    color: #c8ae72;
+    font-size: 0.8rem;
+    line-height: 1.35;
   }
   
   .reward-card-art-wrap {
@@ -1162,6 +1305,13 @@
   .pause-modal .quit-title {
     text-align: center;
   }
+
+  .pause-save-hint {
+    margin: 0.35rem 0 0.7rem;
+    text-align: center;
+    color: #a6884a;
+    font-size: 0.8rem;
+  }
   
   .btn-quit,
   .btn-pause {
@@ -1200,6 +1350,27 @@
   
   .btn-pause-exit:hover {
     box-shadow: 0 6px 0 #2a1515, 0 8px 20px rgba(0, 0, 0, 0.45), 0 0 20px rgba(180, 80, 80, 0.25);
+  }
+
+  .btn-danger-soft {
+    background: linear-gradient(180deg, #6a3a1e 0%, #4a2715 100%);
+    box-shadow: 0 4px 0 #2a160c, 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 200, 160, 0.1);
+  }
+
+  .pause-abandon-confirm {
+    min-width: 320px;
+  }
+
+  .pause-abandon-title {
+    color: #f2c274;
+    font-family: var(--font-title);
+    margin-bottom: 0.3rem;
+  }
+
+  .pause-abandon-copy {
+    color: #b69458;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
   }
   
   .btn-pause-back {
@@ -1468,6 +1639,7 @@
   .talent-tree-scroll {
     max-height: min(82vh, 920px);
     overflow: auto;
+    padding: 18px 14px 22px;
     scrollbar-width: thin;
     scrollbar-color: rgba(160, 120, 40, 0.5) rgba(12, 9, 4, 0.6);
   }
@@ -1601,6 +1773,7 @@
     gap: 5px;
     transition: filter 0.15s ease;
     outline: none;
+    overflow: visible;
   
     &:focus-visible .talent-node-frame {
       box-shadow:
@@ -1840,10 +2013,11 @@
   /* ── Hover Tooltip ── */
   .talent-node-tooltip {
     position: absolute;
-    // bottom: calc(100% + 14px);
+    bottom: calc(100% + 12px);
     left: 50%;
     transform: translateX(-50%);
-    width: 360px;
+    width: min(360px, 72vw);
+    min-width: 280px;
     background: rgba(8, 6, 18, 0.97);
     border: 1px solid rgba(150, 112, 30, 0.7);
     border-radius: 10px;
@@ -1857,6 +2031,7 @@
       0 0 1px rgba(180, 140, 45, 0.35),
       inset 0 1px 0 rgba(180, 140, 45, 0.12);
     text-align: left;
+    white-space: normal;
   }
   
   .talent-node:hover .talent-node-tooltip,
@@ -1943,6 +2118,138 @@
       height: 900px;
     }
   }
+
+  .pile-modal {
+    width: min(900px, 92vw);
+    max-height: min(82vh, 820px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pile-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(180, 136, 36, 0.24);
+  }
+
+  .pile-panel-title {
+    font-family: var(--font-title);
+    font-size: 1.05rem;
+    color: #f4d98a;
+    letter-spacing: 0.05em;
+  }
+
+  .pile-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .pile-tab {
+    border: 1px solid rgba(180, 136, 36, 0.32);
+    border-radius: 8px;
+    background: rgba(20, 14, 8, 0.85);
+    color: #a88a4a;
+    padding: 7px 10px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .pile-tab.active {
+    color: #f4d98a;
+    border-color: rgba(220, 168, 50, 0.6);
+    background: linear-gradient(160deg, #5a3e10 0%, #3c2808 100%);
+  }
+
+  .pile-list-wrap {
+    padding: 0 14px 14px;
+    overflow: auto;
+  }
+
+  .pile-empty {
+    padding: 24px 10px;
+    color: #8a7040;
+    text-align: center;
+  }
+
+  .pile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pile-card-row {
+    display: grid;
+    grid-template-columns: 40px 180px 1fr;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    border: 1px solid rgba(180, 136, 36, 0.25);
+    border-radius: 8px;
+    background: rgba(14, 10, 4, 0.86);
+    padding: 6px 8px;
+    color: #e8d8a0;
+  }
+
+  .pile-card-art {
+    width: 40px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid rgba(120, 90, 24, 0.35);
+  }
+
+  .pile-card-name {
+    font-weight: 700;
+    color: #f0d48a;
+  }
+
+  .pile-card-desc {
+    color: #a08858;
+    font-size: 0.8rem;
+    line-height: 1.3;
+  }
+
+  .sr-live-region {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+
+:host(.high-contrast) {
+  .combat-header,
+  .quit-modal,
+  .intent-detail-panel,
+  .hand-card-preview,
+  .combat-log-panel {
+    border-color: #ffd86a !important;
+    box-shadow: 0 0 0 1px #ffd86a, 0 8px 24px rgba(0, 0, 0, 0.75);
+  }
+
+  .combat-header-badge,
+  .btn-end,
+  .btn-combat-log,
+  .btn-pause {
+    color: #fff6d0 !important;
+    text-shadow: none !important;
+    filter: contrast(1.15) brightness(1.08);
+  }
+
+  .pile-card-desc,
+  .intent-detail-line,
+  .combat-log-entry {
+    color: #edd38f !important;
+  }
+}
 
   /* ── Combo counter ── */
   .combo-overlay {
